@@ -26,7 +26,16 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = ["click", "loguru"]
+dependencies = [
+  "click",
+  "gdown",
+  "humanize",
+  "imgviz",
+  "imshow",
+  "loguru",
+  "onnxruntime",
+  "tabulate",
+]
 dynamic = ["readme", "version"]
 
 [project.optional-dependencies]
