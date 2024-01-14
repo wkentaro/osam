@@ -20,7 +20,7 @@ def cli():
     pass
 
 
-@cli.command(help="list models")
+@cli.command(help="list available models")
 def list():
     rows = []
     for model in models.MODELS:
@@ -43,7 +43,7 @@ def list():
     )
 
 
-@cli.command(help="run model (`osam list` to see available models)")
+@cli.command(help="run model")
 @click.argument("model_name", metavar="model", type=str)
 @click.option(
     "--image",
