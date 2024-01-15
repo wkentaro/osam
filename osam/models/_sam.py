@@ -5,11 +5,11 @@ import numpy as np
 import onnxruntime
 
 from osam.image_embedding import ImageEmbedding
-from osam.models._base import BaseModel
+from osam.models._base import SamBase
 from osam.prompt import Prompt
 
 
-class Sam(BaseModel):
+class Sam(SamBase):
     _image_size: int = 1024
 
     def encode_image(self, image: np.ndarray):

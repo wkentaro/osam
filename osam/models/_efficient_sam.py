@@ -3,11 +3,11 @@ import os
 import numpy as np
 
 from osam.image_embedding import ImageEmbedding
-from osam.models._base import BaseModel
+from osam.models._base import SamBase
 from osam.prompt import Prompt
 
 
-class EfficientSam(BaseModel):
+class EfficientSam(SamBase):
     def encode_image(self, image: np.ndarray) -> ImageEmbedding:
         if image.ndim == 2:
             raise ValueError("Grayscale images are not supported")
