@@ -9,7 +9,6 @@ import PIL.Image
 from osam import _humanize
 from osam import _jsondata
 from osam import _tabulate
-from osam import logger
 from osam import models
 from osam.prompt import Prompt
 
@@ -68,12 +67,12 @@ def pull(model_name):
         if cls.name == model_name:
             break
     else:
-        logger.error(f"Model {model_name} not found.")
+        click.echo(f"Model {model_name} not found.", err=True)
         sys.exit(1)
 
-    logger.info(f"Pulling {model_name!r}...")
+    click.echo(f"Pulling {model_name!r}...", err=True)
     cls.pull()
-    logger.info(f"Pulled {model_name!r}")
+    click.echo(f"Pulled {model_name!r}", err=True)
 
 
 @cli.command(help="remove model")
@@ -83,12 +82,12 @@ def rm(model_name):
         if cls.name == model_name:
             break
     else:
-        logger.error(f"Model {model_name} not found.")
+        click.echo(f"Model {model_name} not found.", err=True)
         sys.exit(1)
 
-    logger.info(f"Removing {model_name!r}...")
+    click.echo(f"Removing {model_name!r}...", err=True)
     cls.remove()
-    logger.info(f"Removed {model_name!r}")
+    click.echo(f"Removed {model_name!r}", err=True)
 
 
 @cli.command(help="run model")
@@ -106,33 +105,34 @@ def run(model_name, image_path, prompt):
         if cls.name == model_name:
             break
     else:
-        logger.error(f"Model {model_name} not found.")
+        click.echo(f"Model {model_name} not found.", err=True)
         sys.exit(1)
 
     if not ("points" in prompt and "point_labels" in prompt):
-        logger.error("'points' and 'point_labels' must be specified in prompt.")
+        click.echo("'points' and 'point_labels' must be specified in prompt", err=True)
         sys.exit(1)
     if len(prompt["points"]) != len(prompt["point_labels"]):
-        logger.error("Length of 'points' and 'point_labels' must be same.")
+        click.echo("Length of 'points' and 'point_labels' must be same", err=True)
         sys.exit(1)
 
     model = cls()
-    logger.debug(f"Loaded {model_name!r}: {model}")
+    click.echo(f"Loaded {model_name!r}: {model}", err=True)
 
     image = np.asarray(PIL.Image.open(image_path))
-    logger.debug(f"Loaded {image_path!r}: {image.shape}, {image.dtype}")
+    click.echo(f"Loaded {image_path!r}: {image.shape}, {image.dtype}", err=True)
 
     image_embedding = model.encode_image(image)
-    logger.debug(
+    click.echo(
         f"Encoded image: {image_embedding.embedding.shape}, "
-        f"{image_embedding.embedding.dtype}"
+        f"{image_embedding.embedding.dtype}",
+        err=True,
     )
 
     mask = model.generate_mask(
         image_embedding=image_embedding,
         prompt=Prompt(points=prompt["points"], point_labels=prompt["point_labels"]),
     )
-    print(_jsondata.ndarray_to_b64data(mask.astype(np.uint8) * 255), end="")
+    click.echo(_jsondata.ndarray_to_b64data(mask.astype(np.uint8) * 255), nl=False)
 
 
 if __name__ == "__main__":
