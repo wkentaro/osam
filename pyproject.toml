@@ -31,7 +31,6 @@ dependencies = [
   "gdown",
   "humanize",
   "imgviz",
-  "imshow",
   "onnxruntime",
   "tabulate",
 ]

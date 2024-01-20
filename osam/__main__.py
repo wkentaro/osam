@@ -5,11 +5,10 @@ import sys
 import click
 import humanize
 import imgviz
-import imshow
 import numpy as np
-import PIL.Image
 import tabulate
 
+from osam import _jsondata
 from osam import logger
 from osam import models
 from osam.prompt import Prompt
@@ -84,35 +83,7 @@ def run(model_name, image_path, prompt):
         image_embedding=image_embedding,
         prompt=Prompt(points=prompt["points"], point_labels=prompt["point_labels"]),
     )
-
-    image_gray = imgviz.gray2rgb(imgviz.rgb2gray(image))
-    prompt_visualized = PIL.Image.fromarray(image_gray)
-    for point, point_label in zip(prompt["points"], prompt["point_labels"]):
-        imgviz.draw.circle_(
-            img=prompt_visualized,
-            center=point[::-1],
-            diameter=max(1, min(image.shape[:2]) // 100),
-            fill=(0, 255, 0) if point_label == 1 else (255, 0, 0),
-        )
-    prompt_visualized = np.asarray(prompt_visualized)
-    mask_visualized = imgviz.label2rgb(
-        label=mask.astype(np.int32) * 2, image=image_gray, alpha=0.7
-    )
-
-    visualized = imgviz.tile(
-        [
-            image,
-            prompt_visualized,
-            mask_visualized,
-        ],
-        shape=(1, 3),
-        border=(255, 255, 255),
-        border_width=10,
-    )
-    imshow.imshow(
-        [visualized],
-        get_title_from_item=lambda x: f"{model_name} - {image_path}",
-    )
+    print(_jsondata.ndarray_to_b64data(mask.astype(np.uint8) * 255), end="")
 
 
 if __name__ == "__main__":
