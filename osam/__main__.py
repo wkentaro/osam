@@ -3,8 +3,8 @@ import json
 import sys
 
 import click
-import imgviz
 import numpy as np
+import PIL.Image
 
 from osam import _humanize
 from osam import _jsondata
@@ -73,7 +73,7 @@ def run(model_name, image_path, prompt):
     model = cls()
     logger.debug(f"Loaded {model_name!r}: {model}")
 
-    image = imgviz.io.imread(image_path)
+    image = np.asarray(PIL.Image.open(image_path))
     logger.debug(f"Loaded {image_path!r}: {image.shape}, {image.dtype}")
 
     image_embedding = model.encode_image(image)
