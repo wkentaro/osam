@@ -19,14 +19,23 @@ class SamBase:
     _decoder_session: onnxruntime.InferenceSession
 
     def __init__(self):
-        gdown.cached_download(
-            url=self._encoder_url, md5=self._encoder_md5, path=self._encoder_path
-        )
-        gdown.cached_download(
-            url=self._decoder_url, md5=self._decoder_md5, path=self._decoder_path
-        )
+        self.pull()
         self._encoder_session = onnxruntime.InferenceSession(self._encoder_path)
         self._decoder_session = onnxruntime.InferenceSession(self._decoder_path)
+
+    @classmethod
+    def pull(cls):
+        gdown.cached_download(
+            url=cls._encoder_url, md5=cls._encoder_md5, path=cls._encoder_path
+        )
+        gdown.cached_download(
+            url=cls._decoder_url, md5=cls._decoder_md5, path=cls._decoder_path
+        )
+
+    @classmethod
+    def remove(cls):
+        os.remove(cls._encoder_path)
+        os.remove(cls._decoder_path)
 
     @classmethod
     def get_id(cls):
