@@ -32,7 +32,6 @@ dependencies = [
   "humanize",
   "imgviz",
   "imshow",
-  "loguru",
   "onnxruntime",
   "tabulate",
 ]
