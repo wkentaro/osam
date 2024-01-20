@@ -9,8 +9,8 @@ import imshow
 import numpy as np
 import PIL.Image
 import tabulate
-from loguru import logger
 
+from osam import logger
 from osam import models
 from osam.prompt import Prompt
 
