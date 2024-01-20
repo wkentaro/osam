@@ -6,9 +6,9 @@ import click
 import humanize
 import imgviz
 import numpy as np
-import tabulate
 
 from osam import _jsondata
+from osam import _tabulate
 from osam import logger
 from osam import models
 from osam.prompt import Prompt
@@ -20,11 +20,16 @@ def cli():
 
 
 @cli.command(help="list available models")
-def list():
+@click.option("--all", "-a", "show_all", is_flag=True, help="show all models")
+def list(show_all):
     rows = []
     for model in models.MODELS:
         size = model.get_size()
         modified_at = model.get_modified_at()
+
+        if not show_all and (size is None or modified_at is None):
+            continue
+
         rows.append(
             [
                 model.name,
@@ -35,11 +40,7 @@ def list():
                 else humanize.naturaltime(datetime.datetime.fromtimestamp(modified_at)),
             ]
         )
-    print(
-        tabulate.tabulate(
-            rows, headers=["NAME", "ID", "SIZE", "MODIFIED"], tablefmt="plain"
-        )
-    )
+    print(_tabulate.tabulate(rows, headers=["NAME", "ID", "SIZE", "MODIFIED"]))
 
 
 @cli.command(help="run model")
