@@ -2,9 +2,9 @@ import os
 
 import numpy as np
 
-from osam.image_embedding import ImageEmbedding
-from osam.models._base import SamBase
-from osam.prompt import Prompt
+from maskit.image_embedding import ImageEmbedding
+from maskit.models._base import SamBase
+from maskit.prompt import Prompt
 
 
 class EfficientSam(SamBase):
@@ -61,11 +61,15 @@ class EfficientSam10m(EfficientSam):
 
     _encoder_url: str = "https://github.com/labelmeai/efficient-sam/releases/download/onnx-models-20231225/efficient_sam_vitt_encoder.onnx"  # NOQA: E501
     _encoder_md5: str = "2d4a1303ff0e19fe4a8b8ede69c2f5c7"
-    _encoder_path: str = os.path.expanduser(f"~/.cache/osam/models/{name}/encoder.onnx")
+    _encoder_path: str = os.path.expanduser(
+        f"~/.cache/maskit/models/{name}/encoder.onnx"
+    )
 
     _decoder_url: str = "https://github.com/labelmeai/efficient-sam/releases/download/onnx-models-20231225/efficient_sam_vitt_decoder.onnx"  # NOQA: E501
     _decoder_md5: str = "be3575ca4ed9b35821ac30991ab01843"
-    _decoder_path: str = os.path.expanduser(f"~/.cache/osam/models/{name}/decoder.onnx")
+    _decoder_path: str = os.path.expanduser(
+        f"~/.cache/maskit/models/{name}/decoder.onnx"
+    )
 
 
 class EfficientSam25m(EfficientSam):
@@ -73,8 +77,12 @@ class EfficientSam25m(EfficientSam):
 
     _encoder_url: str = "https://github.com/labelmeai/efficient-sam/releases/download/onnx-models-20231225/efficient_sam_vits_encoder.onnx"  # NOQA: E501
     _encoder_md5: str = "7d97d23e8e0847d4475ca7c9f80da96d"
-    _encoder_path: str = os.path.expanduser(f"~/.cache/osam/models/{name}/encoder.onnx")
+    _encoder_path: str = os.path.expanduser(
+        f"~/.cache/maskit/models/{name}/encoder.onnx"
+    )
 
     _decoder_url: str = "https://github.com/labelmeai/efficient-sam/releases/download/onnx-models-20231225/efficient_sam_vits_decoder.onnx"  # NOQA: E501
     _decoder_md5: str = "d9372f4a7bbb1a01d236b0508300b994"
-    _decoder_path: str = os.path.expanduser(f"~/.cache/osam/models/{name}/decoder.onnx")
+    _decoder_path: str = os.path.expanduser(
+        f"~/.cache/maskit/models/{name}/decoder.onnx"
+    )

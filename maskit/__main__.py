@@ -6,11 +6,11 @@ import click
 import numpy as np
 import PIL.Image
 
-from osam import _humanize
-from osam import _jsondata
-from osam import _tabulate
-from osam import models
-from osam.prompt import Prompt
+from maskit import _humanize
+from maskit import _jsondata
+from maskit import _tabulate
+from maskit import models
+from maskit.prompt import Prompt
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
