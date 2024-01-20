@@ -29,7 +29,6 @@ classifiers = [
 dependencies = [
   "click",
   "gdown",
-  "imgviz",
   "onnxruntime",
 ]
 dynamic = ["readme", "version"]

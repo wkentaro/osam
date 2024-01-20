@@ -1,8 +1,8 @@
 import os
 
-import imgviz
 import numpy as np
 import onnxruntime
+import PIL.Image
 
 from osam.image_embedding import ImageEmbedding
 from osam.models._base import SamBase
@@ -61,11 +61,10 @@ def _resize_image(image: np.ndarray, image_size: int):
         width=image.shape[1],
         image_size=image_size,
     )
-    scaled_image = imgviz.resize(
-        image,
-        height=new_height,
-        width=new_width,
-        backend="pillow",
+    scaled_image = np.asarray(
+        PIL.Image.fromarray(image).resize(
+            (new_width, new_height), resample=PIL.Image.BILINEAR
+        )
     ).astype(np.float32)
     return scale, scaled_image
 
