@@ -32,7 +32,6 @@ dependencies = [
   "humanize",
   "imgviz",
   "onnxruntime",
-  "tabulate",
 ]
 dynamic = ["readme", "version"]
 
@@ -40,7 +39,6 @@ dynamic = ["readme", "version"]
 test = [
   "mypy",
   "types-Pillow",
-  "types-tabulate",
   "pytest",
   "ruff",
   "twine",
