@@ -29,7 +29,6 @@ classifiers = [
 dependencies = [
   "click",
   "gdown",
-  "humanize",
   "imgviz",
   "onnxruntime",
 ]

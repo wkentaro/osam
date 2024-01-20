@@ -3,10 +3,10 @@ import json
 import sys
 
 import click
-import humanize
 import imgviz
 import numpy as np
 
+from osam import _humanize
 from osam import _jsondata
 from osam import _tabulate
 from osam import logger
@@ -34,10 +34,12 @@ def list(show_all):
             [
                 model.name,
                 model.get_id(),
-                "<not pulled>" if size is None else humanize.naturalsize(size),
+                "<not pulled>" if size is None else _humanize.naturalsize(size),
                 "<not pulled>"
                 if modified_at is None
-                else humanize.naturaltime(datetime.datetime.fromtimestamp(modified_at)),
+                else _humanize.naturaltime(
+                    datetime.datetime.fromtimestamp(modified_at)
+                ),
             ]
         )
     print(_tabulate.tabulate(rows, headers=["NAME", "ID", "SIZE", "MODIFIED"]))
