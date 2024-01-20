@@ -19,6 +19,22 @@ def cli():
     pass
 
 
+@cli.command()
+@click.argument("subcommand", required=False, type=str)
+@click.pass_context
+def help(ctx, subcommand):
+    if subcommand is None:
+        click.echo(cli.get_help(ctx))
+        return
+
+    subcommand_obj = cli.get_command(ctx, subcommand)
+    if subcommand_obj is None:
+        click.echo(f"Unknown subcommand {subcommand!r}", err=True)
+        click.echo(cli.get_help(ctx))
+    else:
+        click.echo(subcommand_obj.get_help(ctx))
+
+
 @cli.command(help="list available models")
 @click.option("--all", "-a", "show_all", is_flag=True, help="show all models")
 def list(show_all):
@@ -43,6 +59,36 @@ def list(show_all):
             ]
         )
     print(_tabulate.tabulate(rows, headers=["NAME", "ID", "SIZE", "MODIFIED"]))
+
+
+@cli.command(help="pull model")
+@click.argument("model_name", metavar="model", type=str)
+def pull(model_name):
+    for cls in models.MODELS:
+        if cls.name == model_name:
+            break
+    else:
+        logger.error(f"Model {model_name} not found.")
+        sys.exit(1)
+
+    logger.info(f"Pulling {model_name!r}...")
+    cls.pull()
+    logger.info(f"Pulled {model_name!r}")
+
+
+@cli.command(help="remove model")
+@click.argument("model_name", metavar="model", type=str)
+def rm(model_name):
+    for cls in models.MODELS:
+        if cls.name == model_name:
+            break
+    else:
+        logger.error(f"Model {model_name} not found.")
+        sys.exit(1)
+
+    logger.info(f"Removing {model_name!r}...")
+    cls.remove()
+    logger.info(f"Removed {model_name!r}")
 
 
 @cli.command(help="run model")
