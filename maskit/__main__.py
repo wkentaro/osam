@@ -99,7 +99,7 @@ def rm(model_name):
     help="image path",
     required=True,
 )
-@click.option("--prompt", type=json.loads, help="prompt", required=True)
+@click.option("--prompt", type=json.loads, help="prompt")
 def run(model_name, image_path, prompt):
     for cls in models.MODELS:
         if cls.name == model_name:
@@ -108,10 +108,14 @@ def run(model_name, image_path, prompt):
         click.echo(f"Model {model_name} not found.", err=True)
         sys.exit(1)
 
-    if not ("points" in prompt and "point_labels" in prompt):
-        click.echo("'points' and 'point_labels' must be specified in prompt", err=True)
-        sys.exit(1)
-    if len(prompt["points"]) != len(prompt["point_labels"]):
+    if prompt is None:
+        width, height = PIL.Image.open(image_path).size
+        prompt = {"points": [[width / 2, height / 2]], "point_labels": [1]}
+        click.echo(
+            f"Prompt is not given, so using the center point as prompt: {prompt!r}",
+            err=True,
+        )
+    if len(prompt.get("points", [])) != len(prompt.get("point_labels", [])):
         click.echo("Length of 'points' and 'point_labels' must be same", err=True)
         sys.exit(1)
 
