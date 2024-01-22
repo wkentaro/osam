@@ -4,9 +4,9 @@ import numpy as np
 import onnxruntime
 import PIL.Image
 
-from maskit.image_embedding import ImageEmbedding
-from maskit.models._base import SamBase
-from maskit.prompt import Prompt
+from samuel.image_embedding import ImageEmbedding
+from samuel.models._base import SamBase
+from samuel.prompt import Prompt
 
 
 class Sam(SamBase):
@@ -145,11 +145,11 @@ class Sam91m(Sam):
 
     _encoder_url: str = "https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_b_01ec64.quantized.encoder.onnx"  # NOQA: E501
     _encoder_md5: str = "80fd8d0ab6c6ae8cb7b3bd5f368a752c"
-    _encoder_path: str = os.path.expanduser(f"~/.cache/maskit/{name}/encoder.onnx")
+    _encoder_path: str = os.path.expanduser(f"~/.cache/samuel/{name}/encoder.onnx")
 
     _decoder_url: str = "https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_b_01ec64.quantized.decoder.onnx"  # NOQA: E501
     _decoder_md5: str = "4253558be238c15fc265a7a876aaec82"
-    _decoder_path: str = os.path.expanduser(f"~/.cache/maskit/{name}/decoder.onnx")
+    _decoder_path: str = os.path.expanduser(f"~/.cache/samuel/{name}/decoder.onnx")
 
 
 class Sam308m(Sam):
@@ -157,11 +157,11 @@ class Sam308m(Sam):
 
     _encoder_url: str = "https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_l_0b3195.quantized.encoder.onnx"  # NOQA: E501
     _encoder_md5: str = "080004dc9992724d360a49399d1ee24b"
-    _encoder_path: str = os.path.expanduser(f"~/.cache/maskit/{name}/encoder.onnx")
+    _encoder_path: str = os.path.expanduser(f"~/.cache/samuel/{name}/encoder.onnx")
 
     _decoder_url: str = "https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_l_0b3195.quantized.decoder.onnx"  # NOQA: E501
     _decoder_md5: str = "851b7faac91e8e23940ee1294231d5c7"
-    _decoder_path: str = os.path.expanduser(f"~/.cache/maskit/{name}/decoder.onnx")
+    _decoder_path: str = os.path.expanduser(f"~/.cache/samuel/{name}/decoder.onnx")
 
 
 class Sam636m(Sam):
@@ -169,8 +169,8 @@ class Sam636m(Sam):
 
     _encoder_url: str = "https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_h_4b8939.quantized.encoder.onnx"  # NOQA: E501
     _encoder_md5: str = "958b5710d25b198d765fb6b94798f49e"
-    _encoder_path: str = os.path.expanduser(f"~/.cache/maskit/{name}/encoder.onnx")
+    _encoder_path: str = os.path.expanduser(f"~/.cache/samuel/{name}/encoder.onnx")
 
     _decoder_url: str = "https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_h_4b8939.quantized.decoder.onnx"  # NOQA: E501
     _decoder_md5: str = "a997a408347aa081b17a3ffff9f42a80"
-    _decoder_path: str = os.path.expanduser(f"~/.cache/maskit/{name}/decoder.onnx")
+    _decoder_path: str = os.path.expanduser(f"~/.cache/samuel/{name}/decoder.onnx")

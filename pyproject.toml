@@ -3,8 +3,8 @@ requires = ["hatchling>=1.20.0", "hatch-vcs", "hatch-fancy-pypi-readme"]
 build-backend = "hatchling.build"
 
 [project]
-name = "maskit"
-description = "maskit"
+name = "samuel"
+description = "samuel"
 license = { text = "MIT" }
 requires-python = ">=3.8"
 authors = [
@@ -43,7 +43,7 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/wkentaro/maskit"
+Homepage = "https://github.com/wkentaro/samuel"
 
 [tool.hatch.metadata.hooks.fancy-pypi-readme]
 content-type = "text/markdown"
@@ -55,7 +55,7 @@ fragments = [
 source = "vcs"
 
 [project.scripts]
-maskit = "maskit:__main__.cli"
+samuel = "samuel:__main__.cli"
 
 [tool.mypy]
 ignore_missing_imports = true
