@@ -4,9 +4,9 @@ import numpy as np
 import onnxruntime
 import PIL.Image
 
-from samuel.image_embedding import ImageEmbedding
-from samuel.models._base import ModelBase
-from samuel.prompt import Prompt
+from samuel._image_embedding import ImageEmbedding
+from samuel._models._base import ModelBase
+from samuel._prompt import Prompt
 
 
 class Sam(ModelBase):
