@@ -5,11 +5,11 @@ import onnxruntime
 import PIL.Image
 
 from samuel.image_embedding import ImageEmbedding
-from samuel.models._base import SamBase
+from samuel.models._base import ModelBase
 from samuel.prompt import Prompt
 
 
-class Sam(SamBase):
+class Sam(ModelBase):
     _image_size: int = 1024
 
     def encode_image(self, image: np.ndarray):

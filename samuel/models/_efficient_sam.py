@@ -3,11 +3,11 @@ import os
 import numpy as np
 
 from samuel.image_embedding import ImageEmbedding
-from samuel.models._base import SamBase
+from samuel.models._base import ModelBase
 from samuel.prompt import Prompt
 
 
-class EfficientSam(SamBase):
+class EfficientSam(ModelBase):
     def encode_image(self, image: np.ndarray) -> ImageEmbedding:
         if image.ndim == 2:
             raise ValueError("Grayscale images are not supported")

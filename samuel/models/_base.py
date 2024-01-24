@@ -6,7 +6,7 @@ import gdown
 import onnxruntime
 
 
-class SamBase:
+class ModelBase:
     _encoder_path: str
     _encoder_md5: str
     _encoder_url: Optional[str]
