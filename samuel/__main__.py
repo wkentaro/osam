@@ -5,12 +5,14 @@ import sys
 import click
 import numpy as np
 import PIL.Image
+import uvicorn
 
 from samuel import _humanize
 from samuel import _json
 from samuel import _models
 from samuel import _tabulate
 from samuel._prompt import Prompt
+from samuel._server import app
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -88,6 +90,12 @@ def rm(model_name):
     click.echo(f"Removing {model_name!r}...", err=True)
     cls.remove()
     click.echo(f"Removed {model_name!r}", err=True)
+
+
+@cli.command(help="Start server")
+def serve():
+    click.echo("Starting server...", err=True)
+    uvicorn.run(app, host="127.0.0.1", port=11368)
 
 
 @cli.command(help="Run a model")

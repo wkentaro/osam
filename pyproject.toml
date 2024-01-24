@@ -29,7 +29,9 @@ classifiers = [
 dependencies = [
   "click",
   "gdown",
+  "fastapi",
   "onnxruntime",
+  "uvicorn",
 ]
 dynamic = ["readme", "version"]
 
