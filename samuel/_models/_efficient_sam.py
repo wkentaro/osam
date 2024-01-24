@@ -2,9 +2,9 @@ import os
 
 import numpy as np
 
-from samuel.image_embedding import ImageEmbedding
-from samuel.models._base import ModelBase
-from samuel.prompt import Prompt
+from samuel._image_embedding import ImageEmbedding
+from samuel._models._base import ModelBase
+from samuel._prompt import Prompt
 
 
 class EfficientSam(ModelBase):

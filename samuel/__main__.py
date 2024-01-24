@@ -8,9 +8,9 @@ import PIL.Image
 
 from samuel import _humanize
 from samuel import _json
+from samuel import _models
 from samuel import _tabulate
-from samuel import models
-from samuel.prompt import Prompt
+from samuel._prompt import Prompt
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -38,7 +38,7 @@ def help(ctx, subcommand):
 @click.option("--all", "-a", "show_all", is_flag=True, help="show all models")
 def list(show_all):
     rows = []
-    for model in models.MODELS:
+    for model in _models.MODELS:
         size = model.get_size()
         modified_at = model.get_modified_at()
 
@@ -63,7 +63,7 @@ def list(show_all):
 @cli.command(help="Pull a model")
 @click.argument("model_name", metavar="model", type=str)
 def pull(model_name):
-    for cls in models.MODELS:
+    for cls in _models.MODELS:
         if cls.name == model_name:
             break
     else:
@@ -78,7 +78,7 @@ def pull(model_name):
 @cli.command(help="Remove a model")
 @click.argument("model_name", metavar="model", type=str)
 def rm(model_name):
-    for cls in models.MODELS:
+    for cls in _models.MODELS:
         if cls.name == model_name:
             break
     else:
@@ -101,7 +101,7 @@ def rm(model_name):
 )
 @click.option("--prompt", type=json.loads, help="prompt")
 def run(model_name, image_path, prompt):
-    for cls in models.MODELS:
+    for cls in _models.MODELS:
         if cls.name == model_name:
             break
     else:
