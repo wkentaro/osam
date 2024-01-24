@@ -18,7 +18,7 @@ def cli():
     pass
 
 
-@cli.command()
+@cli.command(help="Help about any command")
 @click.argument("subcommand", required=False, type=str)
 @click.pass_context
 def help(ctx, subcommand):
@@ -34,7 +34,7 @@ def help(ctx, subcommand):
         click.echo(subcommand_obj.get_help(ctx))
 
 
-@cli.command(help="list available models")
+@cli.command(help="List models")
 @click.option("--all", "-a", "show_all", is_flag=True, help="show all models")
 def list(show_all):
     rows = []
@@ -60,7 +60,7 @@ def list(show_all):
     print(_tabulate.tabulate(rows, headers=["NAME", "ID", "SIZE", "MODIFIED"]))
 
 
-@cli.command(help="pull model")
+@cli.command(help="Pull a model")
 @click.argument("model_name", metavar="model", type=str)
 def pull(model_name):
     for cls in models.MODELS:
@@ -75,7 +75,7 @@ def pull(model_name):
     click.echo(f"Pulled {model_name!r}", err=True)
 
 
-@cli.command(help="remove model")
+@cli.command(help="Remove a model")
 @click.argument("model_name", metavar="model", type=str)
 def rm(model_name):
     for cls in models.MODELS:
@@ -90,7 +90,7 @@ def rm(model_name):
     click.echo(f"Removed {model_name!r}", err=True)
 
 
-@cli.command(help="run model")
+@cli.command(help="Run a model")
 @click.argument("model_name", metavar="model", type=str)
 @click.option(
     "--image",
