@@ -11,8 +11,8 @@ from samuel import _humanize
 from samuel import _json
 from samuel import _models
 from samuel import _tabulate
-from samuel._prompt import Prompt
 from samuel._server import app
+from samuel._types import Prompt
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
