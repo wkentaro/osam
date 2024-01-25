@@ -11,7 +11,6 @@ from samuel import _humanize
 from samuel import _json
 from samuel import _models
 from samuel import _tabulate
-from samuel._server import app
 from samuel._types import Prompt
 
 
@@ -93,9 +92,10 @@ def rm(model_name):
 
 
 @cli.command(help="Start server")
-def serve():
+@click.option("--reload", is_flag=True, help="reload server on file changes")
+def serve(reload):
     click.echo("Starting server...", err=True)
-    uvicorn.run(app, host="127.0.0.1", port=11368)
+    uvicorn.run("samuel._server:app", host="127.0.0.1", port=11368, reload=reload)
 
 
 @cli.command(help="Run a model")
