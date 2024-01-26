@@ -3,10 +3,15 @@ import os
 from typing import Optional
 
 import gdown
+import numpy as np
 import onnxruntime
+
+from .. import _types
 
 
 class ModelBase:
+    name: str
+
     _encoder_path: str
     _encoder_md5: str
     _encoder_url: Optional[str]
@@ -58,3 +63,11 @@ class ModelBase:
         ):
             return None
         return os.stat(cls._encoder_path).st_mtime
+
+    def encode_image(self, image: np.ndarray) -> _types.ImageEmbedding:
+        raise NotImplementedError
+
+    def generate_mask(
+        self, image_embedding: _types.ImageEmbedding, prompt: _types.Prompt
+    ) -> np.ndarray:
+        raise NotImplementedError

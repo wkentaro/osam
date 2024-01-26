@@ -1,3 +1,4 @@
+from ._base import ModelBase  # noqa: F401
 from ._efficient_sam import EfficientSam10m
 from ._efficient_sam import EfficientSam25m
 from ._sam import Sam91m
