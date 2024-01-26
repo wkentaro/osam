@@ -4,7 +4,7 @@ import io
 import PIL.Image
 
 
-def ndarray_to_b64data(ndarray):
+def image_ndarray_to_b64data(ndarray):
     pil = PIL.Image.fromarray(ndarray)
     f = io.BytesIO()
     pil.save(f, format="PNG")

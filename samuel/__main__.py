@@ -144,7 +144,7 @@ def run(model_name, image_path, prompt):
         image_embedding=image_embedding,
         prompt=Prompt(points=prompt["points"], point_labels=prompt["point_labels"]),
     )
-    click.echo(_json.ndarray_to_b64data(mask.astype(np.uint8) * 255), nl=False)
+    click.echo(_json.image_ndarray_to_b64data(mask.astype(np.uint8) * 255), nl=False)
 
 
 if __name__ == "__main__":
