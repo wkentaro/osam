@@ -36,24 +36,21 @@ def help(ctx, subcommand):
 
 
 @cli.command(help="List models")
-@click.option("--all", "-a", "show_all", is_flag=True, help="show all models")
-def list(show_all):
+def list():
     rows = []
     for model in _models.MODELS:
         size = model.get_size()
         modified_at = model.get_modified_at()
 
-        if not show_all and (size is None or modified_at is None):
+        if size is None or modified_at is None:
             continue
 
         rows.append(
             [
                 model.name,
                 model.get_id(),
-                "<not pulled>" if size is None else _humanize.naturalsize(size),
-                "<not pulled>"
-                if modified_at is None
-                else _humanize.naturaltime(
+                _humanize.naturalsize(size),
+                _humanize.naturaltime(
                     datetime.datetime.fromtimestamp(modified_at)
                 ),
             ]
