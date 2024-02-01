@@ -1,10 +1,9 @@
-import os
-
 import numpy as np
 import onnxruntime
 import PIL.Image
 
 from samuel._models._base import ModelBase
+from samuel._models._base import ModelBlob
 from samuel._types import ImageEmbedding
 from samuel._types import Prompt
 
@@ -19,7 +18,7 @@ class Sam(ModelBase):
             raise ValueError("RGBA images are not supported")
 
         image_embedding = _compute_image_embedding(
-            encoder_session=self._encoder_session,
+            encoder_session=self._inference_sessions["encoder"],
             image=image,
             image_size=self._image_size,
         )
@@ -36,7 +35,7 @@ class Sam(ModelBase):
         prompt: Prompt,
     ) -> np.ndarray:
         return _generate_mask(
-            decoder_session=self._decoder_session,
+            decoder_session=self._inference_sessions["decoder"],
             image_embedding=image_embedding,
             prompt=prompt,
             image_size=self._image_size,
@@ -143,34 +142,43 @@ def _generate_mask(
 class Sam91m(Sam):
     name = "sam:91m"
 
-    _encoder_url: str = "https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_b_01ec64.quantized.encoder.onnx"  # NOQA: E501
-    _encoder_md5: str = "80fd8d0ab6c6ae8cb7b3bd5f368a752c"
-    _encoder_path: str = os.path.expanduser(f"~/.cache/samuel/{name}/encoder.onnx")
-
-    _decoder_url: str = "https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_b_01ec64.quantized.decoder.onnx"  # NOQA: E501
-    _decoder_md5: str = "4253558be238c15fc265a7a876aaec82"
-    _decoder_path: str = os.path.expanduser(f"~/.cache/samuel/{name}/decoder.onnx")
+    _blobs = {
+        "encoder": ModelBlob(
+            url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_b_01ec64.quantized.encoder.onnx",
+            hash="sha256:3346b9cc551c9902fbf3b203935e933592b22e042365f58321c17fc12641fd6a",
+        ),
+        "decoder": ModelBlob(
+            url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_b_01ec64.quantized.decoder.onnx",
+            hash="sha256:edbcf1a0afaa55621fb0abe6b3db1516818b609ea9368f309746a3afc68f7613",
+        ),
+    }
 
 
 class Sam308m(Sam):
     name = "sam:308m"
 
-    _encoder_url: str = "https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_l_0b3195.quantized.encoder.onnx"  # NOQA: E501
-    _encoder_md5: str = "080004dc9992724d360a49399d1ee24b"
-    _encoder_path: str = os.path.expanduser(f"~/.cache/samuel/{name}/encoder.onnx")
-
-    _decoder_url: str = "https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_l_0b3195.quantized.decoder.onnx"  # NOQA: E501
-    _decoder_md5: str = "851b7faac91e8e23940ee1294231d5c7"
-    _decoder_path: str = os.path.expanduser(f"~/.cache/samuel/{name}/decoder.onnx")
+    _blobs = {
+        "encoder": ModelBlob(
+            url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_l_0b3195.quantized.encoder.onnx",
+            hash="sha256:f7158a4a1fe7f670ef47ea2f7f852685425c1ed6caa40f5df86cbe2b0502034f",
+        ),
+        "decoder": ModelBlob(
+            url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_l_0b3195.quantized.decoder.onnx",
+            hash="sha256:552ebb23bf52c5e5b971ac710d1eb8dccfd88b36cc6aff881d1536d1662e6d7b",
+        ),
+    }
 
 
 class Sam636m(Sam):
     name = "sam:636m"
 
-    _encoder_url: str = "https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_h_4b8939.quantized.encoder.onnx"  # NOQA: E501
-    _encoder_md5: str = "958b5710d25b198d765fb6b94798f49e"
-    _encoder_path: str = os.path.expanduser(f"~/.cache/samuel/{name}/encoder.onnx")
-
-    _decoder_url: str = "https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_h_4b8939.quantized.decoder.onnx"  # NOQA: E501
-    _decoder_md5: str = "a997a408347aa081b17a3ffff9f42a80"
-    _decoder_path: str = os.path.expanduser(f"~/.cache/samuel/{name}/decoder.onnx")
+    _blobs = {
+        "encoder": ModelBlob(
+            url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_h_4b8939.quantized.encoder.onnx",
+            hash="sha256:a5c745fd4279efc5e5436b412200e983dafc2249ce172af6cc0002a71bb5f485",
+        ),
+        "decoder": ModelBlob(
+            url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_h_4b8939.quantized.decoder.onnx",
+            hash="sha256:020b385a45ffe51097e1acd10cd791075a86171153505f789a793bc382eef210",
+        ),
+    }
