@@ -1,8 +1,7 @@
-import os
-
 import numpy as np
 
 from samuel._models._base import ModelBase
+from samuel._models._base import ModelBlob
 from samuel._types import ImageEmbedding
 from samuel._types import Prompt
 
@@ -15,7 +14,7 @@ class EfficientSam(ModelBase):
             raise ValueError("RGBA images are not supported")
 
         batched_images = image.transpose(2, 0, 1)[None].astype(np.float32) / 255
-        image_embedding = self._encoder_session.run(
+        image_embedding = self._inference_sessions["encoder"].run(
             output_names=None,
             input_feed={"batched_images": batched_images},
         )[0]
@@ -49,7 +48,7 @@ class EfficientSam(ModelBase):
             ),
         }
 
-        masks, _, _ = self._decoder_session.run(None, decoder_inputs)
+        masks, _, _ = self._inference_sessions["decoder"].run(None, decoder_inputs)
         mask = masks[0, 0, 0, :, :]  # (1, 1, 3, H, W) -> (H, W)
         mask = mask > 0.0
 
@@ -59,30 +58,28 @@ class EfficientSam(ModelBase):
 class EfficientSam10m(EfficientSam):
     name = "efficient-sam:10m"
 
-    _encoder_url: str = "https://github.com/labelmeai/efficient-sam/releases/download/onnx-models-20231225/efficient_sam_vitt_encoder.onnx"  # NOQA: E501
-    _encoder_md5: str = "2d4a1303ff0e19fe4a8b8ede69c2f5c7"
-    _encoder_path: str = os.path.expanduser(
-        f"~/.cache/samuel/models/{name}/encoder.onnx"
-    )
-
-    _decoder_url: str = "https://github.com/labelmeai/efficient-sam/releases/download/onnx-models-20231225/efficient_sam_vitt_decoder.onnx"  # NOQA: E501
-    _decoder_md5: str = "be3575ca4ed9b35821ac30991ab01843"
-    _decoder_path: str = os.path.expanduser(
-        f"~/.cache/samuel/models/{name}/decoder.onnx"
-    )
+    _blobs = {
+        "encoder": ModelBlob(
+            url="https://github.com/labelmeai/efficient-sam/releases/download/onnx-models-20231225/efficient_sam_vitt_encoder.onnx",
+            hash="sha256:7a73ee65aa2c37237c89b4b18e73082f757ffb173899609c5d97a2bbd4ebb02d",
+        ),
+        "decoder": ModelBlob(
+            url="https://github.com/labelmeai/efficient-sam/releases/download/onnx-models-20231225/efficient_sam_vitt_decoder.onnx",
+            hash="sha256:e1afe46232c3bfa3470a6a81c7d3181836a94ea89528aff4e0f2d2c611989efd",
+        ),
+    }
 
 
 class EfficientSam25m(EfficientSam):
     name = "efficient-sam:25m"
 
-    _encoder_url: str = "https://github.com/labelmeai/efficient-sam/releases/download/onnx-models-20231225/efficient_sam_vits_encoder.onnx"  # NOQA: E501
-    _encoder_md5: str = "7d97d23e8e0847d4475ca7c9f80da96d"
-    _encoder_path: str = os.path.expanduser(
-        f"~/.cache/samuel/models/{name}/encoder.onnx"
-    )
-
-    _decoder_url: str = "https://github.com/labelmeai/efficient-sam/releases/download/onnx-models-20231225/efficient_sam_vits_decoder.onnx"  # NOQA: E501
-    _decoder_md5: str = "d9372f4a7bbb1a01d236b0508300b994"
-    _decoder_path: str = os.path.expanduser(
-        f"~/.cache/samuel/models/{name}/decoder.onnx"
-    )
+    _blobs = {
+        "encoder": ModelBlob(
+            url="https://github.com/labelmeai/efficient-sam/releases/download/onnx-models-20231225/efficient_sam_vits_encoder.onnx",
+            hash="sha256:4cacbb23c6903b1acf87f1d77ed806b840800c5fcd4ac8f650cbffed474b8896",
+        ),
+        "decoder": ModelBlob(
+            url="https://github.com/labelmeai/efficient-sam/releases/download/onnx-models-20231225/efficient_sam_vits_decoder.onnx",
+            hash="sha256:4727baf23dacfb51d4c16795b2ac382c403505556d0284e84c6ff3d4e8e36f22",
+        ),
+    }
