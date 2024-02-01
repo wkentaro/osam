@@ -50,9 +50,7 @@ def list():
                 model.name,
                 model.get_id(),
                 _humanize.naturalsize(size),
-                _humanize.naturaltime(
-                    datetime.datetime.fromtimestamp(modified_at)
-                ),
+                _humanize.naturaltime(datetime.datetime.fromtimestamp(modified_at)),
             ]
         )
     print(_tabulate.tabulate(rows, headers=["NAME", "ID", "SIZE", "MODIFIED"]))
