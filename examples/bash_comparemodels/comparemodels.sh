@@ -3,7 +3,7 @@
 image_file='../_images/dogs.jpg'
 number_of_choices=2
 
-choices=$(samuel list --all | awk '{print $1}' | sed '1d')
+choices=$(samuel list | awk '{print $1}' | sed '1d')
 
 echo "Select $number_of_choices models to compare:"
 select model in $choices; do
