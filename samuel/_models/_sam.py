@@ -88,7 +88,7 @@ def _compute_image_embedding(
     x = x.transpose(2, 0, 1)[None, :, :, :]
 
     output = encoder_session.run(output_names=None, input_feed={"x": x})
-    image_embedding = output[0]
+    image_embedding = output[0][0]  # (embedding_dim, height, width)
     return image_embedding
 
 
@@ -122,7 +122,7 @@ def _generate_mask(
     onnx_has_mask_input = np.array([-1], dtype=np.float32)
 
     decoder_inputs = {
-        "image_embeddings": image_embedding.embedding,
+        "image_embeddings": image_embedding.embedding[None, :, :, :],
         "point_coords": onnx_coord,
         "point_labels": onnx_label,
         "mask_input": onnx_mask_input,

@@ -17,7 +17,7 @@ class EfficientSam(ModelBase):
         image_embedding = self._inference_sessions["encoder"].run(
             output_names=None,
             input_feed={"batched_images": batched_images},
-        )[0]
+        )[0][0]  # (embedding_dim, height, width)
 
         return ImageEmbedding(
             original_height=image.shape[0],
@@ -33,13 +33,15 @@ class EfficientSam(ModelBase):
         input_point = np.array(prompt.points, dtype=np.float32)
         input_label = np.array(prompt.point_labels, dtype=np.float32)
 
+        # batch_size, embedding_dim, height, width
+        batched_image_embedding = image_embedding.embedding[None, :, :, :]
         # batch_size, num_queries, num_points, 2
         batched_point_coords = input_point[None, None, :, :]
         # batch_size, num_queries, num_points
         batched_point_labels = input_label[None, None, :]
 
         decoder_inputs = {
-            "image_embeddings": image_embedding.embedding,
+            "image_embeddings": batched_image_embedding,
             "batched_point_coords": batched_point_coords,
             "batched_point_labels": batched_point_labels,
             "orig_im_size": np.array(
