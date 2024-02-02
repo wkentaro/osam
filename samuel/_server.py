@@ -26,7 +26,6 @@ async def generate(request: types.GenerateMaskRequest) -> types.GenerateMaskResp
 @app.on_event("startup")
 async def startup_event():
     uvicorn_logger = logging.getLogger("uvicorn")
-    os.makedirs(os.path.expanduser("~/.cache/samuel/logs"), exist_ok=True)
     handler = logging.FileHandler(os.path.expanduser("~/.cache/samuel/samuel.log"))
     handler.setLevel(logging.DEBUG)
     fmt = "%(asctime)s [%(levelname)s] %(module)s:%(funcName)s:%(lineno)s - %(message)s"
