@@ -30,8 +30,10 @@ class Prompt(pydantic.BaseModel):
     points: np.ndarray
     point_labels: np.ndarray
 
-    @pydantic.validator("points")
+    @pydantic.validator("points", pre=True)
     def validate_points(cls, points):
+        if isinstance(points, list):
+            points = np.array(points, dtype=float)
         if points.ndim != 2:
             raise ValueError("points must be 2-dimensional")
         if points.shape[1] != 2:
@@ -42,8 +44,10 @@ class Prompt(pydantic.BaseModel):
     def serialize_points(self, points: np.ndarray) -> List[List[float]]:
         return points.tolist()
 
-    @pydantic.validator("point_labels")
+    @pydantic.validator("point_labels", pre=True)
     def validate_point_labels(cls, point_labels, values):
+        if isinstance(point_labels, list):
+            point_labels = np.array(point_labels, dtype=int)
         if point_labels.ndim != 1:
             raise ValueError("point_labels must be 1-dimensional")
         if "points" in values and point_labels.shape[0] != values["points"].shape[0]:
@@ -65,7 +69,7 @@ class GenerateMaskRequest(pydantic.BaseModel):
     prompt: Optional[Prompt] = pydantic.Field(default=None)
 
     @pydantic.validator("image", pre=True)
-    def pre_validate_image(cls, image: Union[str, np.ndarray]) -> np.ndarray:
+    def validate_image(cls, image: Union[str, np.ndarray]) -> np.ndarray:
         if isinstance(image, str):
             return _json.image_b64data_to_ndarray(b64data=image)
         return image
