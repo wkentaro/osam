@@ -1,7 +1,7 @@
 import fastapi
 
-from samuel import _types
 from samuel import apis
+from samuel import types
 
 app: fastapi.FastAPI = fastapi.FastAPI()
 
@@ -12,7 +12,7 @@ def index():
 
 
 @app.post("/api/generate_mask")
-def generate(request: _types.GenerateMaskRequest) -> _types.GenerateMaskResponse:
+def generate(request: types.GenerateMaskRequest) -> types.GenerateMaskResponse:
     try:
         return apis.generate_mask(request=request)
     except ValueError as e:

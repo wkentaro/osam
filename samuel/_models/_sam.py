@@ -4,8 +4,8 @@ import PIL.Image
 
 from samuel._models._base import ModelBase
 from samuel._models._base import ModelBlob
-from samuel._types import ImageEmbedding
-from samuel._types import Prompt
+from samuel.types import ImageEmbedding
+from samuel.types import Prompt
 
 
 class Sam(ModelBase):

@@ -10,8 +10,8 @@ import uvicorn
 from samuel import _humanize
 from samuel import _models
 from samuel import _tabulate
-from samuel import _types
 from samuel import apis
+from samuel import types
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -106,7 +106,7 @@ def serve(reload):
 def run(model_name, image_path, prompt):
     try:
         response = apis.generate_mask(
-            request=_types.GenerateMaskRequest(
+            request=types.GenerateMaskRequest(
                 model=model_name,
                 image=np.asarray(PIL.Image.open(image_path)),
                 prompt=prompt,

@@ -8,7 +8,7 @@ import gdown
 import numpy as np
 import onnxruntime
 
-from .. import _types
+from samuel import types
 
 
 @dataclasses.dataclass
@@ -88,10 +88,10 @@ class ModelBase:
             modified_at = max(modified_at, blob.modified_at)
         return modified_at
 
-    def encode_image(self, image: np.ndarray) -> _types.ImageEmbedding:
+    def encode_image(self, image: np.ndarray) -> types.ImageEmbedding:
         raise NotImplementedError
 
     def generate_mask(
-        self, image_embedding: _types.ImageEmbedding, prompt: _types.Prompt
+        self, image_embedding: types.ImageEmbedding, prompt: types.Prompt
     ) -> np.ndarray:
         raise NotImplementedError

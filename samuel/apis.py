@@ -4,12 +4,12 @@ from typing import Optional
 import numpy as np
 
 from samuel import _models
-from samuel import _types
+from samuel import types
 
 model: Optional[_models.ModelBase] = None
 
 
-def generate_mask(request: _types.GenerateMaskRequest) -> _types.GenerateMaskResponse:
+def generate_mask(request: types.GenerateMaskRequest) -> types.GenerateMaskResponse:
     global model
 
     if model is None or model.name != request.model:
@@ -24,7 +24,7 @@ def generate_mask(request: _types.GenerateMaskRequest) -> _types.GenerateMaskRes
 
     if request.prompt is None:
         height, width = image.shape[:2]
-        request.prompt = _types.Prompt(
+        request.prompt = types.Prompt(
             points=np.array([[width / 2, height / 2]], dtype=np.float32),
             point_labels=np.array([1], dtype=np.int32),
         )
@@ -34,8 +34,8 @@ def generate_mask(request: _types.GenerateMaskRequest) -> _types.GenerateMaskRes
             file=sys.stderr,
         )
 
-    image_embedding: _types.ImageEmbedding = model.encode_image(image=image)
+    image_embedding: types.ImageEmbedding = model.encode_image(image=image)
     mask: np.ndarray = model.generate_mask(
         image_embedding=image_embedding, prompt=request.prompt
     )
-    return _types.GenerateMaskResponse(model=request.model, mask=mask)
+    return types.GenerateMaskResponse(model=request.model, mask=mask)
