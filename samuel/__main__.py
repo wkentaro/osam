@@ -1,12 +1,14 @@
 import datetime
 import io
 import json
+import os
 import sys
 
 import click
 import numpy as np
 import PIL.Image
 import uvicorn
+from loguru import logger
 
 from samuel import _humanize
 from samuel import _models
@@ -17,7 +19,14 @@ from samuel import types
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
 def cli():
-    pass
+    logger.remove(0)
+    logger.add(
+        sys.stderr, level="INFO", colorize=True, format="<level>{message}</level>"
+    )
+    os.makedirs(os.path.expanduser("~/.cache/samuel"), exist_ok=True)
+    logger.add(
+        os.path.expanduser("~/.cache/samuel/samuel.log"), colorize=True, level="DEBUG"
+    )
 
 
 @cli.command(help="Help about any command")
@@ -30,7 +39,7 @@ def help(ctx, subcommand):
 
     subcommand_obj = cli.get_command(ctx, subcommand)
     if subcommand_obj is None:
-        click.echo(f"Unknown subcommand {subcommand!r}", err=True)
+        logger.warning("Unknown subcommand {subcommand!r}", subcommand=subcommand)
         click.echo(cli.get_help(ctx))
     else:
         click.echo(subcommand_obj.get_help(ctx))
@@ -57,7 +66,7 @@ def list(show_all):
             )
 
         rows.append([model.name, model.get_id(), size, modified_at])
-    print(_tabulate.tabulate(rows, headers=["NAME", "ID", "SIZE", "MODIFIED"]))
+    click.echo(_tabulate.tabulate(rows, headers=["NAME", "ID", "SIZE", "MODIFIED"]))
 
 
 @cli.command(help="Pull a model")
@@ -67,12 +76,12 @@ def pull(model_name):
         if cls.name == model_name:
             break
     else:
-        click.echo(f"Model {model_name} not found.", err=True)
+        logger.warning("Model {model_name!r} not found.", model_name=model_name)
         sys.exit(1)
 
-    click.echo(f"Pulling {model_name!r}...", err=True)
+    logger.info("Pulling {model_name!r}...", model_name=model_name)
     cls.pull()
-    click.echo(f"Pulled {model_name!r}", err=True)
+    logger.info("Pulled {model_name!r}", model_name=model_name)
 
 
 @cli.command(help="Remove a model")
@@ -82,18 +91,18 @@ def rm(model_name):
         if cls.name == model_name:
             break
     else:
-        click.echo(f"Model {model_name} not found.", err=True)
+        logger.warning("Model {model_name} not found.", model_name=model_name)
         sys.exit(1)
 
-    click.echo(f"Removing {model_name!r}...", err=True)
+    logger.info("Removing {model_name!r}...", model_name=model_name)
     cls.remove()
-    click.echo(f"Removed {model_name!r}", err=True)
+    logger.info("Removed {model_name!r}", model_name=model_name)
 
 
 @cli.command(help="Start server")
 @click.option("--reload", is_flag=True, help="reload server on file changes")
 def serve(reload):
-    click.echo("Starting server...", err=True)
+    logger.info("Starting server...")
     uvicorn.run("samuel._server:app", host="127.0.0.1", port=11368, reload=reload)
 
 
@@ -117,7 +126,7 @@ def run(model_name: str, image_path: str, prompt, json: bool) -> None:
         )
         response: types.GenerateMaskResponse = apis.generate_mask(request=request)
     except ValueError as e:
-        click.echo(e, err=True)
+        logger.error("{e}", e=e)
         sys.exit(1)
 
     if json:

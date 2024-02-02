@@ -1,7 +1,7 @@
-import sys
 from typing import Optional
 
 import numpy as np
+from loguru import logger
 
 from samuel import _models
 from samuel import types
@@ -28,10 +28,9 @@ def generate_mask(request: types.GenerateMaskRequest) -> types.GenerateMaskRespo
             points=np.array([[width / 2, height / 2]], dtype=np.float32),
             point_labels=np.array([1], dtype=np.int32),
         )
-        print(
-            "Prompt is not given, so using the center point as prompt: "
-            f"{request.prompt!r}",
-            file=sys.stderr,
+        logger.warning(
+            "Prompt is not given, so using the center point as prompt: {prompt!r}",
+            prompt=request.prompt,
         )
 
     image_embedding: types.ImageEmbedding = model.encode_image(image=image)
