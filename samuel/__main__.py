@@ -1,4 +1,5 @@
 import datetime
+import io
 import json
 import sys
 
@@ -106,19 +107,36 @@ def serve(reload):
     required=True,
 )
 @click.option("--prompt", type=json.loads, help="prompt")
-def run(model_name, image_path, prompt):
+@click.option("--json", is_flag=True, help="json output")
+def run(model_name: str, image_path: str, prompt, json: bool) -> None:
     try:
-        response = apis.generate_mask(
-            request=types.GenerateMaskRequest(
-                model=model_name,
-                image=np.asarray(PIL.Image.open(image_path)),
-                prompt=prompt,
-            )
+        request: types.GenerateMaskRequest = types.GenerateMaskRequest(
+            model=model_name,
+            image=np.asarray(PIL.Image.open(image_path)),
+            prompt=prompt,
         )
+        response: types.GenerateMaskResponse = apis.generate_mask(request=request)
     except ValueError as e:
         click.echo(e, err=True)
         sys.exit(1)
-    click.echo(response.model_dump_json())
+
+    if json:
+        click.echo(response.model_dump_json())
+    else:
+        visualization: np.ndarray = (
+            0.5 * request.image
+            + 0.5
+            * np.array([0, 255, 0])[None, None, :]
+            * (response.mask > 0)[:, :, None]
+        ).astype(np.uint8)
+        sys.stdout.buffer.write(_image_ndarray_to_data(visualization))
+
+
+def _image_ndarray_to_data(ndarray: np.ndarray) -> bytes:
+    pil = PIL.Image.fromarray(ndarray)
+    with io.BytesIO() as f:
+        pil.save(f, format="PNG")
+        return f.getvalue()
 
 
 if __name__ == "__main__":

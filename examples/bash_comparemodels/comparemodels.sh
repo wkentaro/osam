@@ -23,7 +23,7 @@ output_files=()
 for model in "${selections[@]}"; do
     echo "Running $model"
     output_file=${model/:/-}.jpg
-    samuel run $model --image $image_file | base64 --decode > $output_file
+    samuel run $model --image $image_file > $output_file
     echo "Exported $model.jpg"
     output_files+=($output_file)
 done
