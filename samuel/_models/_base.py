@@ -7,6 +7,7 @@ from typing import Optional
 import gdown
 import numpy as np
 import onnxruntime
+from loguru import logger
 
 from samuel import types
 
@@ -38,7 +39,11 @@ class ModelBlob:
         gdown.cached_download(url=self.url, path=self.path, hash=self.hash)
 
     def remove(self):
-        os.remove(self.path)
+        if os.path.exists(self.path):
+            logger.debug("Removing model blob {path!r}", path=self.path)
+            os.remove(self.path)
+        else:
+            logger.warning("Model blob {path!r} not found", path=self.path)
 
 
 class ModelBase:
