@@ -16,6 +16,14 @@ class ImageEmbedding(pydantic.BaseModel):
     original_width: int
     embedding: np.ndarray
 
+    @pydantic.validator("embedding")
+    def validate_embedding(cls, embedding):
+        if embedding.ndim != 3:
+            raise ValueError(
+                "embedding must be 3-dimensional: (embedding_dim, height, width)"
+            )
+        return embedding
+
 
 class Prompt(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
