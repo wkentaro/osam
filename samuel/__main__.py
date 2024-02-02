@@ -36,23 +36,26 @@ def help(ctx, subcommand):
 
 
 @cli.command(help="List models")
-def list():
+@click.option("--all", "-a", "show_all", is_flag=True, help="show all models")
+def list(show_all):
     rows = []
     for model in _models.MODELS:
         size = model.get_size()
         modified_at = model.get_modified_at()
 
         if size is None or modified_at is None:
-            continue
+            if show_all:
+                size = "<not pulled>"
+                modified_at = "<not pulled>"
+            else:
+                continue
+        else:
+            size = _humanize.naturalsize(size)
+            modified_at = _humanize.naturaltime(
+                datetime.datetime.fromtimestamp(modified_at)
+            )
 
-        rows.append(
-            [
-                model.name,
-                model.get_id(),
-                _humanize.naturalsize(size),
-                _humanize.naturaltime(datetime.datetime.fromtimestamp(modified_at)),
-            ]
-        )
+        rows.append([model.name, model.get_id(), size, modified_at])
     print(_tabulate.tabulate(rows, headers=["NAME", "ID", "SIZE", "MODIFIED"]))
 
 
