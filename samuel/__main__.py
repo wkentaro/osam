@@ -8,10 +8,10 @@ import PIL.Image
 import uvicorn
 
 from samuel import _humanize
-from samuel import _json
 from samuel import _models
 from samuel import _tabulate
-from samuel._types import Prompt
+from samuel import _types
+from samuel import apis
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -104,42 +104,18 @@ def serve(reload):
 )
 @click.option("--prompt", type=json.loads, help="prompt")
 def run(model_name, image_path, prompt):
-    for cls in _models.MODELS:
-        if cls.name == model_name:
-            break
-    else:
-        click.echo(f"Model {model_name} not found.", err=True)
-        sys.exit(1)
-
-    if prompt is None:
-        width, height = PIL.Image.open(image_path).size
-        prompt = {"points": [[width / 2, height / 2]], "point_labels": [1]}
-        click.echo(
-            f"Prompt is not given, so using the center point as prompt: {prompt!r}",
-            err=True,
+    try:
+        response = apis.generate_mask(
+            request=_types.GenerateMaskRequest(
+                model=model_name,
+                image=np.asarray(PIL.Image.open(image_path)),
+                prompt=prompt,
+            )
         )
-    if len(prompt.get("points", [])) != len(prompt.get("point_labels", [])):
-        click.echo("Length of 'points' and 'point_labels' must be same", err=True)
+    except ValueError as e:
+        click.echo(e, err=True)
         sys.exit(1)
-
-    model = cls()
-    click.echo(f"Loaded {model_name!r}: {model}", err=True)
-
-    image = np.asarray(PIL.Image.open(image_path))
-    click.echo(f"Loaded {image_path!r}: {image.shape}, {image.dtype}", err=True)
-
-    image_embedding = model.encode_image(image)
-    click.echo(
-        f"Encoded image: {image_embedding.embedding.shape}, "
-        f"{image_embedding.embedding.dtype}",
-        err=True,
-    )
-
-    mask = model.generate_mask(
-        image_embedding=image_embedding,
-        prompt=Prompt(points=prompt["points"], point_labels=prompt["point_labels"]),
-    )
-    click.echo(_json.image_ndarray_to_b64data(mask.astype(np.uint8) * 255), nl=False)
+    click.echo(response.model_dump_json())
 
 
 if __name__ == "__main__":
