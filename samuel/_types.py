@@ -1,13 +1,17 @@
 import dataclasses
 from typing import List
+from typing import Optional
+from typing import Union
 
 import numpy as np
 import pydantic
-from typing_extensions import Annotated
+
+from samuel import _json
 
 
-@dataclasses.dataclass
-class ImageEmbedding:
+class ImageEmbedding(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
     original_height: int
     original_width: int
     embedding: np.ndarray
@@ -16,16 +20,8 @@ class ImageEmbedding:
 class Prompt(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
-    points: Annotated[
-        np.ndarray,
-        pydantic.BeforeValidator(lambda x: np.asarray(x, dtype=np.float32)),
-        pydantic.PlainSerializer(lambda x: x.tolist()),
-    ]
-    point_labels: Annotated[
-        np.ndarray,
-        pydantic.BeforeValidator(lambda x: np.asarray(x, dtype=np.int32)),
-        pydantic.PlainSerializer(lambda x: x.tolist()),
-    ]
+    points: np.ndarray
+    point_labels: np.ndarray
 
     @pydantic.validator("points")
     def validate_points(cls, points):
@@ -36,7 +32,7 @@ class Prompt(pydantic.BaseModel):
         return points
 
     @pydantic.field_serializer("points")
-    def serialize_points(cls, points: np.ndarray) -> List[List[float]]:
+    def serialize_points(self, points: np.ndarray) -> List[List[float]]:
         return points.tolist()
 
     @pydantic.validator("point_labels")
@@ -50,5 +46,30 @@ class Prompt(pydantic.BaseModel):
         return point_labels
 
     @pydantic.field_serializer("point_labels")
-    def serialize_point_labels(cls, point_labels: np.ndarray) -> List[int]:
+    def serialize_point_labels(self, point_labels: np.ndarray) -> List[int]:
         return point_labels.tolist()
+
+
+class GenerateMaskRequest(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    model: str
+    image: np.ndarray
+    prompt: Optional[Prompt] = pydantic.Field(default=None)
+
+    @pydantic.validator("image", pre=True)
+    def pre_validate_image(cls, image: Union[str, np.ndarray]) -> np.ndarray:
+        if isinstance(image, str):
+            return _json.image_b64data_to_ndarray(b64data=image)
+        return image
+
+
+class GenerateMaskResponse(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    model: str
+    mask: np.ndarray
+
+    @pydantic.field_serializer("mask")
+    def serialize_mask(self, mask: np.ndarray) -> str:
+        return _json.image_ndarray_to_b64data(ndarray=mask)
