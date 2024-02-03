@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.12"]
+
+    steps:
+    - uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    - uses: actions/checkout@v3
+
+    - name: Install main
+      run: |
+        pip install .[test]
+
+    - name: Lint
+      run: |
+        make lint
+
+    - name: Test
+      run: |
+        make test
+
+    - name: Install from dist
+      run: |
+        make build
+        pip install dist/samuel-*.tar.gz
+        pip install dist/samuel-*.whl
