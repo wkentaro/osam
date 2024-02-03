@@ -32,15 +32,18 @@ dependencies = [
   "fastapi",
   "loguru",
   "onnxruntime",
+  "Pillow",
   "uvicorn",
 ]
 dynamic = ["readme", "version"]
 
 [project.optional-dependencies]
 test = [
+  "build",
   "mypy",
   "types-Pillow",
   "pytest",
+  "pytest-xdist",
   "ruff",
   "twine",
 ]

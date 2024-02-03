@@ -12,9 +12,16 @@ format:
 	ruff format
 	ruff check --fix
 
+test:
+	python -m pytest -n auto -v tests
+
 clean:
 	rm -rf build dist *.egg-info
 
-publish: clean
+build: clean
 	python -m build --sdist --wheel
+
+upload: build
 	python -m twine upload dist/samuel-*
+
+publish: build upload
