@@ -35,5 +35,5 @@ jobs:
     - name: Install from dist
       run: |
         make build
-        pip install dist/samuel-*.tar.gz
-        pip install dist/samuel-*.whl
+        pip install dist/osam-*.tar.gz
+        pip install dist/osam-*.whl
