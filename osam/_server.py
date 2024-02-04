@@ -14,10 +14,10 @@ async def index():
     return fastapi.Response("osam is running")
 
 
-@app.post("/api/generate_mask")
-async def generate(request: types.GenerateMaskRequest) -> types.GenerateMaskResponse:
+@app.post("/api/generate")
+async def generate(request: types.GenerateRequest) -> types.GenerateResponse:
     try:
-        return apis.generate_mask(request=request)
+        return apis.generate(request=request)
     except ValueError as e:
         raise fastapi.HTTPException(400, str(e))
 

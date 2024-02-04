@@ -9,7 +9,7 @@ from osam import types
 model: Optional[_models.ModelBase] = None
 
 
-def generate_mask(request: types.GenerateMaskRequest) -> types.GenerateMaskResponse:
+def generate(request: types.GenerateRequest) -> types.GenerateResponse:
     global model
 
     if model is None or model.name != request.model:
@@ -37,4 +37,4 @@ def generate_mask(request: types.GenerateMaskRequest) -> types.GenerateMaskRespo
     mask: np.ndarray = model.generate_mask(
         image_embedding=image_embedding, prompt=request.prompt
     )
-    return types.GenerateMaskResponse(model=request.model, mask=mask)
+    return types.GenerateResponse(model=request.model, mask=mask)

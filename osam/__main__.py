@@ -119,12 +119,12 @@ def serve(reload):
 @click.option("--json", is_flag=True, help="json output")
 def run(model_name: str, image_path: str, prompt, json: bool) -> None:
     try:
-        request: types.GenerateMaskRequest = types.GenerateMaskRequest(
+        request: types.GenerateRequest = types.GenerateRequest(
             model=model_name,
             image=np.asarray(PIL.Image.open(image_path)),
             prompt=prompt,
         )
-        response: types.GenerateMaskResponse = apis.generate_mask(request=request)
+        response: types.GenerateResponse = apis.generate(request=request)
     except ValueError as e:
         logger.error("{e}", e=e)
         sys.exit(1)

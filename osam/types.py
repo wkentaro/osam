@@ -61,7 +61,7 @@ class Prompt(pydantic.BaseModel):
         return point_labels.tolist()
 
 
-class GenerateMaskRequest(pydantic.BaseModel):
+class GenerateRequest(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     model: str
@@ -75,7 +75,7 @@ class GenerateMaskRequest(pydantic.BaseModel):
         return image
 
 
-class GenerateMaskResponse(pydantic.BaseModel):
+class GenerateResponse(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     model: str
