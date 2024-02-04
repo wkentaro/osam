@@ -97,8 +97,21 @@ jobs:
                 ]
             }
 
-      - name: Create Release
-        uses: mikepenz/action-gh-release@v0.2.0-a03
+      - name: Create Changelog
+        run: |
+          echo '${{steps.github_release.outputs.changelog}}' > ${{ github.workspace }}-CHANGELOG.txt
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
         with:
-          body: ${{steps.github_release.outputs.changelog}}
+          path: build
+          pattern: build-*
+          merge-multiple: true
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
           draft: true
+          body_path: ${{ github.workspace }}-CHANGELOG.txt
+          files: |
+            build/*
