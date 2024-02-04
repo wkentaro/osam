@@ -28,7 +28,7 @@ classifiers = [
 ]
 dependencies = [
   "click",
-  "gdown",
+  "gdown>=5.1.0",
   "fastapi",
   "loguru",
   "onnxruntime",
