@@ -43,6 +43,9 @@ osam run efficient-sam:25m --image examples/_images/dogs.jpg --json \
   --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}'
 ```
 
+<img src="examples/_images/dogs.jpg" width="35%"> <img src=".readme/dogs_mask.jpg" width="35%">  
+<i>Input and output images ('dogs.jpg', 'mask.jpg').</i>
+
 ### Python
 
 ```python
