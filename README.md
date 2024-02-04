@@ -72,3 +72,7 @@ curl 127.0.0.1:11368/api/generate -X POST \
   -H "Content-Type: application/json" \
   -d "{\"model\": \"sam:308m\", \"image\": \"$(cat examples/_images/dogs.jpg | base64)\"}"
 ```
+
+## License
+
+MIT
