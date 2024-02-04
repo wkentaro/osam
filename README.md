@@ -32,14 +32,14 @@ pip install osam
 
 ```bash
 # Run a model with an image
-osam run sam:308m --image examples/_images/dogs.jpg > mask.jpg
+osam run efficient-sam:25m --image examples/_images/dogs.jpg > mask.jpg
 
 # Get a JSON output
-osam run sam:308m --image examples/_images/dogs.jpg --json
-# {"model": "sam:308m", "mask": "..."}
+osam run efficient-sam:25m --image examples/_images/dogs.jpg --json
+# {"model": "efficient-sam:25m", "mask": "..."}
 
 # Give a prompt
-osam run sam:308m --image examples/_images/dogs.jpg --json \
+osam run efficient-sam:25m --image examples/_images/dogs.jpg --json \
   --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}'
 ```
 
@@ -70,7 +70,7 @@ osam serve
 # POST request
 curl 127.0.0.1:11368/api/generate -X POST \
   -H "Content-Type: application/json" \
-  -d "{\"model\": \"sam:308m\", \"image\": \"$(cat examples/_images/dogs.jpg | base64)\"}"
+  -d "{\"model\": \"efficient-sam:25m\", \"image\": \"$(cat examples/_images/dogs.jpg | base64)\"}"
 ```
 
 ## License
