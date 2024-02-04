@@ -2,10 +2,10 @@ import numpy as np
 import onnxruntime
 import PIL.Image
 
-from samuel._models._base import ModelBase
-from samuel._models._base import ModelBlob
-from samuel.types import ImageEmbedding
-from samuel.types import Prompt
+from osam._models._base import ModelBase
+from osam._models._base import ModelBlob
+from osam.types import ImageEmbedding
+from osam.types import Prompt
 
 
 class Sam(ModelBase):

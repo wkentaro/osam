@@ -5,7 +5,7 @@ from typing import Union
 import numpy as np
 import pydantic
 
-from samuel import _json
+from osam import _json
 
 
 class ImageEmbedding(pydantic.BaseModel):

@@ -10,11 +10,11 @@ import PIL.Image
 import uvicorn
 from loguru import logger
 
-from samuel import _humanize
-from samuel import _models
-from samuel import _tabulate
-from samuel import apis
-from samuel import types
+from osam import _humanize
+from osam import _models
+from osam import _tabulate
+from osam import apis
+from osam import types
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -23,9 +23,9 @@ def cli():
     logger.add(
         sys.stderr, level="INFO", colorize=True, format="<level>{message}</level>"
     )
-    os.makedirs(os.path.expanduser("~/.cache/samuel"), exist_ok=True)
+    os.makedirs(os.path.expanduser("~/.cache/osam"), exist_ok=True)
     logger.add(
-        os.path.expanduser("~/.cache/samuel/samuel.log"), colorize=True, level="DEBUG"
+        os.path.expanduser("~/.cache/osam/osam.log"), colorize=True, level="DEBUG"
     )
 
 
@@ -103,7 +103,7 @@ def rm(model_name):
 @click.option("--reload", is_flag=True, help="reload server on file changes")
 def serve(reload):
     logger.info("Starting server...")
-    uvicorn.run("samuel._server:app", host="127.0.0.1", port=11368, reload=reload)
+    uvicorn.run("osam._server:app", host="127.0.0.1", port=11368, reload=reload)
 
 
 @cli.command(help="Run a model")

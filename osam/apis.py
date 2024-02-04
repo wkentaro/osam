@@ -3,8 +3,8 @@ from typing import Optional
 import numpy as np
 from loguru import logger
 
-from samuel import _models
-from samuel import types
+from osam import _models
+from osam import types
 
 model: Optional[_models.ModelBase] = None
 

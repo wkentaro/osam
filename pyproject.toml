@@ -3,8 +3,8 @@ requires = ["hatchling>=1.20.0", "hatch-vcs", "hatch-fancy-pypi-readme"]
 build-backend = "hatchling.build"
 
 [project]
-name = "samuel"
-description = "samuel"
+name = "osam"
+description = "Get up and running vision foundational models locally."
 license = { text = "MIT" }
 requires-python = ">=3.8"
 authors = [
@@ -49,7 +49,7 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/wkentaro/samuel"
+Homepage = "https://github.com/wkentaro/osam"
 
 [tool.hatch.metadata.hooks.fancy-pypi-readme]
 content-type = "text/markdown"
@@ -61,7 +61,7 @@ fragments = [
 source = "vcs"
 
 [project.scripts]
-samuel = "samuel:__main__.cli"
+osam = "osam:__main__.cli"
 
 [tool.mypy]
 ignore_missing_imports = true

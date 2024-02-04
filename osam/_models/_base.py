@@ -9,7 +9,7 @@ import numpy as np
 import onnxruntime
 from loguru import logger
 
-from samuel import types
+from osam import types
 
 
 @dataclasses.dataclass
@@ -19,7 +19,7 @@ class ModelBlob:
 
     @property
     def path(self):
-        return os.path.expanduser(f"~/.cache/samuel/models/blobs/{self.hash}")
+        return os.path.expanduser(f"~/.cache/osam/models/blobs/{self.hash}")
 
     @property
     def size(self):

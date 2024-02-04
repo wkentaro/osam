@@ -3,15 +3,15 @@ import os
 
 import fastapi
 
-from samuel import apis
-from samuel import types
+from osam import apis
+from osam import types
 
 app: fastapi.FastAPI = fastapi.FastAPI()
 
 
 @app.get("/")
 async def index():
-    return fastapi.Response("Samuel is running")
+    return fastapi.Response("osam is running")
 
 
 @app.post("/api/generate_mask")
@@ -26,7 +26,7 @@ async def generate(request: types.GenerateMaskRequest) -> types.GenerateMaskResp
 @app.on_event("startup")
 async def startup_event():
     uvicorn_logger = logging.getLogger("uvicorn")
-    handler = logging.FileHandler(os.path.expanduser("~/.cache/samuel/samuel.log"))
+    handler = logging.FileHandler(os.path.expanduser("~/.cache/osam/osam.log"))
     handler.setLevel(logging.DEBUG)
     fmt = "%(asctime)s [%(levelname)s] %(module)s:%(funcName)s:%(lineno)s - %(message)s"
     handler.setFormatter(logging.Formatter(fmt=fmt))
