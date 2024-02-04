@@ -38,9 +38,15 @@ jobs:
         script-name: osam
         onefile: true
 
-    - name: Test Executable
+    - name: Test Executable on Linux & macOS
       run: |
         ./build/osam.bin --version
+      if: matrix.os != 'windows-latest'
+
+    - name: Test Executable on Windows
+      run: |
+        ./build/osam.exe --version
+      if: matrix.os == 'windows-latest'
 
     - name: Rename Executable
       run: |

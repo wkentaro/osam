@@ -10,6 +10,7 @@ import PIL.Image
 import uvicorn
 from loguru import logger
 
+from osam import __version__
 from osam import _humanize
 from osam import _models
 from osam import _tabulate
@@ -18,6 +19,7 @@ from osam import types
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
+@click.version_option(__version__)
 def cli():
     logger.remove(0)
     logger.add(
