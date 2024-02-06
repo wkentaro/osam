@@ -27,6 +27,9 @@
 
 ### Pip
 
+<a href="https://pypi.org/project/osam"><img src="https://img.shields.io/pypi/pyversions/osam.svg"></a>
+<a href="https://pypi.python.org/pypi/osam"><img src="https://img.shields.io/pypi/v/osam.svg"></a>
+
 ```bash
 pip install osam
 ```
