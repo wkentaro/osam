@@ -21,6 +21,12 @@
 
 ## Installation
 
+### Pre-built binaries
+
+[Download](https://github.com/wkentaro/osam/releases/latest)
+
+### Pip
+
 ```bash
 pip install osam
 ```
