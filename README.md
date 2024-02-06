@@ -2,19 +2,19 @@
   <img alt="logo" height="200px" src=".readme/icon.png" >
   <h1>Osam</h1>
   <p>
-    Get up and running vision foundational models locally.
+    Get up and running with segment-anything models locally.
   </p>
   <br>
   <br>
   <br>
 </div>
 
-*Osam* (/oʊˈsɑm/) is a tool to run open source vision foundational models locally,
-built inspired by [Ollama](https://github.com/ollama/ollama).
+*Osam* (/oʊˈsɑm/) is a tool to run open-source segment-anything models locally
+(inspired by [Ollama](https://github.com/ollama/ollama)).
 
-*Osam* gives you:
+*Osam* provides:
 
-- **Visual foundational models** - Segment-Anything Model, Efficient-SAM, etc;
+- **Segment-Anything Models** - original SAM, Efficient-SAM;
 - **Local APIs** - CLI & Python & HTTP interface;
 - **Customization** - Host custom vision models.
 
