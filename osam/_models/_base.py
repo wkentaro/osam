@@ -52,10 +52,10 @@ class ModelBase:
     _blobs: Dict[str, ModelBlob]
     _inference_sessions: Dict[str, onnxruntime.InferenceSession]
 
-    def __init__(self):
+    def __init__(self, provider):
         self.pull()
         self._inference_sessions = {
-            key: onnxruntime.InferenceSession(blob.path)
+            key: onnxruntime.InferenceSession(blob.path, providers=[provider])
             for key, blob in self._blobs.items()
         }
 
