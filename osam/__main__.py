@@ -119,12 +119,17 @@ def serve(reload):
 )
 @click.option("--prompt", type=json.loads, help="prompt")
 @click.option("--json", is_flag=True, help="json output")
-def run(model_name: str, image_path: str, prompt, json: bool) -> None:
+@click.option("--cuda", is_flag=True, help="use cuda")
+def run(model_name: str, image_path: str, prompt, json: bool, cuda: bool) -> None:
     try:
+        provider = 'CPUExecutionProvider'
+        if cuda:
+            provider = 'CUDAExecutionProvider'
         request: types.GenerateRequest = types.GenerateRequest(
             model=model_name,
             image=np.asarray(PIL.Image.open(image_path)),
             prompt=prompt,
+            provider=provider
         )
         response: types.GenerateResponse = apis.generate(request=request)
     except ValueError as e:
