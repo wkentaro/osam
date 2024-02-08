@@ -3,7 +3,6 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
-import onnxruntime
 import pydantic
 
 from osam import _json
@@ -68,19 +67,12 @@ class GenerateRequest(pydantic.BaseModel):
     model: str
     image: np.ndarray
     prompt: Optional[Prompt] = pydantic.Field(default=None)
-    provider: str = 'CPUExecutionProvider'
 
     @pydantic.validator("image", pre=True)
     def validate_image(cls, image: Union[str, np.ndarray]) -> np.ndarray:
         if isinstance(image, str):
             return _json.image_b64data_to_ndarray(b64data=image)
         return image
-
-    @pydantic.validator("provider", pre=True)
-    def validate_provider(cls, provider):
-        if provider not in onnxruntime.get_available_providers():
-            raise ValueError(f"Unsupported provider: {provider}")
-        return provider
 
 
 class GenerateResponse(pydantic.BaseModel):

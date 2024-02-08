@@ -15,7 +15,7 @@ def generate(request: types.GenerateRequest) -> types.GenerateResponse:
     if model is None or model.name != request.model:
         for model_cls in _models.MODELS:
             if model_cls.name == request.model:
-                model = model_cls(request.provider)
+                model = model_cls()
                 break
         else:
             raise ValueError(f"Model not found: {request.model!r}")

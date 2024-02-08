@@ -2,6 +2,7 @@ import dataclasses
 import hashlib
 import os
 from typing import Dict
+from typing import List
 from typing import Optional
 
 import gdown
@@ -52,10 +53,13 @@ class ModelBase:
     _blobs: Dict[str, ModelBlob]
     _inference_sessions: Dict[str, onnxruntime.InferenceSession]
 
-    def __init__(self, provider):
+    def __init__(self, providers: Optional[List[str]] = None):
         self.pull()
+        if 'CUDAExecutionProvider' in onnxruntime.get_available_providers():
+            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+
         self._inference_sessions = {
-            key: onnxruntime.InferenceSession(blob.path, providers=[provider])
+            key: onnxruntime.InferenceSession(blob.path, providers=providers)
             for key, blob in self._blobs.items()
         }
 
