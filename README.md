@@ -60,7 +60,7 @@ Here are models that can be downloaded:
 
 ```bash
 # Run a model with an image
-osam run efficient-sam:25m --image examples/_images/dogs.jpg > output.jpg
+osam run efficient-sam:25m --image examples/_images/dogs.jpg > output.png
 
 # Get a JSON output
 osam run efficient-sam:25m --image examples/_images/dogs.jpg --json
@@ -68,11 +68,11 @@ osam run efficient-sam:25m --image examples/_images/dogs.jpg --json
 
 # Give a prompt
 osam run efficient-sam:25m --image examples/_images/dogs.jpg \
-  --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}' > output.jpg
+  --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}' > output.png
 ```
 
-<img src="examples/_images/dogs.jpg" width="35%"> <img src=".readme/dogs_output.jpg" width="35%">  
-<i>Input and output images ('dogs.jpg', 'output.jpg').</i>
+<img src="examples/_images/dogs.jpg" width="35%"> <img src=".readme/dogs_output.png" width="35%">  
+<i>Input and output images ('dogs.jpg', 'output.png').</i>
 
 ### Python
 
@@ -86,10 +86,10 @@ request = osam.types.GenerateRequest(
     prompt=osam.types.Prompt(points=[[1439, 504], [1439, 1289]], point_labels=[1, 1]),
 )
 response = osam.apis.generate(request=request)
-PIL.Image.fromarray(response.mask).save("mask.jpg")
+PIL.Image.fromarray(response.mask).save("mask.png")
 ```
-<img src="examples/_images/dogs.jpg" width="35%"> <img src=".readme/dogs_mask.jpg" width="35%">  
-<i>Input and output images ('dogs.jpg', 'mask.jpg').</i>
+<img src="examples/_images/dogs.jpg" width="35%"> <img src=".readme/dogs_mask.png" width="35%">  
+<i>Input and output images ('dogs.jpg', 'mask.png').</i>
 
 ### HTTP
 
@@ -101,7 +101,7 @@ osam serve
 curl 127.0.0.1:11368/api/generate -X POST \
   -H "Content-Type: application/json" \
   -d "{\"model\": \"efficient-sam:25m\", \"image\": \"$(cat examples/_images/dogs.jpg | base64)\"}" \
-  | jq -r .mask | base64 --decode > mask.jpg
+  | jq -r .mask | base64 --decode > mask.png
 ```
 
 ## License
