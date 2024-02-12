@@ -62,7 +62,10 @@ class ModelBase:
             try:
                 # Try to use all of the available providers e.g., cuda, tensorrt.
                 if providers is None:
-                    providers = onnxruntime.get_available_providers()
+                    if "CUDAExecutionProvider" in onnxruntime.get_available_providers():
+                        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+                    else:
+                        providers = ["CPUExecutionProvider"]
                 # Suppress all the error messages from the missing providers.
                 with _contextlib.suppress():
                     inference_session = onnxruntime.InferenceSession(
