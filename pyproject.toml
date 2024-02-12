@@ -31,7 +31,8 @@ dependencies = [
   "gdown>=5.1.0",
   "fastapi",
   "loguru",
-  "onnxruntime",
+  "onnxruntime; platform_system == 'Darwin'",
+  "onnxruntime-gpu; platform_system != 'Darwin'",
   "Pillow",
   "uvicorn",
 ]
