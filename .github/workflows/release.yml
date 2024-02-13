@@ -98,10 +98,6 @@ jobs:
                 ]
             }
 
-      - name: Create Changelog
-        run: |
-          echo '${{steps.github_release.outputs.changelog}}' > ${{ github.workspace }}-CHANGELOG.txt
-
       - name: Download Artifact
         uses: actions/download-artifact@v4
         with:
@@ -113,6 +109,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           draft: true
-          body_path: ${{ github.workspace }}-CHANGELOG.txt
+          body: ${{steps.github_release.outputs.changelog}}
           files: |
             build/*
