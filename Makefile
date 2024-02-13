@@ -25,3 +25,13 @@ upload: build
 	python -m twine upload dist/osam-*
 
 publish: build upload
+
+# How to publish to GitHub:
+# 
+#   git tag v0.1.1
+#   git push origin --tags
+#
+# How to publish to PyPI AFTER pushing to GitHub:
+#
+#   make publish
+#
