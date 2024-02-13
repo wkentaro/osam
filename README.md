@@ -1,5 +1,5 @@
 <div align="center">
-  <img alt="logo" height="200px" src=".readme/icon.png" >
+  <img alt="logo" height="200px" src="https://github.com/wkentaro/osam/raw/main/.readme/icon.png" >
   <h1>Osam</h1>
   <p>
     Get up and running with segment-anything models locally.
@@ -69,7 +69,7 @@ osam run efficient-sam --image examples/_images/dogs.jpg \
   --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}' > output.png
 ```
 
-<img src="examples/_images/dogs.jpg" width="35%"> <img src=".readme/dogs_output.png" width="35%">  
+<img src="https://github.com/wkentaro/osam/raw/main/examples/_images/dogs.jpg" width="35%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_output.png" width="35%">  
 <i>Input and output images ('dogs.jpg', 'output.png').</i>
 
 ### Python
@@ -86,7 +86,7 @@ request = osam.types.GenerateRequest(
 response = osam.apis.generate(request=request)
 PIL.Image.fromarray(response.mask).save("mask.png")
 ```
-<img src="examples/_images/dogs.jpg" width="35%"> <img src=".readme/dogs_mask.png" width="35%">  
+<img src="https://github.com/wkentaro/osam/raw/main/examples/_images/dogs.jpg" width="35%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_mask.png" width="35%">  
 <i>Input and output images ('dogs.jpg', 'mask.png').</i>
 
 ### HTTP
