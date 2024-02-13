@@ -170,7 +170,7 @@ class Sam308m(Sam):
 
 
 class Sam636m(Sam):
-    name = "sam:636m"
+    name = "sam:latest"
 
     _blobs = {
         "encoder": ModelBlob(

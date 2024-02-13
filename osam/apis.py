@@ -12,13 +12,9 @@ model: Optional[_models.ModelBase] = None
 def generate(request: types.GenerateRequest) -> types.GenerateResponse:
     global model
 
-    if model is None or model.name != request.model:
-        for model_cls in _models.MODELS:
-            if model_cls.name == request.model:
-                model = model_cls()
-                break
-        else:
-            raise ValueError(f"Model not found: {request.model!r}")
+    model_cls = _models.get_model_class_by_name(name=request.model)
+    if model is None or model.name != model_cls.name:
+        model = model_cls()
 
     image: np.ndarray = request.image
 

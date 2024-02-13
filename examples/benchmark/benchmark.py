@@ -12,7 +12,7 @@ import osam.types
 
 def benchmark(n_times: int):
     request = osam.types.GenerateRequest(
-        model="efficient-sam:25m",
+        model="efficient-sam",
         image=np.asarray(PIL.Image.open("../_images/dogs.jpg")),
         prompt={"points": [[1280, 800]], "point_labels": [1]},
     )

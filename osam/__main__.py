@@ -74,13 +74,7 @@ def list(show_all):
 @cli.command(help="Pull a model")
 @click.argument("model_name", metavar="model", type=str)
 def pull(model_name):
-    for cls in _models.MODELS:
-        if cls.name == model_name:
-            break
-    else:
-        logger.warning("Model {model_name!r} not found.", model_name=model_name)
-        sys.exit(1)
-
+    cls = _models.get_model_class_by_name(model_name)
     logger.info("Pulling {model_name!r}...", model_name=model_name)
     cls.pull()
     logger.info("Pulled {model_name!r}", model_name=model_name)
@@ -89,13 +83,7 @@ def pull(model_name):
 @cli.command(help="Remove a model")
 @click.argument("model_name", metavar="model", type=str)
 def rm(model_name):
-    for cls in _models.MODELS:
-        if cls.name == model_name:
-            break
-    else:
-        logger.warning("Model {model_name} not found.", model_name=model_name)
-        sys.exit(1)
-
+    cls = _models.get_model_class_by_name(model_name)
     logger.info("Removing {model_name!r}...", model_name=model_name)
     cls.remove()
     logger.info("Removed {model_name!r}", model_name=model_name)
