@@ -49,7 +49,7 @@ Here are models that can be downloaded:
 | Model             | Parameters | Size  | Download                     |
 |-------------------|------------|-------|------------------------------|
 | SAM 91M           | 91M        | 100MB | `osam run sam:91m`           |
-| SAM 308M          | 398M       | 320MB | `osam run sam:308m`          |
+| SAM 308M          | 308M       | 320MB | `osam run sam:308m`          |
 | SAM 636M          | 636M       | 630MB | `osam run sam:636m`          |
 | Efficient-SAM 10M | 10M        | 40MB  | `osam run efficient-sam:10m` |
 | Efficient-SAM 25M | 25M        | 100MB | `osam run efficient-sam:25m` |
