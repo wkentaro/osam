@@ -39,7 +39,7 @@ pip install osam
 To run with Efficient-SAM:
 
 ```bash
-osam run efficient-sam:25m --image <image_file>
+osam run efficient-sam --image <image_file>
 ```
 
 ## Model library
@@ -50,9 +50,11 @@ Here are models that can be downloaded:
 |-------------------|------------|-------|------------------------------|
 | SAM 91M           | 91M        | 100MB | `osam run sam:91m`           |
 | SAM 308M          | 308M       | 320MB | `osam run sam:308m`          |
-| SAM 636M          | 636M       | 630MB | `osam run sam:636m`          |
+| SAM 636M          | 636M       | 630MB | `osam run sam`               |
 | Efficient-SAM 10M | 10M        | 40MB  | `osam run efficient-sam:10m` |
-| Efficient-SAM 25M | 25M        | 100MB | `osam run efficient-sam:25m` |
+| Efficient-SAM 25M | 25M        | 100MB | `osam run efficient-sam`     |
+
+PS. `sam`, `efficient-sam` is equivalent to `sam:latest`, `efficient-sam:latest`.
 
 ## Usage
 
@@ -60,14 +62,14 @@ Here are models that can be downloaded:
 
 ```bash
 # Run a model with an image
-osam run efficient-sam:25m --image examples/_images/dogs.jpg > output.png
+osam run efficient-sam --image examples/_images/dogs.jpg > output.png
 
 # Get a JSON output
-osam run efficient-sam:25m --image examples/_images/dogs.jpg --json
-# {"model": "efficient-sam:25m", "mask": "..."}
+osam run efficient-sam --image examples/_images/dogs.jpg --json
+# {"model": "efficient-sam", "mask": "..."}
 
 # Give a prompt
-osam run efficient-sam:25m --image examples/_images/dogs.jpg \
+osam run efficient-sam --image examples/_images/dogs.jpg \
   --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}' > output.png
 ```
 
@@ -81,7 +83,7 @@ import osam.apis
 import osam.types
 
 request = osam.types.GenerateRequest(
-    model="efficient-sam:25m",
+    model="efficient-sam",
     image=np.asarray(PIL.Image.open("examples/_images/dogs.jpg")),
     prompt=osam.types.Prompt(points=[[1439, 504], [1439, 1289]], point_labels=[1, 1]),
 )
@@ -100,7 +102,7 @@ osam serve
 # POST request
 curl 127.0.0.1:11368/api/generate -X POST \
   -H "Content-Type: application/json" \
-  -d "{\"model\": \"efficient-sam:25m\", \"image\": \"$(cat examples/_images/dogs.jpg | base64)\"}" \
+  -d "{\"model\": \"efficient-sam\", \"image\": \"$(cat examples/_images/dogs.jpg | base64)\"}" \
   | jq -r .mask | base64 --decode > mask.png
 ```
 

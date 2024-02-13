@@ -73,7 +73,7 @@ class EfficientSam10m(EfficientSam):
 
 
 class EfficientSam25m(EfficientSam):
-    name = "efficient-sam:25m"
+    name = "efficient-sam:latest"
 
     _blobs = {
         "encoder": ModelBlob(
