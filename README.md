@@ -21,10 +21,6 @@
 
 ## Installation
 
-### Pre-built binaries
-
-[Download](https://github.com/wkentaro/osam/releases/latest)
-
 ### Pip
 
 <a href="https://pypi.org/project/osam"><img src="https://img.shields.io/pypi/pyversions/osam.svg"></a>
