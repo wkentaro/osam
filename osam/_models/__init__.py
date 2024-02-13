@@ -7,6 +7,8 @@ from ._sam import Sam91m
 from ._sam import Sam308m
 from ._sam import Sam636m
 
+# TODO: Provide a better way to register models.
+# Currently, we have to manually add the model to the MODELS list.
 MODELS = [
     EfficientSam10m,
     EfficientSam25m,
