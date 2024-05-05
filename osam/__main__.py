@@ -108,11 +108,11 @@ def serve(reload):
 @click.option("--prompt", type=json.loads, help="prompt")
 @click.option("--json", is_flag=True, help="json output")
 def run(model_name: str, image_path: str, prompt, json: bool) -> None:
+    image: np.ndarray = np.asarray(PIL.Image.open(image_path))
+
     try:
         request: types.GenerateRequest = types.GenerateRequest(
-            model=model_name,
-            image=np.asarray(PIL.Image.open(image_path)),
-            prompt=prompt,
+            model=model_name, image=image, prompt=prompt
         )
         response: types.GenerateResponse = apis.generate(request=request)
     except ValueError as e:
@@ -123,7 +123,7 @@ def run(model_name: str, image_path: str, prompt, json: bool) -> None:
         click.echo(response.model_dump_json())
     else:
         visualization: np.ndarray = (
-            0.5 * request.image
+            0.5 * image
             + 0.5
             * np.array([0, 255, 0])[None, None, :]
             * (response.mask > 0)[:, :, None]
