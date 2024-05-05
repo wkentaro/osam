@@ -16,7 +16,13 @@ def generate(request: types.GenerateRequest) -> types.GenerateResponse:
     if model is None or model.name != model_cls.name:
         model = model_cls()
 
-    image: np.ndarray = request.image
+    if request.image_embedding is None:
+        if request.image is None:
+            raise ValueError("Either image_embedding or image must be given")
+        image: np.ndarray = request.image
+        image_embedding: types.ImageEmbedding = model.encode_image(image=image)
+    else:
+        image_embedding = request.image_embedding
 
     if request.prompt is None:
         height, width = image.shape[:2]
@@ -31,8 +37,9 @@ def generate(request: types.GenerateRequest) -> types.GenerateResponse:
     else:
         prompt = request.prompt
 
-    image_embedding: types.ImageEmbedding = model.encode_image(image=image)
     mask: np.ndarray = model.generate_mask(
         image_embedding=image_embedding, prompt=prompt
     )
-    return types.GenerateResponse(model=request.model, mask=mask)
+    return types.GenerateResponse(
+        model=request.model, mask=mask, image_embedding=image_embedding
+    )

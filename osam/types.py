@@ -23,6 +23,10 @@ class ImageEmbedding(pydantic.BaseModel):
             )
         return embedding
 
+    @pydantic.field_serializer("embedding")
+    def serialize_embedding(self, embedding: np.ndarray) -> List[List[List[float]]]:
+        return embedding.tolist()
+
 
 class Prompt(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
@@ -65,11 +69,15 @@ class GenerateRequest(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     model: str
-    image: np.ndarray
+    image_embedding: Optional[ImageEmbedding] = pydantic.Field(default=None)
+    image: Optional[np.ndarray] = pydantic.Field(default=None)
     prompt: Optional[Prompt] = pydantic.Field(default=None)
 
-    @pydantic.validator("image", pre=True)
-    def validate_image(cls, image: Union[str, np.ndarray]) -> np.ndarray:
+    @pydantic.field_validator("image", mode="before")
+    @classmethod
+    def validate_image(
+        cls, image: Optional[Union[str, np.ndarray]]
+    ) -> Optional[np.ndarray]:
         if isinstance(image, str):
             return _json.image_b64data_to_ndarray(b64data=image)
         return image
@@ -79,6 +87,7 @@ class GenerateResponse(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     model: str
+    image_embedding: ImageEmbedding
     mask: np.ndarray
 
     @pydantic.field_serializer("mask")
