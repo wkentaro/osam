@@ -2,9 +2,8 @@ import logging
 import os
 
 import fastapi
-
-from osam import apis
-from osam import types
+from osam_core import apis
+from osam_core import types
 
 app: fastapi.FastAPI = fastapi.FastAPI()
 

@@ -1,14 +1,10 @@
 import numpy as np
-import onnxruntime
 import PIL.Image
-
-from osam._models._base import ModelBase
-from osam._models._base import ModelBlob
-from osam.types import ImageEmbedding
-from osam.types import Prompt
+from osam_core import apis
+from osam_core import types
 
 
-class Sam(ModelBase):
+class Sam(types.ModelBase):
     _image_size: int = 1024
 
     def encode_image(self, image: np.ndarray):
@@ -23,7 +19,7 @@ class Sam(ModelBase):
             image_size=self._image_size,
         )
 
-        return ImageEmbedding(
+        return types.ImageEmbedding(
             original_height=image.shape[0],
             original_width=image.shape[1],
             embedding=image_embedding,
@@ -31,8 +27,8 @@ class Sam(ModelBase):
 
     def generate_mask(
         self,
-        image_embedding: ImageEmbedding,
-        prompt: Prompt,
+        image_embedding: types.ImageEmbedding,
+        prompt: types.Prompt,
     ) -> np.ndarray:
         return _generate_mask(
             decoder_session=self._inference_sessions["decoder"],
@@ -69,7 +65,7 @@ def _resize_image(image: np.ndarray, image_size: int):
 
 
 def _compute_image_embedding(
-    encoder_session: onnxruntime.InferenceSession,
+    encoder_session,
     image: np.ndarray,
     image_size: int,
 ):
@@ -93,9 +89,9 @@ def _compute_image_embedding(
 
 
 def _generate_mask(
-    decoder_session: onnxruntime.InferenceSession,
-    image_embedding: ImageEmbedding,
-    prompt: Prompt,
+    decoder_session,
+    image_embedding: types.ImageEmbedding,
+    prompt: types.Prompt,
     image_size: int,
 ):
     onnx_coord = np.concatenate([prompt.points, np.array([[0.0, 0.0]])], axis=0)[
@@ -143,11 +139,11 @@ class Sam91m(Sam):
     name = "sam:91m"
 
     _blobs = {
-        "encoder": ModelBlob(
+        "encoder": types.ModelBlob(
             url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_b_01ec64.quantized.encoder.onnx",
             hash="sha256:3346b9cc551c9902fbf3b203935e933592b22e042365f58321c17fc12641fd6a",
         ),
-        "decoder": ModelBlob(
+        "decoder": types.ModelBlob(
             url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_b_01ec64.quantized.decoder.onnx",
             hash="sha256:edbcf1a0afaa55621fb0abe6b3db1516818b609ea9368f309746a3afc68f7613",
         ),
@@ -158,11 +154,11 @@ class Sam308m(Sam):
     name = "sam:308m"
 
     _blobs = {
-        "encoder": ModelBlob(
+        "encoder": types.ModelBlob(
             url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_l_0b3195.quantized.encoder.onnx",
             hash="sha256:f7158a4a1fe7f670ef47ea2f7f852685425c1ed6caa40f5df86cbe2b0502034f",
         ),
-        "decoder": ModelBlob(
+        "decoder": types.ModelBlob(
             url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_l_0b3195.quantized.decoder.onnx",
             hash="sha256:552ebb23bf52c5e5b971ac710d1eb8dccfd88b36cc6aff881d1536d1662e6d7b",
         ),
@@ -173,12 +169,17 @@ class Sam636m(Sam):
     name = "sam:latest"
 
     _blobs = {
-        "encoder": ModelBlob(
+        "encoder": types.ModelBlob(
             url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_h_4b8939.quantized.encoder.onnx",
             hash="sha256:a5c745fd4279efc5e5436b412200e983dafc2249ce172af6cc0002a71bb5f485",
         ),
-        "decoder": ModelBlob(
+        "decoder": types.ModelBlob(
             url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_h_4b8939.quantized.decoder.onnx",
             hash="sha256:020b385a45ffe51097e1acd10cd791075a86171153505f789a793bc382eef210",
         ),
     }
+
+
+apis.register_model_type(Sam91m)
+apis.register_model_type(Sam308m)
+apis.register_model_type(Sam636m)

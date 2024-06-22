@@ -2,6 +2,9 @@
 requires = ["hatchling>=1.20.0", "hatch-vcs", "hatch-fancy-pypi-readme"]
 build-backend = "hatchling.build"
 
+[project.urls]
+Homepage = "https://github.com/wkentaro/osam"
+
 [project]
 name = "osam"
 description = "Get up and running vision foundational models locally."
@@ -28,11 +31,9 @@ classifiers = [
 ]
 dependencies = [
   "click",
-  "gdown>=5.1.0",
   "fastapi",
   "loguru",
-  "onnxruntime; platform_system == 'Darwin'",
-  "onnxruntime-gpu; platform_system != 'Darwin'",
+  "osam-core @ git+https://github.com/wkentaro/osam-core.git@b54b13ea1c093980faaa03beccfc13853dadbb00",
   "Pillow",
   "uvicorn",
 ]
@@ -49,8 +50,8 @@ test = [
   "twine",
 ]
 
-[project.urls]
-Homepage = "https://github.com/wkentaro/osam"
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.metadata.hooks.fancy-pypi-readme]
 content-type = "text/markdown"

@@ -9,13 +9,12 @@ import numpy as np
 import PIL.Image
 import uvicorn
 from loguru import logger
+from osam_core import apis
+from osam_core import types
 
-from osam import __version__
-from osam import _humanize
-from osam import _models
-from osam import _tabulate
-from osam import apis
-from osam import types
+from . import __version__
+from . import _humanize
+from . import _tabulate
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -51,9 +50,9 @@ def help(ctx, subcommand):
 @click.option("--all", "-a", "show_all", is_flag=True, help="show all models")
 def list(show_all):
     rows = []
-    for model in _models.MODELS:
-        size = model.get_size()
-        modified_at = model.get_modified_at()
+    for model_type in apis.registered_model_types:
+        size = model_type.get_size()
+        modified_at = model_type.get_modified_at()
 
         if size is None or modified_at is None:
             if show_all:
@@ -67,14 +66,14 @@ def list(show_all):
                 datetime.datetime.fromtimestamp(modified_at)
             )
 
-        rows.append([model.name, model.get_id(), size, modified_at])
+        rows.append([model_type.name, model_type.get_id(), size, modified_at])
     click.echo(_tabulate.tabulate(rows, headers=["NAME", "ID", "SIZE", "MODIFIED"]))
 
 
 @cli.command(help="Pull a model")
 @click.argument("model_name", metavar="model", type=str)
 def pull(model_name):
-    cls = _models.get_model_class_by_name(model_name)
+    cls = apis.get_model_type_by_name(model_name)
     logger.info("Pulling {model_name!r}...", model_name=model_name)
     cls.pull()
     logger.info("Pulled {model_name!r}", model_name=model_name)
@@ -83,7 +82,7 @@ def pull(model_name):
 @cli.command(help="Remove a model")
 @click.argument("model_name", metavar="model", type=str)
 def rm(model_name):
-    cls = _models.get_model_class_by_name(model_name)
+    cls = apis.get_model_type_by_name(model_name)
     logger.info("Removing {model_name!r}...", model_name=model_name)
     cls.remove()
     logger.info("Removed {model_name!r}", model_name=model_name)

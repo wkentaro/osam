@@ -1,9 +1,9 @@
 import numpy as np
-
-from osam._models._base import ModelBase
-from osam._models._base import ModelBlob
-from osam.types import ImageEmbedding
-from osam.types import Prompt
+from osam_core import apis
+from osam_core.types import ImageEmbedding
+from osam_core.types import ModelBase
+from osam_core.types import ModelBlob
+from osam_core.types import Prompt
 
 
 class EfficientSam(ModelBase):
@@ -85,3 +85,7 @@ class EfficientSam25m(EfficientSam):
             hash="sha256:4727baf23dacfb51d4c16795b2ac382c403505556d0284e84c6ff3d4e8e36f22",
         ),
     }
+
+
+apis.register_model_type(EfficientSam10m)
+apis.register_model_type(EfficientSam25m)
