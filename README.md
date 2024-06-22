@@ -101,7 +101,3 @@ curl 127.0.0.1:11368/api/generate -X POST \
   -d "{\"model\": \"efficientsam\", \"image\": \"$(cat examples/_images/dogs.jpg | base64)\"}" \
   | jq -r .mask | base64 --decode > mask.png
 ```
-
-## License
-
-MIT
