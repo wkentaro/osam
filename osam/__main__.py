@@ -126,12 +126,16 @@ def run(model_name: str, image_path: str, prompt, json: bool) -> None:
     if json:
         click.echo(response.model_dump_json())
     else:
-        visualization: np.ndarray = (
-            0.5 * image
-            + 0.5
-            * np.array([0, 255, 0])[None, None, :]
-            * (response.mask > 0)[:, :, None]
-        ).astype(np.uint8)
+        visualization: np.ndarray
+        if len(response.masks) == 1:
+            visualization = (
+                0.5 * image
+                + 0.5
+                * np.array([0, 255, 0])[None, None, :]
+                * (response.masks[0] > 0)[:, :, None]
+            ).astype(np.uint8)
+        else:
+            raise NotImplementedError
         sys.stdout.buffer.write(_image_ndarray_to_data(visualization))
 
 
