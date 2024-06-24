@@ -22,7 +22,12 @@ from . import _tabulate
 def cli():
     logger.remove(0)
     logger.add(
-        sys.stderr, level="INFO", colorize=True, format="<level>{message}</level>"
+        sys.stderr,
+        level="INFO",
+        colorize=True,
+        format="<level>{message}</level>",
+        backtrace=False,
+        diagnose=False,
     )
     os.makedirs(os.path.expanduser("~/.cache/osam"), exist_ok=True)
     logger.add(
@@ -114,8 +119,8 @@ def run(model_name: str, image_path: str, prompt, json: bool) -> None:
             model=model_name, image=image, prompt=prompt
         )
         response: types.GenerateResponse = apis.generate(request=request)
-    except ValueError as e:
-        logger.error("{e}", e=e)
+    except Exception:
+        logger.exception("Failed to run model")
         sys.exit(1)
 
     if json:
