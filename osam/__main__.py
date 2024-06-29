@@ -128,22 +128,37 @@ def run(model_name: str, image_path: str, prompt, json: bool) -> None:
         click.echo(response.model_dump_json())
     else:
         visualization: np.ndarray
-        if response.masks is not None and len(response.masks) == 1:
-            visualization = (
-                0.5 * image
-                + 0.5
-                * np.array([0, 255, 0])[None, None, :]
-                * (response.masks[0] > 0)[:, :, None]
-            ).astype(np.uint8)
+
+        if request.prompt and request.prompt.texts is not None:
+            labels = [
+                1 + request.prompt.texts.index(annotation.text)
+                for annotation in response.annotations
+            ]
         else:
-            visualization = imgviz.instances2rgb(
-                image=image,
-                labels=[
-                    1 + request.prompt.texts.index(text) for text in response.texts
-                ],
-                bboxes=response.bounding_boxes,
-                captions=response.texts,
-            )
+            labels = [1] * len(response.annotations)
+
+        if request.prompt and request.prompt.texts is not None:
+            captions = [
+                f"{annotation.text}: {annotation.score:.2f}"
+                for annotation in response.annotations
+            ]
+        else:
+            captions = None
+
+        visualization = imgviz.instances2rgb(
+            image=image,
+            labels=labels,
+            bboxes=[
+                [
+                    getattr(annotation.bounding_box, key)
+                    for key in ["ymin", "xmin", "ymax", "xmax"]
+                ]
+                for annotation in response.annotations
+            ],
+            masks=[annotation.mask for annotation in response.annotations],
+            captions=captions,
+            alpha=0.5,
+        )
 
         sys.stdout.buffer.write(_image_ndarray_to_data(visualization))
 
