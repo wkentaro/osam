@@ -49,6 +49,7 @@ Here are models that can be downloaded:
 | SAM 600M          | 600M       | 600MB | `osam run sam`               |
 | EfficientSAM 10M  | 10M        | 40MB  | `osam run efficientsam:10m`  |
 | EfficientSAM 30M  | 30M        | 100MB | `osam run efficientsam`      |
+| YoloWorld XL      | 100M       | 400MB | `osam run yoloworld`         |
 
 PS. `sam`, `efficientsam` is equivalent to `sam:latest`, `efficientsam:latest`.
 
@@ -66,11 +67,14 @@ osam run efficientsam --image examples/_images/dogs.jpg --json
 
 # Give a prompt
 osam run efficientsam --image examples/_images/dogs.jpg \
-  --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}' > output.png
+  --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}' \
+  > efficientsam.png
+osam run yoloworld --image examples/_images/dogs.jpg --prompt '{"text": ["dog"]}' \
+  > yoloworld.png
 ```
 
-<img src="https://github.com/wkentaro/osam/raw/main/examples/_images/dogs.jpg" width="35%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_output.png" width="35%">  
-<i>Input and output images ('dogs.jpg', 'output.png').</i>
+<img src="https://github.com/wkentaro/osam/raw/main/examples/_images/dogs.jpg" width="30%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam.png" width="30%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_yoloworld.png" width="30%">  
+<i>Input and output images ('dogs.jpg', 'efficientsam.png', 'yoloworld.png').</i>
 
 ### Python
 
@@ -86,7 +90,7 @@ request = osam.types.GenerateRequest(
 response = osam.apis.generate(request=request)
 PIL.Image.fromarray(response.mask).save("mask.png")
 ```
-<img src="https://github.com/wkentaro/osam/raw/main/examples/_images/dogs.jpg" width="35%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_mask.png" width="35%">  
+<img src="https://github.com/wkentaro/osam/raw/main/examples/_images/dogs.jpg" width="35%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam_mask.png" width="35%">  
 <i>Input and output images ('dogs.jpg', 'mask.png').</i>
 
 ### HTTP
