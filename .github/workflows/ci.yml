@@ -46,5 +46,5 @@ jobs:
       shell: bash
       run: |
         make build
-        pip install dist/osam-*.tar.gz
-        pip install dist/osam-*.whl
+        pip install dist/osam*.tar.gz
+        pip install dist/osam*.whl
