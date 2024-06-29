@@ -28,6 +28,10 @@ jobs:
 
     - name: Install main
       run: |
+        pip install -e git+https://github.com/osamproject/osam-core.git#egg=osam-core
+        pip install -e git+https://github.com/osamproject/osam-efficientsam.git#egg=osam-efficientsam
+        pip install -e git+https://github.com/osamproject/osam-sam.git#egg=osam-sam
+        pip install -e git+https://github.com/osamproject/osam-yoloworld.git#egg=osam-yoloworld
         pip install .[test]
 
     - name: Lint

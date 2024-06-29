@@ -34,9 +34,10 @@ dependencies = [
   "fastapi",
   "imgviz",
   "loguru",
-  "osam-core @ git+https://github.com/wkentaro/osam-core.git@b54b13ea1c093980faaa03beccfc13853dadbb00",
-  "osam-efficientsam @ git+https://github.com/wkentaro/osam-efficientsam.git@main",
-  "osam-sam @ git+https://github.com/wkentaro/osam-sam.git@main",
+  "osam-core",
+  "osam-efficientsam",
+  "osam-sam",
+  "osam-yoloworld",
   "Pillow",
   "uvicorn",
 ]
