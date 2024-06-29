@@ -5,6 +5,7 @@ import os
 import sys
 
 import click
+import imgviz
 import numpy as np
 import PIL.Image
 import uvicorn
@@ -127,7 +128,7 @@ def run(model_name: str, image_path: str, prompt, json: bool) -> None:
         click.echo(response.model_dump_json())
     else:
         visualization: np.ndarray
-        if len(response.masks) == 1:
+        if response.masks is not None and len(response.masks) == 1:
             visualization = (
                 0.5 * image
                 + 0.5
@@ -135,7 +136,15 @@ def run(model_name: str, image_path: str, prompt, json: bool) -> None:
                 * (response.masks[0] > 0)[:, :, None]
             ).astype(np.uint8)
         else:
-            raise NotImplementedError
+            visualization = imgviz.instances2rgb(
+                image=image,
+                labels=[
+                    1 + request.prompt.texts.index(text) for text in response.texts
+                ],
+                bboxes=response.bounding_boxes,
+                captions=response.texts,
+            )
+
         sys.stdout.buffer.write(_image_ndarray_to_data(visualization))
 
 
