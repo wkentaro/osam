@@ -44,11 +44,11 @@ Here are models that can be downloaded:
 
 | Model             | Parameters | Size  | Download                     |
 |-------------------|------------|-------|------------------------------|
-| SAM 91M           | 91M        | 100MB | `osam run sam:91m`           |
-| SAM 308M          | 308M       | 320MB | `osam run sam:308m`          |
-| SAM 636M          | 636M       | 630MB | `osam run sam`               |
-| EfficientSAM 10M | 10M        | 40MB  | `osam run efficientsam:10m` |
-| EfficientSAM 25M | 25M        | 100MB | `osam run efficientsam`     |
+| SAM 100M          | 100M       | 100MB | `osam run sam:100m`           |
+| SAM 300M          | 300M       | 300MB | `osam run sam:300m`          |
+| SAM 600M          | 600M       | 600MB | `osam run sam`               |
+| EfficientSAM 10M  | 10M        | 40MB  | `osam run efficientsam:10m`  |
+| EfficientSAM 30M  | 30M        | 100MB | `osam run efficientsam`      |
 
 PS. `sam`, `efficientsam` is equivalent to `sam:latest`, `efficientsam:latest`.
 
