@@ -137,24 +137,35 @@ def run(model_name: str, image_path: str, prompt, json: bool) -> None:
         else:
             labels = [1] * len(response.annotations)
 
-        if request.prompt and request.prompt.texts is not None:
-            captions = [
-                f"{annotation.text}: {annotation.score:.2f}"
-                for annotation in response.annotations
-            ]
-        else:
-            captions = None
+        captions = []
+        for annotation in response.annotations:
+            if annotation.text is not None and annotation.score is not None:
+                caption = f"{annotation.text}: {annotation.score:.2f}"
+            elif annotation.text is not None:
+                caption = f"{annotation.text}"
+            elif annotation.score is not None:
+                caption = f"{annotation.score:.2f}"
+            else:
+                caption = None
+            captions.append(caption)
 
-        visualization = imgviz.instances2rgb(
-            image=image,
-            labels=labels,
-            bboxes=[
+        if all(
+            annotation.bounding_box is not None for annotation in response.annotations
+        ):
+            bboxes = [
                 [
                     getattr(annotation.bounding_box, key)
                     for key in ["ymin", "xmin", "ymax", "xmax"]
                 ]
                 for annotation in response.annotations
-            ],
+            ]
+        else:
+            bboxes = None
+
+        visualization = imgviz.instances2rgb(
+            image=image,
+            labels=labels,
+            bboxes=bboxes,
             masks=[annotation.mask for annotation in response.annotations],
             captions=captions,
             alpha=0.5,
