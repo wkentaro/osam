@@ -38,6 +38,12 @@ To run with EfficientSAM:
 osam run efficientsam --image <image_file>
 ```
 
+To run with YoloWorld:
+
+```bash
+osam run yoloworld --image <image_file>
+```
+
 ## Model library
 
 Here are models that can be downloaded:
