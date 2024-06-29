@@ -2,8 +2,8 @@
 
 import argparse
 
-from loguru import logger
 import onnx
+from loguru import logger
 
 
 def count_parameters(onnx_file):
@@ -28,7 +28,10 @@ def main():
 
     logger.debug(f"ONNX file: {args.onnx_file!r}")
     num_params = count_parameters(onnx_file=args.onnx_file)
-    logger.debug(f"Number of parameters: {num_params} = {num_params / 1e6:.2f}M = {num_params / 1e9:.2f}B")
+    logger.debug(
+        "Number of parameters: "
+        f"{num_params} = {num_params / 1e6:.2f}M = {num_params / 1e9:.2f}B"
+    )
 
 
 if __name__ == "__main__":
