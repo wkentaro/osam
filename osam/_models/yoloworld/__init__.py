@@ -2,9 +2,9 @@ from typing import Tuple
 
 import imgviz
 import numpy as np
-import onnxruntime
 from loguru import logger
 
+from ... import apis
 from ... import types
 from . import clip
 
@@ -54,8 +54,7 @@ class _YoloWorld(types.Model):
         max_annotations = (
             len(bboxes) if prompt.max_annotations is None else prompt.max_annotations
         )
-        bboxes, scores, labels = _non_maximum_suppression(
-            inference_session=self._inference_sessions["nms"],
+        bboxes, scores, labels = apis.non_maximum_suppression(
             boxes=bboxes,
             scores=scores,
             iou_threshold=iou_threshold,
@@ -97,10 +96,6 @@ class YoloWorldXL(_YoloWorld):
         "yolo": types.Blob(
             url="https://github.com/wkentaro/yolo-world-onnx/releases/download/v0.1.0/yolo_world_v2_xl_vlpan_bn_2e-3_100e_4x8gpus_obj365v1_goldg_train_lvis_minival.onnx",
             hash="sha256:92660c6456766439a2670cf19a8a258ccd3588118622a15959f39e253731c05d",
-        ),
-        "nms": types.Blob(
-            url="https://github.com/wkentaro/yolo-world-onnx/releases/download/v0.1.0/non_maximum_suppression.onnx",
-            hash="sha256:328310ba8fdd386c7ca63fc9df3963cc47b1268909647abd469e8ebdf7f3d20a",
         ),
     }
 
@@ -145,37 +140,3 @@ def _untransform_bboxes(
     bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, original_image_hw[0])
     bboxes = bboxes.round().astype(int)
     return bboxes
-
-
-def _non_maximum_suppression(
-    inference_session: onnxruntime.InferenceSession,
-    boxes: np.ndarray,
-    scores: np.ndarray,
-    iou_threshold: float,
-    score_threshold: float,
-    max_num_detections: int,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    selected_indices = inference_session.run(
-        output_names=["selected_indices"],
-        input_feed={
-            "boxes": boxes[None, :, :],
-            "scores": scores[None, :, :].transpose(0, 2, 1),
-            "max_output_boxes_per_class": np.array(
-                [max_num_detections], dtype=np.int64
-            ),
-            "iou_threshold": np.array([iou_threshold], dtype=np.float32),
-            "score_threshold": np.array([score_threshold], dtype=np.float32),
-        },
-    )[0]
-    labels = selected_indices[:, 1]
-    box_indices = selected_indices[:, 2]
-    boxes = boxes[box_indices]
-    scores = scores[box_indices, labels]
-
-    if len(boxes) > max_num_detections:
-        keep_indices = np.argsort(scores)[-max_num_detections:]
-        boxes = boxes[keep_indices]
-        scores = scores[keep_indices]
-        labels = labels[keep_indices]
-
-    return boxes, scores, labels
