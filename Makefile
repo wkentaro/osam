@@ -5,10 +5,12 @@ all:
 
 PACKAGE_DIR=osam
 
+mypy:
+	mypy --package $(PACKAGE_DIR)
+
 lint:
 	ruff format --check
 	ruff check
-	mypy --package $(PACKAGE_DIR)
 
 format:
 	ruff format

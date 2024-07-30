@@ -10,12 +10,12 @@ import numpy as np
 import PIL.Image
 import uvicorn
 from loguru import logger
-from osam_core import apis
-from osam_core import types
 
 from . import __version__
 from . import _humanize
 from . import _tabulate
+from . import apis
+from . import types
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -131,7 +131,9 @@ def run(model_name: str, image_path: str, prompt, json: bool) -> None:
 
         if request.prompt and request.prompt.texts is not None:
             labels = [
-                1 + request.prompt.texts.index(annotation.text)
+                0
+                if annotation.text is None
+                else 1 + request.prompt.texts.index(annotation.text)
                 for annotation in response.annotations
             ]
         else:
