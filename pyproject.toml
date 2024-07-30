@@ -31,14 +31,13 @@ classifiers = [
 ]
 dependencies = [
   "click",
+  "gdown",
   "fastapi",
   "imgviz",
   "loguru",
-  "osam-core",
-  "osam-efficientsam",
-  "osam-sam",
-  "osam-yoloworld",
+  "onnxruntime",
   "Pillow",
+  "pydantic",
   "uvicorn",
 ]
 dynamic = ["readme", "version"]
