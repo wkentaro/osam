@@ -8,7 +8,6 @@ import click
 import imgviz
 import numpy as np
 import PIL.Image
-import uvicorn
 from loguru import logger
 
 from . import __version__
@@ -97,8 +96,16 @@ def rm(model_name):
 @cli.command(help="Start server")
 @click.option("--reload", is_flag=True, help="reload server on file changes")
 def serve(reload):
-    logger.info("Starting server...")
-    uvicorn.run("osam._server:app", host="127.0.0.1", port=11368, reload=reload)
+    try:
+        import uvicorn
+
+        import osam._server  # noqa: F401
+
+        logger.info("Starting server...")
+        uvicorn.run("osam._server:app", host="127.0.0.1", port=11368, reload=reload)
+    except ImportError:
+        logger.error("Run `pip install osam[serve]` to use `osam serve`")
+        sys.exit(1)
 
 
 @cli.command(help="Run a model")

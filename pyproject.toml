@@ -32,17 +32,19 @@ classifiers = [
 dependencies = [
   "click",
   "gdown",
-  "fastapi",
   "imgviz",
   "loguru",
   "onnxruntime",
   "Pillow",
   "pydantic",
-  "uvicorn",
 ]
 dynamic = ["readme", "version"]
 
 [project.optional-dependencies]
+serve = [
+  "fastapi",
+  "uvicorn",
+]
 test = [
   "build",
   "mypy",

@@ -30,6 +30,12 @@
 pip install osam
 ```
 
+**For `osam serve`**:
+
+```bash
+pip install osam[serve]
+```
+
 ## Quickstart
 
 To run with EfficientSAM:
@@ -102,6 +108,8 @@ PIL.Image.fromarray(response.mask).save("mask.png")
 ### HTTP
 
 ```bash
+# pip install osam[serve]  # required for `osam serve`
+
 # Get up the server
 osam serve
 
