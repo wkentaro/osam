@@ -2,19 +2,19 @@
   <img alt="logo" height="200px" src="https://github.com/wkentaro/osam/raw/main/.readme/icon.png" >
   <h1>Osam</h1>
   <p>
-    Get up and running with segment-anything models locally.
+    Get up and running with promptable vision models locally.
   </p>
   <br>
   <br>
   <br>
 </div>
 
-*Osam* (/oʊˈsɑm/) is a tool to run open-source segment-anything models locally
+*Osam* (/oʊˈsɑm/) is a tool to run open-source promptable vision models locally
 (inspired by [Ollama](https://github.com/ollama/ollama)).
 
 *Osam* provides:
 
-- **Segment-Anything Models** - original SAM, EfficientSAM;
+- **Promptable Vision Models** - Segment Anything Model (SAM), EfficientSAM, YOLO-World;
 - **Local APIs** - CLI & Python & HTTP interface;
 - **Customization** - Host custom vision models.
 
@@ -44,7 +44,7 @@ To run with EfficientSAM:
 osam run efficientsam --image <image_file>
 ```
 
-To run with YoloWorld:
+To run with YOLO-World:
 
 ```bash
 osam run yoloworld --image <image_file>
@@ -61,7 +61,7 @@ Here are models that can be downloaded:
 | SAM 600M          | 600M       | 600MB | `osam run sam`               |
 | EfficientSAM 10M  | 10M        | 40MB  | `osam run efficientsam:10m`  |
 | EfficientSAM 30M  | 30M        | 100MB | `osam run efficientsam`      |
-| YoloWorld XL      | 100M       | 400MB | `osam run yoloworld`         |
+| YOLO-World XL      | 100M       | 400MB | `osam run yoloworld`         |
 
 PS. `sam`, `efficientsam` is equivalent to `sam:latest`, `efficientsam:latest`.
 
