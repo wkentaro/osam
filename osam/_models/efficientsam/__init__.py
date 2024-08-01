@@ -80,7 +80,7 @@ class EfficientSam(types.Model):
         mask = masks[0, 0, 0, :, :]  # (1, 1, 3, H, W) -> (H, W)
         mask = mask > 0.0
 
-        bbox = imgviz.instances.mask_to_bbox([mask])[0].astype(int)
+        bbox = imgviz.instances.masks_to_bboxes(masks=[mask])[0].astype(int)
 
         return types.GenerateResponse(
             model=self.name,
