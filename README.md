@@ -81,7 +81,7 @@ osam run efficientsam --image examples/_images/dogs.jpg --json
 osam run efficientsam --image examples/_images/dogs.jpg \
   --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}' \
   > efficientsam.png
-osam run yoloworld --image examples/_images/dogs.jpg --prompt '{"text": ["dog"]}' \
+osam run yoloworld --image examples/_images/dogs.jpg --prompt '{"texts": ["dog"]}' \
   > yoloworld.png
 ```
 
