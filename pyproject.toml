@@ -9,7 +9,7 @@ Homepage = "https://github.com/wkentaro/osam"
 name = "osam"
 description = "Get up and running vision foundational models locally."
 license = { text = "MIT" }
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 authors = [
   { name = "Kentaro Wada", email = "www.kentaro.wada@gmail.com" },
 ]
@@ -45,14 +45,13 @@ serve = [
   "fastapi",
   "uvicorn",
 ]
-test = [
-  "build",
-  "mypy",
-  "types-Pillow",
-  "pytest",
-  "pytest-xdist",
-  "ruff",
-  "twine",
+
+[dependency-groups]
+dev = [
+  "mypy>=1.15.0",
+  "pytest>=8.3.4",
+  "ruff==0.1.9",
+  "twine>=6.1.0",
 ]
 
 [tool.hatch.metadata]
