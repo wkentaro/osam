@@ -48,9 +48,9 @@ def generate(request: types.GenerateRequest) -> types.GenerateResponse:
     return response
 
 
-_non_maximum_suppression_inference_session: Optional[onnxruntime.InferenceSession] = (
-    None
-)
+_non_maximum_suppression_inference_session: Optional[
+    onnxruntime.InferenceSession
+] = None
 
 
 def non_maximum_suppression(
