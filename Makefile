@@ -1,41 +1,47 @@
-all:
-	@echo '## Make commands ##'
-	@echo
-	@$(MAKE) -pRrq -f $(lastword $(MAKEFILE_LIST)) : 2>/dev/null | awk -v RS= -F: '/^# File/,/^# Finished Make data base/ {if ($$1 !~ "^[#.]") {print $$1}}' | sort | egrep -v -e '^[^[:alnum:]]' -e '^$@$$' | xargs
+ifneq ($(OS),Windows_NT)
+	# On Unix-based systems, use ANSI codes
+	BLUE = \033[36m
+	BOLD_BLUE = \033[1;36m
+	BOLD_GREEN = \033[1;32m
+	RED = \033[31m
+	YELLOW = \033[33m
+	BOLD = \033[1m
+	NC = \033[0m
+endif
 
-PACKAGE_DIR=osam
+escape = $(subst $$,\$$,$(subst ",\",$(subst ',\',$(1))))
 
-mypy:
-	mypy --package $(PACKAGE_DIR)
+define exec
+	@echo "$(BOLD_BLUE)$(call escape,$(1))$(NC)"
+	@$(1)
+endef
+
+help:
+	@echo "$(BOLD_GREEN)Available targets:$(NC)"
+	@grep -E '^[a-zA-Z_-].+:.*?# .*$$' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?# "}; \
+		{printf "  $(BOLD_BLUE)%-20s$(NC) %s\n", $$1, $$2}'
+
+PACKAGE_NAME:=osam
+
+setup:  # Setup the development environment
+	$(call exec,uv sync --dev)
+
+format:  # Format code
+	$(call exec,uv run ruff format)
+	$(call exec,uv run ruff check --fix)
 
 lint:
-	ruff format --check
-	ruff check
+	$(call exec,uv run ruff format --check)
+	$(call exec,uv run ruff check)
 
-format:
-	ruff format
-	ruff check --fix
+mypy:
+	$(call exec,uv run mypy --package $(PACKAGE_NAME))
 
-test:
-	python -m pytest -n auto -v $(PACKAGE_DIR)
+check: lint mypy  # Run checks
 
-clean:
-	rm -rf build dist *.egg-info
+test:  # Run tests
+	$(call exec,uv run pytest -v osam/ -n auto)
 
-build: clean
-	python -m build --sdist --wheel
-
-upload: build
-	python -m twine upload dist/$(PACKAGE_DIR)-*
-
-publish: build upload
-
-# How to publish to GitHub:
-# 
-#   git tag v0.1.1
-#   git push origin --tags
-#
-# How to publish to PyPI AFTER pushing to GitHub:
-#
-#   make publish
-#
+build:  # Build the package
+	$(call exec,uv build)
