@@ -13,28 +13,24 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
-        python-version: ['3.8']
+        python-version: [3.9]
 
     steps:
-    - uses: actions/setup-python@v4
+    - uses: actions/checkout@v4
+
+    - uses: astral-sh/setup-uv@v5
       with:
         python-version: ${{ matrix.python-version }}
-    - uses: actions/checkout@v3
 
-    - name: Install make
-      if: matrix.os == 'windows-latest'
+    - shell: bash
       run: |
-        choco install make
+        make setup
 
-    - name: Install main
+    - shell: bash
       run: |
-        pip install .[test]
+        make check
 
-    - name: Lint
-      run: |
-        make lint mypy
-
-    - name: Test
+    - shell: bash
       run: |
         make test
 
@@ -42,5 +38,4 @@ jobs:
       shell: bash
       run: |
         make build
-        pip install dist/osam*.tar.gz
-        pip install dist/osam*.whl
+        uv pip install dist/osam-*.whl
