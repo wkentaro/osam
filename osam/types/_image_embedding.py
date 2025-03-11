@@ -1,4 +1,7 @@
+from typing import Union
+
 import numpy as np
+import numpy.typing as npt
 import pydantic
 
 
@@ -7,13 +10,19 @@ class ImageEmbedding(pydantic.BaseModel):
 
     original_height: int
     original_width: int
-    embedding: np.ndarray
+    embedding: npt.NDArray[np.float32]
 
-    @pydantic.field_validator("embedding")
-    def validate_embedding(cls, embedding):
+    @pydantic.field_validator("embedding", mode="before")
+    def validate_embedding(
+        cls, embedding: Union[npt.NDArray[np.float32], list[list[list[float]]]]
+    ) -> npt.NDArray[np.float32]:
+        if isinstance(embedding, list):
+            embedding = np.array(embedding, dtype=np.float32)
         if embedding.ndim != 3:
+            raise ValueError("embedding must be of dimension 3, not %r", embedding.ndim)
+        if embedding.dtype != np.float32:
             raise ValueError(
-                "embedding must be 3-dimensional: (embedding_dim, height, width)"
+                "embedding must be of type float, but got %r", embedding.dtype
             )
         return embedding
 
