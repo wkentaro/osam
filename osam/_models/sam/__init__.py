@@ -91,7 +91,8 @@ def _resize_image(image: np.ndarray, image_size: int):
     )
     scaled_image = np.asarray(
         PIL.Image.fromarray(image).resize(
-            (new_width, new_height), resample=PIL.Image.BILINEAR
+            (new_width, new_height),
+            resample=PIL.Image.BILINEAR,  # type: ignore[attr-defined]
         )
     ).astype(np.float32)
     return scale, scaled_image
