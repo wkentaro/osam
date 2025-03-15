@@ -82,7 +82,7 @@ class Sam(SamBase):
             decoder_session=self._inference_sessions["decoder"],
             image_embedding=image_embedding,
             prompt=prompt,
-            image_size=_encoding.get_input_size(
+            input_size=_encoding.get_input_size(
                 encoder_session=self._inference_sessions["encoder"]
             ),
         )

@@ -17,9 +17,9 @@ def get_input_size(encoder_session: onnxruntime.InferenceSession) -> int:
 
 
 def _compute_input_from_image(
-    image: npt.NDArray[np.uint8], image_size: int
+    image: npt.NDArray[np.uint8], input_size: int
 ) -> npt.NDArray[np.float32]:
-    _scale, scaled_image = _images.resize_image(image=image, image_size=image_size)
+    _scale, scaled_image = _images.resize_image(image=image, target_size=input_size)
     input_: npt.NDArray[np.float32] = (
         scaled_image.astype(np.float32)
         - np.array([123.675, 116.28, 103.53], dtype=np.float32)
@@ -27,8 +27,8 @@ def _compute_input_from_image(
     input_ = np.pad(
         input_,
         (
-            (0, image_size - input_.shape[0]),
-            (0, image_size - input_.shape[1]),
+            (0, input_size - input_.shape[0]),
+            (0, input_size - input_.shape[1]),
             (0, 0),
         ),
     )
@@ -46,7 +46,7 @@ def compute_image_embedding_from_image(
         raise ValueError("RGBA images are not supported")
 
     input_: npt.NDArray[np.float32] = _compute_input_from_image(
-        image=image, image_size=get_input_size(encoder_session=encoder_session)
+        image=image, input_size=get_input_size(encoder_session=encoder_session)
     )
     output = encoder_session.run(output_names=None, input_feed={"x": input_})
     image_embedding: npt.NDArray[np.float32] = output[0][

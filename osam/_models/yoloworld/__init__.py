@@ -8,7 +8,7 @@ from . import clip
 
 
 class _YoloWorld(types.Model):
-    _image_size: int
+    _input_size: int
 
     def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
         if request.prompt is None:
@@ -33,7 +33,7 @@ class _YoloWorld(types.Model):
         if request.image is None:
             raise ValueError("request.image is required: request=%r", request)
         transformed_image, original_image_hw, padding_hw = _transform_image(
-            image=request.image, image_size=self._image_size
+            image=request.image, input_size=self._input_size
         )
         scores, bboxes = self._inference_sessions["yolo"].run(
             output_names=["scores", "boxes"],
@@ -61,7 +61,7 @@ class _YoloWorld(types.Model):
         )
         bboxes = _untransform_bboxes(
             bboxes=bboxes,
-            image_size=self._image_size,
+            input_size=self._input_size,
             original_image_hw=original_image_hw,
             padding_hw=padding_hw,
         )
@@ -85,7 +85,7 @@ class _YoloWorld(types.Model):
 class YoloWorldXL(_YoloWorld):
     name: str = "yoloworld:latest"
 
-    _image_size = 640
+    _input_size = 640
     _blobs = {
         "textual": types.Blob(
             url="https://clip-as-service.s3.us-east-2.amazonaws.com/models/onnx/ViT-B-32/textual.onnx",
@@ -99,19 +99,19 @@ class YoloWorldXL(_YoloWorld):
 
 
 def _transform_image(
-    image: np.ndarray, image_size: int
+    image: np.ndarray, input_size: int
 ) -> tuple[np.ndarray, tuple[int, int], tuple[int, int]]:
     height, width = image.shape[:2]
 
-    scale = image_size / max(height, width)
+    scale = input_size / max(height, width)
     image_resized = imgviz.resize(
         image,
         height=int(height * scale),
         width=int(width * scale),
         interpolation="linear",
     )
-    pad_height = image_size - image_resized.shape[0]
-    pad_width = image_size - image_resized.shape[1]
+    pad_height = input_size - image_resized.shape[0]
+    pad_width = input_size - image_resized.shape[1]
     image_resized = np.pad(
         image_resized,
         (
@@ -128,12 +128,12 @@ def _transform_image(
 
 def _untransform_bboxes(
     bboxes: np.ndarray,
-    image_size: int,
+    input_size: int,
     original_image_hw: tuple[int, int],
     padding_hw: tuple[int, int],
 ) -> np.ndarray:
     bboxes -= np.array([padding_hw[1] // 2, padding_hw[0] // 2] * 2)
-    bboxes /= image_size / max(original_image_hw)
+    bboxes /= input_size / max(original_image_hw)
     bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, original_image_hw[1])
     bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, original_image_hw[0])
     bboxes = bboxes.round().astype(int)
