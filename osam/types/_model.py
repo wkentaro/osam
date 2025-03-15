@@ -1,3 +1,4 @@
+import abc
 import hashlib
 from typing import Dict
 from typing import Optional
@@ -13,7 +14,7 @@ from ._generate import GenerateResponse
 from ._image_embedding import ImageEmbedding
 
 
-class Model:
+class Model(abc.ABC):
     name: str
 
     _blobs: Dict[str, Blob]
@@ -98,5 +99,6 @@ class Model:
     def encode_image(self, image: np.ndarray) -> ImageEmbedding:
         raise NotImplementedError
 
+    @abc.abstractmethod
     def generate(self, request: GenerateRequest) -> GenerateResponse:
-        raise NotImplementedError
+        pass

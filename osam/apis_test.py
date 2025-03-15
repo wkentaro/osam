@@ -27,6 +27,7 @@ def test_generate_point_to_mask(model: str) -> None:
     assert annotation.mask is not None
     assert annotation.mask.dtype == bool
     assert annotation.mask.shape == image.shape[:2]
+    assert annotation.bounding_box is not None
 
 
 def test_generate_text_to_bounding_box() -> None:
