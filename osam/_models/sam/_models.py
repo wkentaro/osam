@@ -1,3 +1,6 @@
+import abc
+
+import imgviz
 import numpy as np
 import numpy.typing as npt
 from loguru import logger
@@ -8,12 +11,12 @@ from . import _decoding
 from . import _encoding
 
 
-class Sam(types.Model):
-    def encode_image(self, image: np.ndarray) -> types.ImageEmbedding:
-        return _encoding.compute_image_embedding_from_image(
-            encoder_session=self._inference_sessions["encoder"],
-            image=image,
-        )
+class SamBase(types.Model):
+    @abc.abstractmethod
+    def _generate_mask_from_image_embedding(
+        self, image_embedding: types.ImageEmbedding, prompt: types.Prompt
+    ) -> npt.NDArray[np.bool_]:
+        pass
 
     def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
         image_embedding: types.ImageEmbedding
@@ -49,18 +52,39 @@ class Sam(types.Model):
         if prompt.points is None or prompt.point_labels is None:
             raise ValueError("Prompt must contain points and point_labels: %r", prompt)
 
-        mask: npt.NDArray[np.bool_] = _decoding.generate_mask_from_image_embedding(
+        mask: npt.NDArray[np.bool_] = self._generate_mask_from_image_embedding(
+            image_embedding=image_embedding, prompt=prompt
+        )
+
+        bbox = imgviz.instances.masks_to_bboxes(masks=[mask])[0].astype(int)
+        bounding_box: types.BoundingBox = types.BoundingBox(
+            ymin=bbox[0], xmin=bbox[1], ymax=bbox[2], xmax=bbox[3]
+        )
+
+        return types.GenerateResponse(
+            model=self.name,
+            image_embedding=image_embedding,
+            annotations=[types.Annotation(mask=mask, bounding_box=bounding_box)],
+        )
+
+
+class Sam(SamBase):
+    def encode_image(self, image: np.ndarray) -> types.ImageEmbedding:
+        return _encoding.compute_image_embedding_from_image(
+            encoder_session=self._inference_sessions["encoder"],
+            image=image,
+        )
+
+    def _generate_mask_from_image_embedding(
+        self, image_embedding: types.ImageEmbedding, prompt: types.Prompt
+    ) -> npt.NDArray[np.bool_]:
+        return _decoding.generate_mask_from_image_embedding(
             decoder_session=self._inference_sessions["decoder"],
             image_embedding=image_embedding,
             prompt=prompt,
             image_size=_encoding.get_input_size(
                 encoder_session=self._inference_sessions["encoder"]
             ),
-        )
-        return types.GenerateResponse(
-            model=self.name,
-            image_embedding=image_embedding,
-            annotations=[types.Annotation(mask=mask)],
         )
 
 
