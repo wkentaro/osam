@@ -11,7 +11,17 @@ here = pathlib.Path(__file__).resolve().parent
 
 @pytest.mark.parametrize(
     "model",
-    ["efficientsam:10m", "efficientsam:latest", "sam:100m", "sam:300m", "sam:latest"],
+    [
+        "efficientsam:10m",
+        "efficientsam:latest",
+        "sam:100m",
+        "sam:300m",
+        "sam:latest",
+        "sam2:tiny",
+        "sam2:small",
+        "sam2:latest",
+        "sam2:large",
+    ],
 )
 def test_generate_point_to_mask(model: str) -> None:
     image = imgviz.io.imread(here / "_data" / "dogs.jpg")
