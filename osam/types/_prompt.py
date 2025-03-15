@@ -1,4 +1,3 @@
-from typing import List
 from typing import Optional
 from typing import Type
 from typing import Union
@@ -12,18 +11,18 @@ class Prompt(pydantic.BaseModel):
 
     points: Optional[np.ndarray] = pydantic.Field(default=None)
     point_labels: Optional[np.ndarray] = pydantic.Field(default=None)
-    texts: Optional[List[str]] = pydantic.Field(default=None)
+    texts: Optional[list[str]] = pydantic.Field(default=None)
 
     iou_threshold: Optional[float] = pydantic.Field(default=0.5)
     score_threshold: Optional[float] = pydantic.Field(default=0.1)
     max_annotations: Optional[int] = pydantic.Field(default=100)
 
     @pydantic.field_serializer("points")
-    def _serialize_points(self: "Prompt", points: np.ndarray) -> List[List[float]]:
+    def _serialize_points(self: "Prompt", points: np.ndarray) -> list[list[float]]:
         return points.tolist()
 
     @pydantic.field_serializer("point_labels")
-    def _serialize_point_labels(self: "Prompt", point_labels: np.ndarray) -> List[int]:
+    def _serialize_point_labels(self: "Prompt", point_labels: np.ndarray) -> list[int]:
         return point_labels.tolist()
 
     @pydantic.field_validator("points", mode="before")

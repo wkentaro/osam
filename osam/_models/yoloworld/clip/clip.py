@@ -1,7 +1,5 @@
 # https://github.com/openai/CLIP/blob/main/clip/clip.py
 
-from typing import List
-
 import numpy as np
 
 from .simple_tokenizer import SimpleTokenizer
@@ -10,7 +8,7 @@ _tokenizer = SimpleTokenizer()
 
 
 def tokenize(
-    texts: List[str], context_length: int = 77, truncate: bool = False
+    texts: list[str], context_length: int = 77, truncate: bool = False
 ) -> np.ndarray:
     sot_token = _tokenizer.encoder["<|startoftext|>"]
     eot_token = _tokenizer.encoder["<|endoftext|>"]

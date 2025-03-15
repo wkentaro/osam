@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import imgviz
 import numpy as np
 from loguru import logger
@@ -102,7 +100,7 @@ class YoloWorldXL(_YoloWorld):
 
 def _transform_image(
     image: np.ndarray, image_size: int
-) -> Tuple[np.ndarray, Tuple[int, int], Tuple[int, int]]:
+) -> tuple[np.ndarray, tuple[int, int], tuple[int, int]]:
     height, width = image.shape[:2]
 
     scale = image_size / max(height, width)
@@ -131,8 +129,8 @@ def _transform_image(
 def _untransform_bboxes(
     bboxes: np.ndarray,
     image_size: int,
-    original_image_hw: Tuple[int, int],
-    padding_hw: Tuple[int, int],
+    original_image_hw: tuple[int, int],
+    padding_hw: tuple[int, int],
 ) -> np.ndarray:
     bboxes -= np.array([padding_hw[1] // 2, padding_hw[0] // 2] * 2)
     bboxes /= image_size / max(original_image_hw)

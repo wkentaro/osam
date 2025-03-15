@@ -1,4 +1,3 @@
-from typing import List
 from typing import Optional
 from typing import Union
 
@@ -18,7 +17,7 @@ class GenerateRequest(pydantic.BaseModel):
     image_embedding: Optional[ImageEmbedding] = pydantic.Field(default=None)
     image: Optional[np.ndarray] = pydantic.Field(default=None)
     prompt: Optional[Prompt] = pydantic.Field(default=None)
-    annotations: Optional[List[Annotation]] = pydantic.Field(default=None)
+    annotations: Optional[list[Annotation]] = pydantic.Field(default=None)
 
     @pydantic.field_validator("image", mode="before")
     @classmethod
@@ -35,4 +34,4 @@ class GenerateResponse(pydantic.BaseModel):
 
     model: str
     image_embedding: Optional[ImageEmbedding] = pydantic.Field(default=None)
-    annotations: List[Annotation]
+    annotations: list[Annotation]

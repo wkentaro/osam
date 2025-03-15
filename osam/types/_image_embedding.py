@@ -1,5 +1,3 @@
-from typing import List
-
 import numpy as np
 import pydantic
 
@@ -20,5 +18,5 @@ class ImageEmbedding(pydantic.BaseModel):
         return embedding
 
     @pydantic.field_serializer("embedding")
-    def serialize_embedding(self, embedding: np.ndarray) -> List[List[List[float]]]:
+    def serialize_embedding(self, embedding: np.ndarray) -> list[list[list[float]]]:
         return embedding.tolist()
