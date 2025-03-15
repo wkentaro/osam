@@ -1,6 +1,4 @@
-from typing import List
 from typing import Optional
-from typing import Tuple
 from typing import Type
 
 import numpy as np
@@ -11,7 +9,7 @@ from . import types
 
 running_model: Optional[types.Model] = None
 
-registered_model_types: List[Type] = [
+registered_model_types: list[Type] = [
     _models.EfficientSam10m,
     _models.EfficientSam30m,
     _models.Sam100m,
@@ -59,7 +57,7 @@ def non_maximum_suppression(
     iou_threshold: float,
     score_threshold: float,
     max_num_detections: int,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     global _non_maximum_suppression_inference_session
     if _non_maximum_suppression_inference_session is None:
         blob = types.Blob(
