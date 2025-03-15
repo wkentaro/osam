@@ -1158,7 +1158,7 @@ wheels = [
 
 [[package]]
 name = "osam"
-version = "0.2.3.dev5+gf54d258.d20250310"
+version = "0.2.3.dev25+g2ff90a2.d20250315"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
