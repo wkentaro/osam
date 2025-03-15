@@ -5,8 +5,10 @@ import argparse
 import onnx
 from loguru import logger
 
+import osam
 
-def count_parameters(onnx_file):
+
+def count_parameters(onnx_file) -> int:
     model = onnx.load(onnx_file)
     total_params = 0
 
@@ -23,11 +25,22 @@ def main():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("onnx_file")
+    parser.add_argument(
+        "model",
+        type=str,
+        choices=[model_type.name for model_type in osam.apis.registered_model_types],
+    )
     args = parser.parse_args()
 
-    logger.debug(f"ONNX file: {args.onnx_file!r}")
-    num_params = count_parameters(onnx_file=args.onnx_file)
+    model_type: osam.types.Model = osam.apis.get_model_type_by_name(name=args.model)
+    model_type.pull()
+
+    blob: osam.types.Blob
+    num_params: int = 0
+    for blob in model_type._blobs.values():
+        logger.debug(f"Counting parameters in {blob.path}")
+        num_params += count_parameters(onnx_file=blob.path)
+
     logger.debug(
         "Number of parameters: "
         f"{num_params} = {num_params / 1e6:.2f}M = {num_params / 1e9:.2f}B"

@@ -11,7 +11,7 @@ def generate_mask_from_image_embedding(
     decoder_session: onnxruntime.InferenceSession,
     image_embedding: types.ImageEmbedding,
     prompt: types.Prompt,
-    image_size: int,
+    input_size: int,
 ) -> npt.NDArray[np.bool_]:
     if prompt.points is None or prompt.point_labels is None:
         raise ValueError("Prompt must contain points and point_labels: %r" % prompt)
@@ -29,7 +29,7 @@ def generate_mask_from_image_embedding(
     scale, new_height, new_width = _images.compute_scale_to_resize_image(
         height=image_embedding.original_height,
         width=image_embedding.original_width,
-        image_size=image_size,
+        target_size=input_size,
     )
     onnx_coord = (
         onnx_coord.astype(float)

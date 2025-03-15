@@ -53,6 +53,7 @@ dev = [
   "pytest>=8.3.4",
   "ruff==0.1.9",
   "twine>=6.1.0",
+  "onnx>=1.17.0",
 ]
 
 [tool.hatch.metadata]

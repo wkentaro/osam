@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import argparse
 import time
 
 import numpy as np
@@ -10,9 +11,9 @@ import osam.apis
 import osam.types
 
 
-def benchmark(n_times: int):
+def benchmark(model: str, n_times: int):
     request = osam.types.GenerateRequest(
-        model="efficient-sam",
+        model=model,
         image=np.asarray(PIL.Image.open("../_images/dogs.jpg")),
         prompt={"points": [[1280, 800]], "point_labels": [1]},
     )
@@ -33,7 +34,17 @@ def benchmark(n_times: int):
 
 
 def main():
-    benchmark(n_times=10)
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "model",
+        type=str,
+        choices=[model_type.name for model_type in osam.apis.registered_model_types],
+    )
+    args = parser.parse_args()
+
+    benchmark(model=args.model, n_times=10)
 
 
 if __name__ == "__main__":
