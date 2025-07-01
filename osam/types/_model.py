@@ -46,7 +46,7 @@ class Model(abc.ABC):
                 # is empty. We fallback to cpu in such cases.
                 logger.error(
                     "Failed to create inference session with providers {providers!r}. "
-                    "Falling back to ['CPUExecutionProvider']",
+                    "Falling back to ['CPUExecutionProvider']: {e}",
                     providers=providers,
                     e=e,
                 )
