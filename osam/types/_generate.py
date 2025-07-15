@@ -15,18 +15,9 @@ class GenerateRequest(pydantic.BaseModel):
 
     model: str
     image_embedding: Optional[ImageEmbedding] = pydantic.Field(default=None)
-    image: Optional[np.ndarray] = pydantic.Field(default=None)
+    image: Optional[str] = pydantic.Field(default=None)
     prompt: Optional[Prompt] = pydantic.Field(default=None)
     annotations: Optional[list[Annotation]] = pydantic.Field(default=None)
-
-    @pydantic.field_validator("image", mode="before")
-    @classmethod
-    def validate_image(
-        cls, image: Optional[Union[str, np.ndarray]]
-    ) -> Optional[np.ndarray]:
-        if isinstance(image, str):
-            return _json.image_b64data_to_ndarray(b64data=image)
-        return image
 
 
 class GenerateResponse(pydantic.BaseModel):
