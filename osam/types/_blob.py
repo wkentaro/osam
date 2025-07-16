@@ -3,7 +3,7 @@ import os
 
 import gdown
 from loguru import logger
-
+from pathlib impot Path
 
 @dataclasses.dataclass
 class Blob:
@@ -12,7 +12,7 @@ class Blob:
 
     @property
     def path(self):
-        return os.path.expanduser(f"~/.cache/osam/models/blobs/{self.hash}")
+        return os.path.expanduser(f"~/.cache/osam/models/blobs/{Path(self.url).name}")
 
     @property
     def size(self):
