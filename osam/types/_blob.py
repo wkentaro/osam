@@ -29,7 +29,28 @@ class Blob:
             return None
 
     def pull(self):
-        gdown.cached_download(url=self.url, path=self.path, hash=self.hash)
+        try:
+            return gdown.cached_download(
+                url=self.url,
+                path=self.path,
+                hash=self.hash,
+                use_cookies=False,
+                postprocess=None,
+                verify=True,
+            )
+        except Exception as e:
+            logger.warning(f"SSL verification failed: {e}")
+            logger.warning("Retrying with verify=False (enterprise proxy fallback)")
+
+            return gdown.cached_download(
+                url=self.url,
+                path=self.path,
+                hash=self.hash,
+                use_cookies=False,
+                postprocess=None,
+                verify=False,
+            )
+        
 
     def remove(self):
         if os.path.exists(self.path):
