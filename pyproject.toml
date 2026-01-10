@@ -25,6 +25,10 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  # onnxruntime unavailable yet for Python 3.14
+  # https://github.com/wkentaro/osam/actions/runs/20874965630/job/59982819097
+  # "Programming Language :: Python :: 3.14",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
