@@ -36,8 +36,10 @@ lint:
 	$(call exec,uv run ruff check)
 	$(call exec,uv run ty check --no-progress)
 
+PYTEST_ARGS ?=
+
 test:  # Run tests
-	$(call exec,uv run pytest -v osam/ -n auto)
+	$(call exec,uv run pytest -v osam/ -n auto $(PYTEST_ARGS))
 
 build:  # Build the package
 	$(call exec,uv build)
