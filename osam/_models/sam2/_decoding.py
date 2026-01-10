@@ -1,3 +1,5 @@
+from typing import cast
+
 import numpy as np
 import numpy.typing as npt
 import onnxruntime
@@ -36,11 +38,9 @@ def generate_mask_from_image_embedding(
             dtype=np.int64,
         ),
     }
-    (
-        masks,
-        scores,
-        _low_res_mask,
-    ) = decoder_session.run(None, decoder_inputs)
+    masks, scores, _low_res_mask = decoder_session.run(None, decoder_inputs)
+    masks = cast(npt.NDArray[np.float32], masks)
+    scores = cast(npt.NDArray[np.float32], scores)
 
     mask: npt.NDArray[np.bool_] = (
         masks[0, np.argmax(scores)] > 0.0

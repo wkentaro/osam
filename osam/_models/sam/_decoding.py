@@ -1,3 +1,5 @@
+from typing import cast
+
 import numpy as np
 import numpy.typing as npt
 import onnxruntime
@@ -57,5 +59,6 @@ def generate_mask_from_image_embedding(
     }
 
     masks, _, _ = decoder_session.run(None, decoder_inputs)
+    masks = cast(npt.NDArray[np.bool_], masks)
     mask: npt.NDArray[np.bool_] = masks[0, 0] > 0.0  # (1, 1, H, W) -> (H, W)
     return mask

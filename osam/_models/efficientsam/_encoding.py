@@ -1,3 +1,5 @@
+from typing import cast
+
 import numpy as np
 import numpy.typing as npt
 import onnxruntime
@@ -16,10 +18,13 @@ def compute_image_embedding_from_image(
     batched_images: npt.NDArray[np.float32] = (
         image.transpose(2, 0, 1)[None].astype(np.float32) / 255
     )
-    image_embedding: npt.NDArray[np.float32] = encoder_session.run(
+    outputs = encoder_session.run(
         output_names=None,
         input_feed={"batched_images": batched_images},
-    )[0][0]  # (embedding_dim, height, width)
+    )
+    image_embedding: npt.NDArray[np.float32] = cast(
+        npt.NDArray[np.float32], outputs[0]
+    )[0]  # (embedding_dim, height, width)
 
     return types.ImageEmbedding(
         original_height=image.shape[0],

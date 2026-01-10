@@ -9,6 +9,7 @@ import imgviz
 import numpy as np
 import PIL.Image
 from loguru import logger
+from numpy.typing import NDArray
 
 from . import __version__
 from . import _humanize
@@ -158,24 +159,30 @@ def run(model_name: str, image_path: str, prompt, json: bool) -> None:
                 caption = None
             captions.append(caption)
 
+        bboxes: NDArray[np.float32] | None = None
         if all(
             annotation.bounding_box is not None for annotation in response.annotations
         ):
-            bboxes = [
+            bboxes = np.array(
                 [
-                    getattr(annotation.bounding_box, key)
-                    for key in ["ymin", "xmin", "ymax", "xmax"]
-                ]
-                for annotation in response.annotations
-            ]
-        else:
-            bboxes = None
+                    [
+                        getattr(annotation.bounding_box, key)
+                        for key in ["ymin", "xmin", "ymax", "xmax"]
+                    ]
+                    for annotation in response.annotations
+                ],
+                dtype=np.float32,
+            )
+
+        masks: NDArray[np.bool_] | None = None
+        if all(annotation.mask is not None for annotation in response.annotations):
+            masks = np.array([annotation.mask for annotation in response.annotations])
 
         visualization = imgviz.instances2rgb(
             image=image,
             labels=labels,
             bboxes=bboxes,
-            masks=[annotation.mask for annotation in response.annotations],
+            masks=masks,
             captions=captions,
             alpha=0.5,
         )

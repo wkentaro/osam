@@ -1,3 +1,5 @@
+from typing import cast
+
 import numpy as np
 import numpy.typing as npt
 import onnxruntime
@@ -48,10 +50,10 @@ def compute_image_embedding_from_image(
     input_: npt.NDArray[np.float32] = _compute_input_from_image(
         image=image, input_size=get_input_size(encoder_session=encoder_session)
     )
-    output = encoder_session.run(output_names=None, input_feed={"x": input_})
-    image_embedding: npt.NDArray[np.float32] = output[0][
-        0
-    ]  # (embedding_dim, height, width)
+    outputs = encoder_session.run(output_names=None, input_feed={"x": input_})
+    image_embedding: npt.NDArray[np.float32] = cast(
+        npt.NDArray[np.float32], outputs[0]
+    )[0]  # (embedding_dim, height, width)
 
     return types.ImageEmbedding(
         original_height=image.shape[0],
