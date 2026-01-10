@@ -24,8 +24,8 @@ help:
 
 PACKAGE_NAME:=osam
 
-setup:  # Setup the development environment
-	$(call exec,uv sync --dev)
+setup:  # Setup dev env
+	$(call exec,uv sync)
 
 format:  # Format code
 	$(call exec,uv run ruff format)
