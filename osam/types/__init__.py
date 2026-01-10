@@ -13,7 +13,7 @@ from ._prompt import Prompt  # noqa: F401
 class ModelBase(Model):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warning(
+        warnings.warn(
             "This class is deprecated, use `Model` instead.", DeprecationWarning
         )
 
@@ -21,6 +21,6 @@ class ModelBase(Model):
 class ModelBlob(Blob):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warning(
+        warnings.warn(
             "This class is deprecated, use `Blob` instead.", DeprecationWarning
         )
