@@ -1,6 +1,9 @@
+from typing import cast
+
 import imgviz
 import numpy as np
 from loguru import logger
+from numpy.typing import NDArray
 
 from ... import apis
 from ... import types
@@ -23,9 +26,8 @@ class _YoloWorld(types.Model):
         if prompt.texts is None:
             raise ValueError("prompt.texts is required: prompt=%r", prompt)
         token = clip.tokenize(texts=prompt.texts + [" "])
-        (text_features,) = self._inference_sessions["textual"].run(
-            None, {"input": token}
-        )
+        outputs = self._inference_sessions["textual"].run(None, {"input": token})
+        text_features: NDArray[np.float32] = cast(NDArray[np.float32], outputs[0])
         text_features = text_features / np.linalg.norm(
             text_features, ord=2, axis=1, keepdims=True
         )
@@ -35,15 +37,15 @@ class _YoloWorld(types.Model):
         transformed_image, original_image_hw, padding_hw = _transform_image(
             image=request.image, input_size=self._input_size
         )
-        scores, bboxes = self._inference_sessions["yolo"].run(
+        yolo_outputs = self._inference_sessions["yolo"].run(
             output_names=["scores", "boxes"],
             input_feed={
                 "images": transformed_image[None],
                 "text_features": text_features[None],
             },
         )
-        scores = scores[0]
-        bboxes = bboxes[0]
+        scores = cast(NDArray[np.float32], yolo_outputs[0])[0]
+        bboxes = cast(NDArray[np.float32], yolo_outputs[1])[0]
         #
         iou_threshold = 1.0 if prompt.iou_threshold is None else prompt.iou_threshold
         score_threshold = (

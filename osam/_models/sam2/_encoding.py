@@ -1,3 +1,5 @@
+from typing import cast
+
 import imgviz
 import numpy as np
 import numpy.typing as npt
@@ -38,14 +40,10 @@ def compute_image_embedding_from_image(
     )
     input_ = input_.transpose(2, 0, 1)[None]
 
-    image_embedding: npt.NDArray[np.float32]
-    high_res_features1: npt.NDArray[np.float32]
-    high_res_features2: npt.NDArray[np.float32]
-    (
-        image_embedding,
-        high_res_features1,
-        high_res_features2,
-    ) = encoder_session.run(output_names=None, input_feed={"input": input_})
+    outputs = encoder_session.run(output_names=None, input_feed={"input": input_})
+    image_embedding = cast(npt.NDArray[np.float32], outputs[0])
+    high_res_features1 = cast(npt.NDArray[np.float32], outputs[1])
+    high_res_features2 = cast(npt.NDArray[np.float32], outputs[2])
 
     return types.ImageEmbedding(
         original_height=image.shape[0],

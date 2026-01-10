@@ -1,8 +1,10 @@
 from typing import Optional
 from typing import Type
+from typing import cast
 
 import numpy as np
 import onnxruntime
+from numpy.typing import NDArray
 
 from . import _models
 from . import types
@@ -74,7 +76,7 @@ def non_maximum_suppression(
         )
     inference_session = _non_maximum_suppression_inference_session
 
-    selected_indices = inference_session.run(
+    outputs = inference_session.run(
         output_names=["selected_indices"],
         input_feed={
             "boxes": boxes[None, :, :],
@@ -85,7 +87,8 @@ def non_maximum_suppression(
             "iou_threshold": np.array([iou_threshold], dtype=np.float32),
             "score_threshold": np.array([score_threshold], dtype=np.float32),
         },
-    )[0]
+    )
+    selected_indices = cast(NDArray[np.int64], outputs[0])
     labels = selected_indices[:, 1]
     box_indices = selected_indices[:, 2]
     boxes = boxes[box_indices]
