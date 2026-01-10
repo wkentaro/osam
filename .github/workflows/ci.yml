@@ -16,17 +16,23 @@ jobs:
           # full version coverage on Linux (fastest/cheapest)
           - os: ubuntu-latest
             python-version: "3.10"
+            pytest-args: ""
           - os: ubuntu-latest
             python-version: "3.11"
+            pytest-args: ""
           - os: ubuntu-latest
             python-version: "3.12"
+            pytest-args: ""
           - os: ubuntu-latest
             python-version: "3.13"
-          # minimum version on other platforms
+            pytest-args: ""
+          # minimum version on other platforms (light tests only)
           - os: macos-latest
             python-version: "3.10"
+            pytest-args: "-m 'not heavy'"
           - os: windows-latest
             python-version: "3.10"
+            pytest-args: "-m 'not heavy'"
 
     steps:
     - uses: actions/checkout@v4
@@ -45,7 +51,7 @@ jobs:
 
     - shell: bash
       run: |
-        make test
+        make test PYTEST_ARGS="${{ matrix.pytest-args }}"
 
     - name: Install from dist
       shell: bash

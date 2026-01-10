@@ -13,14 +13,14 @@ here = pathlib.Path(__file__).resolve().parent
     "model",
     [
         "efficientsam:10m",
-        "efficientsam:latest",
-        "sam:100m",
-        "sam:300m",
-        "sam:latest",
-        "sam2:tiny",
-        "sam2:small",
-        "sam2:latest",
-        "sam2:large",
+        pytest.param("efficientsam:latest", marks=pytest.mark.heavy),
+        pytest.param("sam:100m", marks=pytest.mark.heavy),
+        pytest.param("sam:300m", marks=pytest.mark.heavy),
+        pytest.param("sam:latest", marks=pytest.mark.heavy),
+        pytest.param("sam2:tiny", marks=pytest.mark.heavy),
+        pytest.param("sam2:small", marks=pytest.mark.heavy),
+        pytest.param("sam2:latest", marks=pytest.mark.heavy),
+        pytest.param("sam2:large", marks=pytest.mark.heavy),
     ],
 )
 def test_generate_point_to_mask(model: str) -> None:
