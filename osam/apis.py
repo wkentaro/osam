@@ -19,6 +19,7 @@ registered_model_types: list[Type[types.Model]] = [
     _models.Sam2Large,
     _models.Sam2Small,
     _models.Sam2Tiny,
+    _models.Sam3,
     _models.Sam300m,
     _models.Sam600m,
     _models.YoloWorldXL,
