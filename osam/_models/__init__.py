@@ -7,4 +7,5 @@ from .sam2 import Sam2BasePlus  # noqa: F401
 from .sam2 import Sam2Large  # noqa: F401
 from .sam2 import Sam2Small  # noqa: F401
 from .sam2 import Sam2Tiny  # noqa: F401
+from .sam3 import Sam3  # noqa: F401
 from .yoloworld import YoloWorldXL  # noqa: F401

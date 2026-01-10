@@ -63,6 +63,7 @@ Here are models that can be downloaded:
 | SAM2 Small        | 46M        | 170MB | `osam run sam2:small`        |
 | SAM2 BasePlus     | 82M        | 300MB | `osam run sam2`              |
 | SAM2 Large        | 227M       | 870MB | `osam run sam2:large`        |
+| SAM3              | 893M       | 3.4GB | `osam run sam3`              |
 | EfficientSAM 10M  | 10M        | 40MB  | `osam run efficientsam:10m`  |
 | EfficientSAM 30M  | 26M        | 100MB | `osam run efficientsam`      |
 | YOLO-World XL     | 168M       | 640MB | `osam run yoloworld`         |
@@ -85,12 +86,12 @@ osam run efficientsam --image examples/_images/dogs.jpg --json
 osam run efficientsam --image examples/_images/dogs.jpg \
   --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}' \
   > efficientsam.png
-osam run yoloworld --image examples/_images/dogs.jpg --prompt '{"texts": ["dog"]}' \
-  > yoloworld.png
+osam run sam3 --image examples/_images/dogs.jpg --prompt '{"texts": ["dog"]}' \
+  > sam3.png
 ```
 
-<img src="https://github.com/wkentaro/osam/raw/main/examples/_images/dogs.jpg" width="30%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam.png" width="30%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_yoloworld.png" width="30%">  
-<i>Input and output images ('dogs.jpg', 'efficientsam.png', 'yoloworld.png').</i>
+<img src="https://github.com/wkentaro/osam/raw/main/examples/_images/dogs.jpg" width="30%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam.png" width="30%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam3.png" width="30%">  
+<i>Input and output images ('dogs.jpg', 'efficientsam.png', 'sam3.png').</i>
 
 ### Python
 
