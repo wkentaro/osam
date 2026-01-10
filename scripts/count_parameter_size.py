@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+from typing import Type
 
 import onnx
 from loguru import logger
@@ -32,7 +33,9 @@ def main():
     )
     args = parser.parse_args()
 
-    model_type: osam.types.Model = osam.apis.get_model_type_by_name(name=args.model)
+    model_type: Type[osam.types.Model] = osam.apis.get_model_type_by_name(
+        name=args.model
+    )
     model_type.pull()
 
     blob: osam.types.Blob

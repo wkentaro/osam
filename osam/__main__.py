@@ -97,7 +97,7 @@ def rm(model_name):
 @click.option("--reload", is_flag=True, help="reload server on file changes")
 def serve(reload):
     try:
-        import uvicorn
+        import uvicorn  # type: ignore[unresolved-import]
 
         import osam._server  # noqa: F401
 

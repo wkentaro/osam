@@ -9,7 +9,7 @@ from . import types
 
 running_model: Optional[types.Model] = None
 
-registered_model_types: list[Type] = [
+registered_model_types: list[Type[types.Model]] = [
     _models.EfficientSam10m,
     _models.EfficientSam30m,
     _models.Sam100m,
@@ -23,7 +23,7 @@ registered_model_types: list[Type] = [
 ]
 
 
-def get_model_type_by_name(name: str) -> Type:
+def get_model_type_by_name(name: str) -> Type[types.Model]:
     model_name: str
     if ":" in name:
         model_name = name

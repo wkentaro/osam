@@ -30,7 +30,7 @@ class Model(abc.ABC):
             try:
                 # Try to use all of the available providers e.g., cuda, tensorrt.
                 if providers is None:
-                    if "CUDAExecutionProvider" in onnxruntime.get_available_providers():
+                    if "CUDAExecutionProvider" in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
                         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
                     else:
                         providers = ["CPUExecutionProvider"]

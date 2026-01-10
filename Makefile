@@ -24,8 +24,8 @@ help:
 
 PACKAGE_NAME:=osam
 
-setup:  # Setup the development environment
-	$(call exec,uv sync --dev)
+setup:  # Setup dev env
+	$(call exec,uv sync)
 
 format:  # Format code
 	$(call exec,uv run ruff format)
@@ -34,11 +34,7 @@ format:  # Format code
 lint:
 	$(call exec,uv run ruff format --check)
 	$(call exec,uv run ruff check)
-
-mypy:
-	$(call exec,uv run mypy --package $(PACKAGE_NAME))
-
-check: lint mypy  # Run checks
+	$(call exec,uv run ty check --no-progress)
 
 test:  # Run tests
 	$(call exec,uv run pytest -v osam/ -n auto)

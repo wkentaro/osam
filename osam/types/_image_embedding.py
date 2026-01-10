@@ -1,5 +1,6 @@
 import base64
 from typing import Union
+from typing import cast
 
 import numpy as np
 import numpy.typing as npt
@@ -40,7 +41,9 @@ class ImageEmbedding(pydantic.BaseModel):
         for i, high_res_feature in enumerate(extra_features):
             high_res_feature_ndarray: npt.NDArray[np.float32]
             if isinstance(high_res_feature, np.ndarray):
-                high_res_feature_ndarray = high_res_feature
+                high_res_feature_ndarray = cast(
+                    npt.NDArray[np.float32], high_res_feature
+                )
             elif isinstance(high_res_feature, dict):
                 if {"data", "shape", "dtype"} != set(high_res_feature.keys()):
                     raise ValueError(
