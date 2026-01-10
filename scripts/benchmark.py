@@ -15,7 +15,9 @@ def benchmark(model: str, n_times: int):
     request = osam.types.GenerateRequest(
         model=model,
         image=np.asarray(PIL.Image.open("../_images/dogs.jpg")),
-        prompt={"points": [[1280, 800]], "point_labels": [1]},
+        prompt=osam.types.Prompt(
+            points=np.array([[1280, 800]]), point_labels=np.array([1])
+        ),
     )
 
     logger.info("Warming up")

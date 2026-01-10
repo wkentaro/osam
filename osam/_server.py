@@ -1,7 +1,7 @@
 import logging
 import os
 
-import fastapi
+import fastapi  # type: ignore[unresolved-import]
 
 from . import apis
 from . import types
