@@ -86,7 +86,7 @@ class Model(abc.ABC):
 
     @classmethod
     def get_modified_at(cls) -> Optional[float]:
-        modified_at = 0
+        modified_at: float = 0
         for blob in cls._blobs.values():
             if blob.modified_at is None:
                 return None
