@@ -19,13 +19,13 @@ jobs:
             pytest-args: ""
           - os: ubuntu-latest
             python-version: "3.11"
-            pytest-args: ""
+            pytest-args: "-m 'not heavy'"
           - os: ubuntu-latest
             python-version: "3.12"
-            pytest-args: ""
+            pytest-args: "-m 'not heavy'"
           - os: ubuntu-latest
             python-version: "3.13"
-            pytest-args: ""
+            pytest-args: "-m 'not heavy'"
           # minimum version on other platforms (light tests only)
           - os: macos-latest
             python-version: "3.10"
