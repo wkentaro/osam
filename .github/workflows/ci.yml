@@ -28,7 +28,7 @@ jobs:
 
     - shell: bash
       run: |
-        make check
+        make lint
 
     - shell: bash
       run: |
