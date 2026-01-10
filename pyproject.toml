@@ -36,7 +36,7 @@ dependencies = [
   "gdown",
   "imgviz",
   "loguru",
-  "onnxruntime>=1.14.1,!=1.16.0,!=1.20.0,!=1.20.1",
+  "onnxruntime>=1.23.2",
   "Pillow",
   "pydantic",
 ]
