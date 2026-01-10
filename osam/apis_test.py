@@ -40,9 +40,14 @@ def test_generate_point_to_mask(model: str) -> None:
     assert annotation.bounding_box is not None
 
 
-def test_generate_text_to_bounding_box() -> None:
-    model: str = "yoloworld:latest"
-
+@pytest.mark.parametrize(
+    "model, has_mask",
+    [
+        ("sam3:latest", True),
+        pytest.param("yoloworld:latest", False, marks=pytest.mark.heavy),
+    ],
+)
+def test_generate_text_to_bounding_box(model: str, has_mask: bool) -> None:
     image = imgviz.io.imread(here / "_data" / "dogs.jpg")
     request: types.GenerateRequest = types.GenerateRequest(
         model=model, image=image, prompt=types.Prompt(texts=["dog"])
@@ -56,4 +61,9 @@ def test_generate_text_to_bounding_box() -> None:
         assert annotation.bounding_box is not None
         assert annotation.text == "dog"
         assert isinstance(annotation.score, float)
-        assert annotation.mask is None
+        if has_mask:
+            assert annotation.mask is not None
+            assert annotation.mask.dtype == bool
+            assert annotation.mask.shape == image.shape[:2]
+        else:
+            assert annotation.mask is None
