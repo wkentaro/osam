@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import hashlib
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Dict
@@ -91,14 +92,32 @@ def _load_inference_sessions(
     return inference_sessions
 
 
+def _link_or_copy(src: str | Path, dst: Path) -> None:
+    """Create a link to src at dst, falling back to copy if symlinks are not available.
+
+    On Windows, creating symlinks requires administrator privileges or Developer Mode.
+    This function provides a fallback mechanism:
+    1. Try symbolic link (fast, works on Unix and Windows with Dev Mode)
+    2. Try hard link (fast, works on same filesystem without special permissions)
+    3. Fall back to copy (slow but always works)
+    """
+    try:
+        dst.symlink_to(src)
+    except OSError:
+        try:
+            dst.hardlink_to(src)
+        except OSError:
+            shutil.copy2(src, dst)
+
+
 def _load_inference_session(
     tmp_dir: Path, blob: Blob, providers: list[str] | None = None
 ) -> onnxruntime.InferenceSession:
     # ONNX models with external data files (.onnx.data) require the data file to be
     # in the same directory as the main .onnx file with the correct filename.
-    (tmp_dir / blob.filename).symlink_to(blob.path)
+    _link_or_copy(blob.path, tmp_dir / blob.filename)
     for attachment in blob.attachments:
-        (tmp_dir / attachment.filename).symlink_to(attachment.path)
+        _link_or_copy(attachment.path, tmp_dir / attachment.filename)
     load_path: Path = tmp_dir / blob.filename
 
     try:
