@@ -125,16 +125,39 @@ class Sam3(types.Model):
         language_mask: NDArray[np.bool_] = cast(NDArray[np.bool_], outputs[0])
         language_features: NDArray[np.float32] = cast(NDArray[np.float32], outputs[1])
 
-        if prompt.points is None:
-            box_coords: NDArray[np.float32] = np.array(
-                [[[0, 0, 0, 0]]], dtype=np.float32
+        box_coords: NDArray[np.float32]
+        box_labels: NDArray[np.int64]
+        box_masks: NDArray[np.bool_]
+        if prompt.points is None and prompt.point_labels is None:
+            box_coords = np.array([[[0, 0, 0, 0]]], dtype=np.float32)
+            box_labels = np.array([[1]], dtype=np.int64)
+            box_masks = np.array([[True]], dtype=np.bool_)  # masked out
+        elif prompt.points is None or prompt.point_labels is None:
+            raise ValueError(
+                "both points and point_labels must be provided together: "
+                f"{prompt.points=}, {prompt.point_labels=}"
             )
-            box_labels: NDArray[np.int64] = np.array([[1]], dtype=np.int64)
-            box_masks: NDArray[np.bool_] = np.array(
-                [[True]], dtype=np.bool_
-            )  # masked out
         else:
-            raise NotImplementedError("point prompt is not implemented yet")
+            if len(prompt.points) != 2 or prompt.points.shape[1] != 2:
+                raise ValueError(
+                    "only two point prompts (left-top, right-bottom) are supported: "
+                    f"{prompt.points=}, {prompt.point_labels=}"
+                )
+            if prompt.point_labels.tolist() != [2, 3]:
+                raise ValueError(
+                    "only point labels for box prompts (2: left-top, 3: right-bottom) "
+                    f"are supported: {prompt.point_labels=}"
+                )
+            points_normalized: NDArray[np.float32] = (
+                prompt.points / [original_width, original_height]
+            ).astype(np.float32)
+            # (x_center, y_center, width, height)
+            box_coords = np.r_[
+                (points_normalized[0] + points_normalized[1]) / 2,
+                points_normalized[1] - points_normalized[0],
+            ][None, None]
+            box_labels = np.array([[1]], dtype=np.int64)
+            box_masks = np.array([[False]], dtype=np.bool_)
 
         outputs = self._inference_sessions["decoder"].run(
             None,

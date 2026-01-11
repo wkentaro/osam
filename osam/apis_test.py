@@ -1,6 +1,7 @@
 import pathlib
 
 import imgviz
+import numpy as np
 import pytest
 
 from . import apis
@@ -67,3 +68,54 @@ def test_generate_text_to_bounding_box(model: str, has_mask: bool) -> None:
             assert annotation.mask.shape == image.shape[:2]
         else:
             assert annotation.mask is None
+
+
+@pytest.mark.parametrize("model", ["sam2:tiny"])
+def test_generate_box_to_mask_sam2(model: str) -> None:
+    image = imgviz.io.imread(here / "_data" / "dogs.jpg")
+    request: types.GenerateRequest = types.GenerateRequest(
+        model=model,
+        image=image,
+        prompt=types.Prompt(
+            points=np.array([[1233, 376], [1649, 691]], dtype=np.float32),
+            point_labels=np.array([2, 3], dtype=np.int32),
+        ),
+    )
+    response: types.GenerateResponse = apis.generate(request=request)
+
+    assert response.model == model
+
+    assert len(response.annotations) == 1
+    for annotation in response.annotations:
+        assert annotation.text is None
+        assert annotation.score is None
+        assert annotation.mask is not None
+        assert annotation.mask.dtype == bool
+        assert annotation.mask.shape == image.shape[:2]
+        assert annotation.bounding_box is not None
+
+
+@pytest.mark.parametrize("model", ["sam3:latest"])
+def test_generate_box_to_mask_sam3(model: str) -> None:
+    image = imgviz.io.imread(here / "_data" / "dogs.jpg")
+    request: types.GenerateRequest = types.GenerateRequest(
+        model=model,
+        image=image,
+        prompt=types.Prompt(
+            points=np.array([[1233, 376], [1649, 691]], dtype=np.float32),
+            point_labels=np.array([2, 3], dtype=np.int32),
+        ),
+    )
+    response: types.GenerateResponse = apis.generate(request=request)
+
+    assert response.model == model
+
+    # SAM3 returns multiple mask candidates (unlike SAM2 which returns 1)
+    assert len(response.annotations) == 3
+    for annotation in response.annotations:
+        assert annotation.text == "visual"
+        assert annotation.score is not None
+        assert annotation.mask is not None
+        assert annotation.mask.dtype == bool
+        assert annotation.mask.shape == image.shape[:2]
+        assert annotation.bounding_box is not None
