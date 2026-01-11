@@ -16,7 +16,7 @@ jobs:
           # full version coverage on Linux (fastest/cheapest)
           - os: ubuntu-latest
             python-version: "3.10"
-            pytest-args: ""
+            pytest-args: "-n 3"  # memory is insufficient to run in full parallel (4)
           - os: ubuntu-latest
             python-version: "3.11"
             pytest-args: "-m 'not heavy'"
