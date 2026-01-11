@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import abc
 import hashlib
-import tempfile
-from pathlib import Path
 from typing import Dict
 from typing import Optional
 from typing import Sequence
@@ -77,13 +75,11 @@ def _load_inference_sessions(
     providers: Sequence[str] | None = None
     inference_sessions: dict[str, onnxruntime.InferenceSession] = {}
     for key, blob in blobs.items():
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            inference_session: onnxruntime.InferenceSession = _load_inference_session(
-                tmp_dir=Path(tmp_dir), blob=blob, providers=providers
-            )
-            providers = inference_session.get_providers()
-
-            inference_sessions[key] = inference_session
+        inference_session: onnxruntime.InferenceSession = _load_inference_session(
+            blob=blob, providers=providers
+        )
+        providers = inference_session.get_providers()
+        inference_sessions[key] = inference_session
     logger.info(
         "Initialized inference sessions with providers {providers!r}",
         providers=providers,
@@ -92,15 +88,8 @@ def _load_inference_sessions(
 
 
 def _load_inference_session(
-    tmp_dir: Path, blob: Blob, providers: list[str] | None = None
+    blob: Blob, providers: list[str] | None = None
 ) -> onnxruntime.InferenceSession:
-    # ONNX models with external data files (.onnx.data) require the data file to be
-    # in the same directory as the main .onnx file with the correct filename.
-    (tmp_dir / blob.filename).symlink_to(blob.path)
-    for attachment in blob.attachments:
-        (tmp_dir / attachment.filename).symlink_to(attachment.path)
-    load_path: Path = tmp_dir / blob.filename
-
     try:
         # Try to use all of the available providers e.g., cuda, tensorrt.
         if providers is None:
@@ -108,7 +97,7 @@ def _load_inference_session(
                 providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
             else:
                 providers = ["CPUExecutionProvider"]
-        inference_session = onnxruntime.InferenceSession(load_path, providers=providers)
+        inference_session = onnxruntime.InferenceSession(blob.path, providers=providers)
     except Exception as e:
         # Even though there is fallback in onnxruntime, it won't always work.
         # e.g., CUDA is installed and CUDA_PATH is set, but CUDA_VISIBLE_DEVICES
@@ -120,5 +109,5 @@ def _load_inference_session(
             e=e,
         )
         providers = ["CPUExecutionProvider"]
-        inference_session = onnxruntime.InferenceSession(load_path, providers=providers)
+        inference_session = onnxruntime.InferenceSession(blob.path, providers=providers)
     return inference_session
