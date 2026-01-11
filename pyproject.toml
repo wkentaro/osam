@@ -33,7 +33,7 @@ classifiers = [
 ]
 dependencies = [
   "click",
-  "gdown",
+  "gdown>=5.2.1",
   "imgviz",
   "loguru",
   "onnxruntime>=1.23.2",
