@@ -10,6 +10,7 @@ class Prompt(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     points: Optional[np.ndarray] = pydantic.Field(default=None)
+    # point_labels: ignore=-1, background=0, foreground=1, box_lt=2, box_rb=3
     point_labels: Optional[np.ndarray] = pydantic.Field(default=None)
     texts: Optional[list[str]] = pydantic.Field(default=None)
 
