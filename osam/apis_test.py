@@ -14,14 +14,14 @@ here = pathlib.Path(__file__).resolve().parent
     "model",
     [
         "efficientsam:10m",
-        pytest.param("efficientsam:latest", marks=pytest.mark.heavy),
-        pytest.param("sam:100m", marks=pytest.mark.heavy),
-        pytest.param("sam:300m", marks=pytest.mark.heavy),
-        pytest.param("sam:latest", marks=pytest.mark.heavy),
-        pytest.param("sam2:tiny", marks=pytest.mark.heavy),
-        pytest.param("sam2:small", marks=pytest.mark.heavy),
-        pytest.param("sam2:latest", marks=pytest.mark.heavy),
-        pytest.param("sam2:large", marks=pytest.mark.heavy),
+        pytest.param("efficientsam:latest", marks=pytest.mark.extra),
+        pytest.param("sam:100m", marks=pytest.mark.extra),
+        pytest.param("sam:300m", marks=pytest.mark.extra),
+        pytest.param("sam:latest", marks=pytest.mark.extra),
+        pytest.param("sam2:tiny", marks=pytest.mark.extra),
+        pytest.param("sam2:small", marks=pytest.mark.extra),
+        pytest.param("sam2:latest", marks=pytest.mark.extra),
+        pytest.param("sam2:large", marks=pytest.mark.extra),
     ],
 )
 def test_generate_point_to_mask(model: str) -> None:
@@ -45,7 +45,7 @@ def test_generate_point_to_mask(model: str) -> None:
     "model, has_mask",
     [
         ("sam3:latest", True),
-        pytest.param("yoloworld:latest", False, marks=pytest.mark.heavy),
+        pytest.param("yoloworld:latest", False, marks=pytest.mark.extra),
     ],
 )
 def test_generate_text_to_bounding_box(model: str, has_mask: bool) -> None:
