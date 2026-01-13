@@ -56,5 +56,5 @@ jobs:
     - name: Install from dist
       shell: bash
       run: |
-        make build
+        uv build
         uv pip install dist/osam-*.whl

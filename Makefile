@@ -40,6 +40,3 @@ PYTEST_ARGS ?=
 
 test:  # Run tests
 	$(call exec,uv run pytest -v osam/ -n auto $(PYTEST_ARGS))
-
-build:  # Build the package
-	$(call exec,uv build)
