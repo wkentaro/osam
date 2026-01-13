@@ -7,54 +7,57 @@ on:
   pull_request:
 
 jobs:
-  build:
+  setup:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: make setup
+      - run: |
+          uv build
+          uv pip install dist/*.tar.gz
+          uv pip install dist/*.whl
+        shell: bash
 
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: make setup
+      - run: make lint
+
+  test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
-          # full version coverage on Linux (fastest/cheapest)
           - os: ubuntu-latest
             python-version: "3.10"
             pytest-args: "-n 3"  # memory is insufficient to run in full parallel (4)
-          - os: ubuntu-latest
-            python-version: "3.11"
-            pytest-args: "-m 'not extra'"
-          - os: ubuntu-latest
-            python-version: "3.12"
-            pytest-args: "-m 'not extra'"
-          - os: ubuntu-latest
-            python-version: "3.13"
-            pytest-args: "-m 'not extra'"
-          # minimum version on other platforms (light tests only)
           - os: macos-latest
             python-version: "3.10"
-            pytest-args: "-m 'not extra'"
+            pytest-args: "-m 'not extra'"  # minimum version by 'not extra'
           - os: windows-latest
             python-version: "3.10"
-            pytest-args: "-m 'not extra' -n 0"  # windows filesystem cannot handle parallel tests well
-
+            # minimum version by 'not extra'
+            # windows filesystem cannot handle parallel tests well
+            pytest-args: "-m 'not extra' -n 0"
     steps:
-    - uses: actions/checkout@v4
-
-    - uses: astral-sh/setup-uv@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-
-    - shell: bash
-      run: |
-        make setup
-
-    - shell: bash
-      run: |
-        make lint
-
-    - shell: bash
-      run: |
-        make test PYTEST_ARGS="${{ matrix.pytest-args }}"
-
-    - name: Install from dist
-      shell: bash
-      run: |
-        uv build
-        uv pip install dist/osam-*.whl
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: make setup
+      - run: make test PYTEST_ARGS="${{ matrix.pytest-args }}"
