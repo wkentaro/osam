@@ -59,12 +59,14 @@ _non_maximum_suppression_inference_session: Optional[
 
 
 def non_maximum_suppression(
-    boxes: np.ndarray,
-    scores: np.ndarray,
+    boxes: NDArray[np.floating],
+    scores: NDArray[np.floating],
     iou_threshold: float,
     score_threshold: float,
     max_num_detections: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[
+    NDArray[np.floating], NDArray[np.floating], NDArray[np.int64], NDArray[np.int64]
+]:
     global _non_maximum_suppression_inference_session
     if _non_maximum_suppression_inference_session is None:
         blob = types.Blob(
@@ -94,11 +96,13 @@ def non_maximum_suppression(
     box_indices = selected_indices[:, 2]
     boxes = boxes[box_indices]
     scores = scores[box_indices, labels]
+    indices = box_indices
 
     if len(boxes) > max_num_detections:
         keep_indices = np.argsort(scores)[-max_num_detections:]
         boxes = boxes[keep_indices]
         scores = scores[keep_indices]
         labels = labels[keep_indices]
+        indices = indices[keep_indices]
 
-    return boxes, scores, labels
+    return boxes, scores, labels, indices
