@@ -54,7 +54,7 @@ class _YoloWorld(types.Model):
         max_annotations = (
             len(bboxes) if prompt.max_annotations is None else prompt.max_annotations
         )
-        bboxes, scores, labels = apis.non_maximum_suppression(
+        bboxes, scores, labels, _indices = apis.non_maximum_suppression(
             boxes=bboxes,
             scores=scores,
             iou_threshold=iou_threshold,
