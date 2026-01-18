@@ -57,6 +57,7 @@ dev = [
   "twine>=6.1.0",
   "onnx>=1.17.0",
   "ty>=0.0.11",
+  "ipython>=8.38.0",
 ]
 
 [tool.hatch.metadata]
