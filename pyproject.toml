@@ -34,7 +34,7 @@ classifiers = [
 dependencies = [
   "click",
   "gdown>=5.2.1",
-  "imgviz",
+  "imgviz>=2.0.0",
   "loguru",
   "onnxruntime>=1.23.2",
   "Pillow",

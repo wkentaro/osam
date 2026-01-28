@@ -438,7 +438,7 @@ wheels = [
 
 [[package]]
 name = "imgviz"
-version = "1.8.0"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cmap" },
@@ -446,9 +446,9 @@ dependencies = [
     { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pillow" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f7/71/1964a2a6d73d662dbe80862033b060a993839290c3f4b10c0d5542779a93/imgviz-1.8.0.tar.gz", hash = "sha256:2eb3968d6e2875cb0f8ad62a7fc2d6bed8c81671609a047f49ee74b3b7eb34e5", size = 8825946, upload-time = "2025-12-29T10:49:21.326Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/07/28988bae2d5a2baf1403df6d9cf35abc801dfa668f9c1be7727999980a04/imgviz-2.0.0.tar.gz", hash = "sha256:7f5f2a5d6f86e2ad92ce80ff44db7df9ddcd9797ad8f5b74cc2464e26717a790", size = 8781839, upload-time = "2026-01-28T12:42:25.696Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/eb/bb/758868d9031499e522cb2477e26a6bf2696569bfdcd4ee432df19c24e0dd/imgviz-1.8.0-py3-none-any.whl", hash = "sha256:43d2f5304064d6367cb41301914c9bf28d131bdba06442225e48a3615e7e0b97", size = 7880243, upload-time = "2025-12-29T10:49:25.378Z" },
+    { url = "https://files.pythonhosted.org/packages/af/0c/bfc231931fe1a66a7adcf6696eaffb2732d9d8c91b122bcaa82e32e84e5a/imgviz-2.0.0-py3-none-any.whl", hash = "sha256:e32a13ce58494ad312654a31b06036425eb19683c61a5cfa9c52eea1174a13b9", size = 7862518, upload-time = "2026-01-28T12:42:20.582Z" },
 ]
 
 [[package]]
@@ -1143,7 +1143,7 @@ requires-dist = [
     { name = "click" },
     { name = "fastapi", marker = "extra == 'serve'" },
     { name = "gdown", specifier = ">=5.2.1" },
-    { name = "imgviz" },
+    { name = "imgviz", specifier = ">=2.0.0" },
     { name = "loguru" },
     { name = "onnxruntime", specifier = ">=1.23.2" },
     { name = "pillow" },

@@ -56,7 +56,7 @@ class SamBase(types.Model):
             image_embedding=image_embedding, prompt=prompt
         )
 
-        bbox = imgviz.instances.masks_to_bboxes(masks=[mask])[0].astype(int)
+        bbox = imgviz.masks_to_bboxes(masks=[mask])[0].astype(int)
         bounding_box: types.BoundingBox = types.BoundingBox(
             ymin=bbox[0], xmin=bbox[1], ymax=bbox[2], xmax=bbox[3]
         )
