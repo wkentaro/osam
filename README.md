@@ -87,17 +87,21 @@ osam run efficientsam --image examples/_images/dogs.jpg --json
 osam run efficientsam --image examples/_images/dogs.jpg \
   --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}' \
   > efficientsam_point.png
-# 2. box prompt (lt=2, rb=3)
+# 2. box prompt with sam2 (lt=2, rb=3)
 osam run sam2 --image examples/_images/dogs.jpg \
   --prompt '{"points": [[1233, 376], [1649, 691]], "point_labels": [2, 3]}' \
   > sam2_box.png
 # 3. text prompt
 osam run sam3 --image examples/_images/dogs.jpg --prompt '{"texts": ["dog"]}' \
   > sam3_text.png
+# 4. box prompt with sam3 (lt=2, rb=3)
+osam run sam3 --image examples/_images/dogs.jpg \
+  --prompt '{"points": [[1233, 376], [1649, 691]], "point_labels": [2, 3]}' \
+  > sam3_box.png
 ```
 
-<img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam.png" width="30%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam2.png" width="30%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam3.png" width="30%">  
-<i>Output images: 'efficientsam_point.png', 'sam2_box.png', 'sam3_text.png'</i>
+<img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam.png" width="24%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam2.png" width="24%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam3.png" width="24%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam3_box.png" width="24%">  
+<i>Output images: 'efficientsam_point.png', 'sam2_box.png', 'sam3_text.png', 'sam3_box.png'</i>
 
 ### Python
 
