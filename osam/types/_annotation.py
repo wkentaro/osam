@@ -23,6 +23,19 @@ class Annotation(pydantic.BaseModel):
             raise ValueError("mask must be boolean arrays")
         return mask
 
+    @pydantic.model_validator(mode="after")
+    def validate_mask_bbox_consistency(self) -> "Annotation":
+        if self.mask is not None:
+            if self.bounding_box is None:
+                raise ValueError("bounding_box is required when mask is provided")
+            bb = self.bounding_box
+            expected = (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
+            if self.mask.shape != expected:
+                raise ValueError(
+                    f"mask shape {self.mask.shape} != expected bbox shape {expected}"
+                )
+        return self
+
     @pydantic.field_serializer("mask")
     def serialize_mask(self, mask: Optional[np.ndarray]) -> Optional[str]:
         if mask is None:

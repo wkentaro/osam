@@ -37,8 +37,9 @@ def test_generate_point_to_mask(model: str) -> None:
     assert annotation.score is None
     assert annotation.mask is not None
     assert annotation.mask.dtype == bool
-    assert annotation.mask.shape == image.shape[:2]
     assert annotation.bounding_box is not None
+    bb = annotation.bounding_box
+    assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
 
 
 @pytest.mark.parametrize(
@@ -65,7 +66,11 @@ def test_generate_text_to_bounding_box(model: str, has_mask: bool) -> None:
         if has_mask:
             assert annotation.mask is not None
             assert annotation.mask.dtype == bool
-            assert annotation.mask.shape == image.shape[:2]
+            bb = annotation.bounding_box
+            assert annotation.mask.shape == (
+                bb.ymax - bb.ymin + 1,
+                bb.xmax - bb.xmin + 1,
+            )
         else:
             assert annotation.mask is None
 
@@ -91,8 +96,9 @@ def test_generate_box_to_mask_sam2(model: str) -> None:
         assert annotation.score is None
         assert annotation.mask is not None
         assert annotation.mask.dtype == bool
-        assert annotation.mask.shape == image.shape[:2]
         assert annotation.bounding_box is not None
+        bb = annotation.bounding_box
+        assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
 
 
 @pytest.mark.parametrize("model", ["sam3:latest"])
@@ -117,5 +123,6 @@ def test_generate_box_to_mask_sam3(model: str) -> None:
         assert annotation.score is not None
         assert annotation.mask is not None
         assert annotation.mask.dtype == bool
-        assert annotation.mask.shape == image.shape[:2]
         assert annotation.bounding_box is not None
+        bb = annotation.bounding_box
+        assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)

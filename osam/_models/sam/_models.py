@@ -60,11 +60,14 @@ class SamBase(types.Model):
         bounding_box: types.BoundingBox = types.BoundingBox(
             ymin=bbox[0], xmin=bbox[1], ymax=bbox[2], xmax=bbox[3]
         )
+        cropped_mask = mask[bbox[0] : bbox[2] + 1, bbox[1] : bbox[3] + 1]
 
         return types.GenerateResponse(
             model=self.name,
             image_embedding=image_embedding,
-            annotations=[types.Annotation(mask=mask, bounding_box=bounding_box)],
+            annotations=[
+                types.Annotation(mask=cropped_mask, bounding_box=bounding_box)
+            ],
         )
 
 
