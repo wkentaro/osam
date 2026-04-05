@@ -15,34 +15,28 @@ class Sam3(types.Model):
 
     _blobs = {
         "image_encoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models/resolve/main/sam3_image_encoder.onnx",
-            hash="sha256:3dd676271e9c459463f7026d8ab2c6318672cd89511f89c30b34cdf0a2e67a3f",
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/main/sam3_image_encoder.onnx",
+            hash="sha256:c6f3769e9d42573806c34b663d6100b3827a4c0ecba6f45dbf39b8f3906be725",
             attachments=[
                 types.Blob(
-                    url="https://huggingface.co/wkentaro/sam3-onnx-models/resolve/main/sam3_image_encoder.onnx.data",
+                    url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/main/sam3_image_encoder.onnx.data",
                     hash="sha256:03bd50b0703e2b04e2193ca831b7f9d5ecf40bc5287cc59b1970f56ab800c995",
                 ),
             ],
         ),
         "language_encoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models/resolve/main/sam3_language_encoder.onnx",
-            hash="sha256:af80dffcd8fc369281b0422295244ba22f64e8424e9eefa111ac8966e9ea9ba6",
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/main/sam3_language_encoder.onnx",
+            hash="sha256:b3b465935c9bf4cf5efd950589741f3da5eec9e9bfe459576989cbe565331b53",
             attachments=[
                 types.Blob(
-                    url="https://huggingface.co/wkentaro/sam3-onnx-models/resolve/main/sam3_language_encoder.onnx.data",
+                    url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/main/sam3_language_encoder.onnx.data",
                     hash="sha256:1b03dabc657c1f2887d1b8ce2a3537467d4c033ea1f8c8be141fbca55e4b95f7",
                 ),
             ],
         ),
         "decoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models/resolve/main/sam3_decoder.onnx",
-            hash="sha256:aca3109a1bf87d1589bf2a4a61c641fd97624152b21c6e9a5aa85735db398884",
-            attachments=[
-                types.Blob(
-                    url="https://huggingface.co/wkentaro/sam3-onnx-models/resolve/main/sam3_decoder.onnx.data",
-                    hash="sha256:afae2f057f4c6e2478589877aa3d361a0d863cdfdb8259f7eee903f529188ac6",
-                ),
-            ],
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/main/sam3_decoder.onnx",
+            hash="sha256:bbc216dbf3de4742f692c2a0a0fd215ea8957956002a05f28150040a88b5dc1a",
         ),
     }
 
@@ -162,8 +156,6 @@ class Sam3(types.Model):
         outputs = self._inference_sessions["decoder"].run(
             None,
             {
-                "original_height": np.array(original_height, dtype=np.int64),
-                "original_width": np.array(original_width, dtype=np.int64),
                 "backbone_fpn_0": backbone_fpn_0,
                 "backbone_fpn_1": backbone_fpn_1,
                 "backbone_fpn_2": backbone_fpn_2,
@@ -175,24 +167,50 @@ class Sam3(types.Model):
                 "box_masks": box_masks,
             },
         )
-        boxes: NDArray[np.float32] = cast(NDArray[np.float32], outputs[0])
+        boxes_norm: NDArray[np.float32] = cast(NDArray[np.float32], outputs[0])
         scores: NDArray[np.float32] = cast(NDArray[np.float32], outputs[1])
-        masks: NDArray[np.bool_] = cast(NDArray[np.bool_], outputs[2])
+        masks_native: NDArray[np.float32] = cast(NDArray[np.float32], outputs[2])
+        mask_h, mask_w = masks_native.shape[2], masks_native.shape[3]
+
+        # Scale normalized boxes to original image coordinates
+        boxes = boxes_norm * np.array(
+            [original_width, original_height, original_width, original_height],
+            dtype=np.float32,
+        )
+        # Scale normalized boxes to native mask coordinates
+        boxes_mask = boxes_norm * np.array(
+            [mask_w, mask_h, mask_w, mask_h], dtype=np.float32
+        )
 
         annotations: list[types.Annotation] = []
         for i in range(len(scores)):
             if scores[i] < score_threshold:
                 continue
             box = boxes[i]
+            bb = types.BoundingBox(
+                xmin=round(box[0]),
+                ymin=round(box[1]),
+                xmax=round(box[2]),
+                ymax=round(box[3]),
+            )
+            bbox_w = bb.xmax - bb.xmin + 1
+            bbox_h = bb.ymax - bb.ymin + 1
+            # Crop in native mask space, then resize to bbox dimensions
+            bm = boxes_mask[i].astype(int)
+            native_crop = masks_native[i, 0, bm[1] : bm[3] + 1, bm[0] : bm[2] + 1]
+            cropped_mask: NDArray[np.bool_] = (
+                np.asarray(
+                    PIL.Image.fromarray(native_crop).resize(
+                        (bbox_w, bbox_h),
+                        resample=PIL.Image.Resampling.BILINEAR,
+                    )
+                )
+                > 0.5
+            )
             annotations.append(
                 types.Annotation(
-                    mask=masks[i, 0] > 0,
-                    bounding_box=types.BoundingBox(
-                        xmin=int(box[0]),
-                        ymin=int(box[1]),
-                        xmax=int(box[2]),
-                        ymax=int(box[3]),
-                    ),
+                    mask=cropped_mask,
+                    bounding_box=bb,
                     text=text_prompt,
                     score=float(scores[i]),
                 )

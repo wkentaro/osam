@@ -175,8 +175,21 @@ def run(model_name: str, image_path: str, prompt, json: bool) -> None:
             )
 
         masks: NDArray[np.bool_] | None = None
-        if all(annotation.mask is not None for annotation in response.annotations):
-            masks = np.array([annotation.mask for annotation in response.annotations])
+        if all(
+            annotation.mask is not None and annotation.bounding_box is not None
+            for annotation in response.annotations
+        ):
+            h, w = image.shape[:2]
+            mask_list = []
+            for annotation in response.annotations:
+                full_mask = np.zeros((h, w), dtype=bool)
+                assert annotation.bounding_box is not None
+                bb = annotation.bounding_box
+                full_mask[
+                    bb.ymin : bb.ymax + 1, bb.xmin : bb.xmax + 1
+                ] = annotation.mask
+                mask_list.append(full_mask)
+            masks = np.array(mask_list)
 
         visualization = imgviz.instances2rgb(
             image=image,
