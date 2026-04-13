@@ -10,9 +10,7 @@ name = "osam"
 description = "Get up and running vision foundational models locally."
 license = { text = "MIT" }
 requires-python = ">=3.10"
-authors = [
-  { name = "Kentaro Wada", email = "www.kentaro.wada@gmail.com" },
-]
+authors = [{ name = "Kentaro Wada", email = "www.kentaro.wada@gmail.com" }]
 keywords = []
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -43,10 +41,7 @@ dependencies = [
 dynamic = ["readme", "version"]
 
 [project.optional-dependencies]
-serve = [
-  "fastapi",
-  "uvicorn",
-]
+serve = ["fastapi", "uvicorn"]
 
 [dependency-groups]
 dev = [
@@ -58,6 +53,7 @@ dev = [
   "onnx>=1.17.0",
   "ty>=0.0.11",
   "ipython>=8.38.0",
+  "taplo>=0.9.3",
 ]
 
 [tool.hatch.metadata]
@@ -65,9 +61,7 @@ allow-direct-references = true
 
 [tool.hatch.metadata.hooks.fancy-pypi-readme]
 content-type = "text/markdown"
-fragments = [
-  { path = "README.md" },
-]
+fragments = [{ path = "README.md" }]
 
 [tool.hatch.version]
 source = "vcs"
@@ -79,11 +73,7 @@ osam = "osam:__main__.cli"
 ignore_missing_imports = true
 
 [tool.ruff]
-exclude = [
-  ".conda",
-  ".git",
-  "src",
-]
+exclude = [".conda", ".git", "src"]
 
 line-length = 88
 indent-width = 4
