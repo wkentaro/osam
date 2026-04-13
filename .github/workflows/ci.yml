@@ -44,12 +44,12 @@ jobs:
             pytest-args: -n 3  # memory is insufficient to run in full parallel (4)
           - os: macos-latest
             python-version: '3.10'
-            pytest-args: -m 'not extra'    # minimum version by 'not extra'
+            pytest-args: -n 4 -m 'not extra'    # minimum version by 'not extra'
           - os: windows-latest
             python-version: '3.10'
             # minimum version by 'not extra'
             # windows filesystem cannot handle parallel tests well
-            pytest-args: -m 'not extra' -n 0
+            pytest-args: -n 0 -m 'not extra'
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
