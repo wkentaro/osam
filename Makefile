@@ -1,42 +1,41 @@
 ifneq ($(OS),Windows_NT)
-	# On Unix-based systems, use ANSI codes
-	BLUE = \033[36m
-	BOLD_BLUE = \033[1;36m
-	BOLD_GREEN = \033[1;32m
-	RED = \033[31m
-	YELLOW = \033[33m
-	BOLD = \033[1m
-	NC = \033[0m
+	SHELL := bash
 endif
 
-escape = $(subst $$,\$$,$(subst ",\",$(subst ',\',$(1))))
+.PHONY: help setup format lint test coverage
+.DEFAULT_GOAL := help
+
+PYTEST_ARGS ?= --numprocesses=auto
 
 define exec
-	@echo "$(BOLD_BLUE)$(call escape,$(1))$(NC)"
+	@uv run --no-sync python -c "import sys;print('\033[1;36m'+' '.join(sys.argv[1:])+'\033[0m')" $(1)
 	@$(1)
 endef
 
 help:
-	@echo "$(BOLD_GREEN)Available targets:$(NC)"
-	@grep -E '^[a-zA-Z_-].+:.*?# .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?# "}; \
-		{printf "  $(BOLD_BLUE)%-20s$(NC) %s\n", $$1, $$2}'
+	@uv run --no-sync python -c "import re; lines=open('Makefile').read().splitlines(); print('\033[1;32mAvailable targets:\033[0m'); [print(f'  \033[1;36m{m.group(1):<20s}\033[0m {m.group(2)}') for l in lines if (m:=re.match(r'^([a-zA-Z_-]+):.*?# (.+)$$',l))]"
 
-PACKAGE_NAME:=osam
-
-setup:  # Setup dev env
+setup:  # Setup the development environment
 	$(call exec,uv sync)
 
 format:  # Format code
 	$(call exec,uv run ruff format)
 	$(call exec,uv run ruff check --fix)
+#	$(call exec,uv run taplo fmt $(shell git ls-files "*.toml"))
+#	$(call exec,uv run mdformat $(shell git ls-files "*.md"))
+#	$(call exec,uv run yamlfix $(shell git ls-files "*.yml" "*.yaml"))
 
-lint:
+lint:  # Lint code
 	$(call exec,uv run ruff format --check)
 	$(call exec,uv run ruff check)
 	$(call exec,uv run ty check --no-progress)
-
-PYTEST_ARGS ?=
+#	$(call exec,uv run taplo fmt --check $(shell git ls-files "*.toml"))
+#	$(call exec,uv run mdformat --check $(shell git ls-files "*.md"))
+#	$(call exec,uv run yamlfix --check $(shell git ls-files "*.yml" "*.yaml"))
+#	$(call exec,uv run typos)
 
 test:  # Run tests
-	$(call exec,uv run pytest -v osam/ -n auto $(PYTEST_ARGS))
+	$(call exec,uv run pytest -v osam/ $(PYTEST_ARGS))
+
+# coverage:  # Run tests with coverage
+# 	$(MAKE) test PYTEST_ARGS="--cov=osam --cov-report=term-missing"
