@@ -1,18 +1,16 @@
+---
 name: ci
-
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-
 jobs:
   setup:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ['3.10', '3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -24,12 +22,11 @@ jobs:
           uv pip install dist/*.tar.gz
           uv pip install dist/*.whl
         shell: bash
-
   lint:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10"]
+        python-version: ['3.10']
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -37,23 +34,22 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: make setup
       - run: make lint
-
   test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
-            python-version: "3.10"
-            pytest-args: "-n 3"  # memory is insufficient to run in full parallel (4)
+            python-version: '3.10'
+            pytest-args: -n 3  # memory is insufficient to run in full parallel (4)
           - os: macos-latest
-            python-version: "3.10"
-            pytest-args: "-m 'not extra'"  # minimum version by 'not extra'
+            python-version: '3.10'
+            pytest-args: -m 'not extra'    # minimum version by 'not extra'
           - os: windows-latest
-            python-version: "3.10"
+            python-version: '3.10'
             # minimum version by 'not extra'
             # windows filesystem cannot handle parallel tests well
-            pytest-args: "-m 'not extra' -n 0"
+            pytest-args: -m 'not extra' -n 0
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

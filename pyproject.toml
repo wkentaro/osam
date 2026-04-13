@@ -55,6 +55,7 @@ dev = [
   "ipython>=8.38.0",
   "taplo>=0.9.3",
   "mdformat>=1.0.0",
+  "yamlfix>=1.19.1",
 ]
 
 [tool.hatch.metadata]
