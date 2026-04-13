@@ -37,5 +37,5 @@ lint:  # Lint code
 test:  # Run tests
 	$(call exec,uv run pytest -v osam/ $(PYTEST_ARGS))
 
-# coverage:  # Run tests with coverage
-# 	$(MAKE) test PYTEST_ARGS="--cov=osam --cov-report=term-missing"
+coverage:  # Run tests with coverage
+	$(call exec,uv run pytest -v osam/ --numprocesses=auto --cov=osam --cov-report=term-missing)
