@@ -4,6 +4,7 @@ import dataclasses
 import os
 import shutil
 import urllib.parse
+from collections.abc import Callable
 
 import gdown
 from loguru import logger
@@ -59,23 +60,56 @@ class Blob:
             latest = max(latest, os.stat(attachment_path).st_mtime)
         return latest
 
-    def pull(self):
+    def pull(
+        self,
+        progress: Callable[[str, int, int | None], None] | None = None,
+    ) -> None:
+        def _gdown_progress(
+            filename: str,
+        ) -> Callable[[int, int | None], None] | None:
+            if progress is None:
+                return None
+            return lambda bytes_so_far, bytes_total: progress(
+                filename, bytes_so_far, bytes_total
+            )
+
+        def _download(url: str, path: str, hash: str, filename: str) -> None:
+            gdown.cached_download(
+                url=url,
+                path=path,
+                hash=hash,
+                progress=_gdown_progress(filename),
+            )
+
         if self.attachments:
             blob_dir: str = os.path.dirname(self.path)
             if os.path.isfile(blob_dir):
                 logger.warning("Removing file {!r} to create blob directory", blob_dir)
                 os.remove(blob_dir)
             os.makedirs(blob_dir, exist_ok=True)
-            gdown.cached_download(url=self.url, path=self.path, hash=self.hash)
+            _download(
+                url=self.url,
+                path=self.path,
+                hash=self.hash,
+                filename=self.filename,
+            )
             for attachment in self.attachments:
                 attachment_path: str = os.path.join(
                     os.path.dirname(self.path), attachment.filename
                 )
-                gdown.cached_download(
-                    url=attachment.url, path=attachment_path, hash=attachment.hash
+                _download(
+                    url=attachment.url,
+                    path=attachment_path,
+                    hash=attachment.hash,
+                    filename=attachment.filename,
                 )
         else:
-            gdown.cached_download(url=self.url, path=self.path, hash=self.hash)
+            _download(
+                url=self.url,
+                path=self.path,
+                hash=self.hash,
+                filename=self.filename,
+            )
 
     def remove(self):
         if self.attachments:
