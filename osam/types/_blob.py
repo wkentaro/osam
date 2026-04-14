@@ -21,13 +21,15 @@ class Blob:
 
     @property
     def path(self) -> str:
-        base = os.path.expanduser("~/.cache/osam/models/blobs")
+        base = os.path.expanduser(
+            os.path.join("~", ".cache", "osam", "models", "blobs")
+        )
         if self.attachments:
             # Windows can't use ':' for directory names
             safe_hash = self.hash.replace("sha256:", "sha256-")
-            return f"{base}/{safe_hash}/{self.filename}"
+            return os.path.join(base, safe_hash, self.filename)
         else:
-            return f"{base}/{self.hash}"
+            return os.path.join(base, self.hash)
 
     @property
     def size(self) -> int | None:
