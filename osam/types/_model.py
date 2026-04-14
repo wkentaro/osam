@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import hashlib
+from collections.abc import Callable
 from typing import Dict
 from typing import Optional
 from typing import Sequence
@@ -28,9 +29,12 @@ class Model(abc.ABC):
         self._inference_sessions = _load_inference_sessions(blobs=self._blobs)
 
     @classmethod
-    def pull(cls):
+    def pull(
+        cls,
+        progress: Callable[[str, int, int | None], None] | None = None,
+    ) -> None:
         for blob in cls._blobs.values():
-            blob.pull()
+            blob.pull(progress=progress)
 
     @classmethod
     def remove(cls):
