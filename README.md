@@ -18,7 +18,6 @@
 - **Local APIs** - CLI & Python & HTTP interface;
 - **Customization** - Host custom vision models.
 
-
 ## Installation
 
 ### Pip
@@ -54,19 +53,19 @@ osam run yoloworld --image <image_file>
 
 Here are models that can be downloaded:
 
-| Model             | Parameters | Size  | Download                     |
+| Model | Parameters | Size | Download |
 |-------------------|------------|-------|------------------------------|
-| SAM 100M          | 94M        | 100MB | `osam run sam:100m`          |
-| SAM 300M          | 313M       | 310MB | `osam run sam:300m`          |
-| SAM 600M          | 642M       | 630MB | `osam run sam`               |
-| SAM2 Tiny         | 39M        | 150MB | `osam run sam2:tiny`         |
-| SAM2 Small        | 46M        | 170MB | `osam run sam2:small`        |
-| SAM2 BasePlus     | 82M        | 300MB | `osam run sam2`              |
-| SAM2 Large        | 227M       | 870MB | `osam run sam2:large`        |
-| SAM3              | 893M       | 3.4GB | `osam run sam3`              |
-| EfficientSAM 10M  | 10M        | 40MB  | `osam run efficientsam:10m`  |
-| EfficientSAM 30M  | 26M        | 100MB | `osam run efficientsam`      |
-| YOLO-World XL     | 168M       | 640MB | `osam run yoloworld`         |
+| SAM 100M | 94M | 100MB | `osam run sam:100m` |
+| SAM 300M | 313M | 310MB | `osam run sam:300m` |
+| SAM 600M | 642M | 630MB | `osam run sam` |
+| SAM2 Tiny | 39M | 150MB | `osam run sam2:tiny` |
+| SAM2 Small | 46M | 170MB | `osam run sam2:small` |
+| SAM2 BasePlus | 82M | 300MB | `osam run sam2` |
+| SAM2 Large | 227M | 870MB | `osam run sam2:large` |
+| SAM3 | 893M | 3.4GB | `osam run sam3` |
+| EfficientSAM 10M | 10M | 40MB | `osam run efficientsam:10m` |
+| EfficientSAM 30M | 26M | 100MB | `osam run efficientsam` |
+| YOLO-World XL | 168M | 640MB | `osam run yoloworld` |
 
 PS. `sam`, `efficientsam` is equivalent to `sam:latest`, `efficientsam:latest`.
 
@@ -100,7 +99,7 @@ osam run sam3 --image examples/_images/dogs.jpg \
   > sam3_box.png
 ```
 
-<img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam.png" width="24%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam2.png" width="24%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam3.png" width="24%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam3_box.png" width="24%">  
+<img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam.png" width="24%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam2.png" width="24%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam3.png" width="24%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam3_box.png" width="24%">\
 <i>Output images: 'efficientsam_point.png', 'sam2_box.png', 'sam3_text.png', 'sam3_box.png'</i>
 
 ### Python
@@ -117,7 +116,8 @@ request = osam.types.GenerateRequest(
 response = osam.apis.generate(request=request)
 PIL.Image.fromarray(response.mask).save("mask.png")
 ```
-<img src="https://github.com/wkentaro/osam/raw/main/examples/_images/dogs.jpg" width="35%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam_mask.png" width="35%">  
+
+<img src="https://github.com/wkentaro/osam/raw/main/examples/_images/dogs.jpg" width="35%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam_mask.png" width="35%">\
 <i>Input and output images ('dogs.jpg', 'mask.png').</i>
 
 ### HTTP
