@@ -105,16 +105,23 @@ osam run sam3 --image examples/_images/dogs.jpg \
 ### Python
 
 ```python
-import osam.apis
-import osam.types
+import numpy as np
+from PIL import Image
 
+import osam
+
+image = np.asarray(Image.open("examples/_images/dogs.jpg"))
 request = osam.types.GenerateRequest(
     model="efficientsam",
-    image=np.asarray(PIL.Image.open("examples/_images/dogs.jpg")),
+    image=image,
     prompt=osam.types.Prompt(points=[[1439, 504], [1439, 1289]], point_labels=[1, 1]),
 )
 response = osam.apis.generate(request=request)
-PIL.Image.fromarray(response.mask).save("mask.png")
+annotation = response.annotations[0]
+mask = np.zeros(image.shape[:2], dtype=np.bool_)
+bbox = annotation.bounding_box
+mask[bbox.ymin:bbox.ymax + 1, bbox.xmin:bbox.xmax + 1] = annotation.mask
+Image.fromarray(mask).save("mask.png")
 ```
 
 <img src="https://github.com/wkentaro/osam/raw/main/examples/_images/dogs.jpg" width="35%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam_mask.png" width="35%">\
