@@ -25,12 +25,12 @@ class Blob:
         base = os.path.expanduser(
             os.path.join("~", ".cache", "osam", "models", "blobs")
         )
+        # Windows can't use ':' in file or directory names
+        safe_hash = self.hash.replace("sha256:", "sha256-")
         if self.attachments:
-            # Windows can't use ':' for directory names
-            safe_hash = self.hash.replace("sha256:", "sha256-")
             return os.path.join(base, safe_hash, self.filename)
         else:
-            return os.path.join(base, self.hash)
+            return os.path.join(base, safe_hash)
 
     @property
     def size(self) -> int | None:
