@@ -33,6 +33,9 @@ dependencies = [
   "imgviz>=2.0.0",
   "loguru",
   "onnxruntime>=1.23.2",
+  # onnxruntime dropped cp310 wheels at 1.24, which is also the first release
+  # with cp314 wheels; pin 3.10 below that boundary.
+  "onnxruntime<1.24; python_version < '3.11'",
   "Pillow",
   "pydantic",
 ]
