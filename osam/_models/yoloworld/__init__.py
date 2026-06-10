@@ -24,7 +24,7 @@ class _YoloWorld(types.Model):
             prompt = request.prompt
 
         if prompt.texts is None:
-            raise ValueError("prompt.texts is required: prompt=%r", prompt)
+            raise ValueError(f"prompt.texts is required: prompt={prompt!r}")
         token = clip.tokenize(texts=prompt.texts + [" "])
         outputs = self._inference_sessions["textual"].run(None, {"input": token})
         text_features: NDArray[np.float32] = cast(NDArray[np.float32], outputs[0])
@@ -33,7 +33,7 @@ class _YoloWorld(types.Model):
         )
         #
         if request.image is None:
-            raise ValueError("request.image is required: request=%r", request)
+            raise ValueError(f"request.image is required: request={request!r}")
         transformed_image, original_image_hw, padding_hw = _transform_image(
             image=request.image, input_size=self._input_size
         )

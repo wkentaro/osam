@@ -22,10 +22,12 @@ class ImageEmbedding(pydantic.BaseModel):
         if isinstance(embedding, list):
             embedding = np.array(embedding, dtype=np.float32)
         if embedding.ndim != 3:
-            raise ValueError("embedding must be of dimension 3, not %r", embedding.ndim)
+            raise ValueError(
+                f"embedding must be of dimension 3, not {embedding.ndim!r}"
+            )
         if embedding.dtype != np.float32:
             raise ValueError(
-                "embedding must be of type float, but got %r", embedding.dtype
+                f"embedding must be of type float, but got {embedding.dtype!r}"
             )
         return embedding
 
@@ -48,8 +50,7 @@ class ImageEmbedding(pydantic.BaseModel):
                 if {"data", "shape", "dtype"} != set(high_res_feature.keys()):
                     raise ValueError(
                         "extra_features must have keys {'data', 'shape', 'dtype'}, "
-                        "but got %r",
-                        set(high_res_feature.keys()),
+                        f"but got {set(high_res_feature.keys())!r}"
                     )
                 high_res_feature_ndarray = np.frombuffer(
                     base64.b64decode(high_res_feature["data"]),
@@ -58,20 +59,19 @@ class ImageEmbedding(pydantic.BaseModel):
             else:
                 raise ValueError(
                     "extra_features must be either a numpy array or a dictionary, "
-                    "but got %r",
-                    high_res_feature,
+                    f"but got {high_res_feature!r}"
                 )
             del high_res_feature
 
             if high_res_feature_ndarray.ndim != 3:
                 raise ValueError(
-                    "extra_features must be of dimension 3, not %r",
-                    high_res_feature_ndarray.ndim,
+                    "extra_features must be of dimension 3, not "
+                    f"{high_res_feature_ndarray.ndim!r}"
                 )
             if high_res_feature_ndarray.dtype != np.float32:
                 raise ValueError(
-                    "extra_features must be of type float, but got %r",
-                    high_res_feature_ndarray.dtype,
+                    "extra_features must be of type float, but got "
+                    f"{high_res_feature_ndarray.dtype!r}"
                 )
             extra_features_ndarray.append(high_res_feature_ndarray)
         return extra_features_ndarray
