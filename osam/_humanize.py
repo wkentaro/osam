@@ -14,9 +14,10 @@ def naturalsize(size: int) -> str:
     return f"{size:.2f} {prefix}"
 
 
-def naturaltime(dt: datetime.datetime) -> str:
+def naturaltime(dt: datetime.datetime, now: datetime.datetime | None = None) -> str:
     """Convert datetime to human readable format."""
-    now = datetime.datetime.now()
+    if now is None:
+        now = datetime.datetime.now()
     delta = now - dt
     if delta.days > 0:
         return f"{delta.days} days ago"
