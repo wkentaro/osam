@@ -19,16 +19,28 @@ class Prompt(pydantic.BaseModel):
     max_annotations: Optional[int] = pydantic.Field(default=100)
 
     @pydantic.field_serializer("points")
-    def _serialize_points(self: "Prompt", points: np.ndarray) -> list[list[float]]:
+    def _serialize_points(
+        self: "Prompt", points: Optional[np.ndarray]
+    ) -> Optional[list[list[float]]]:
+        if points is None:
+            return None
         return points.tolist()
 
     @pydantic.field_serializer("point_labels")
-    def _serialize_point_labels(self: "Prompt", point_labels: np.ndarray) -> list[int]:
+    def _serialize_point_labels(
+        self: "Prompt", point_labels: Optional[np.ndarray]
+    ) -> Optional[list[int]]:
+        if point_labels is None:
+            return None
         return point_labels.tolist()
 
     @pydantic.field_validator("points", mode="before")
     @classmethod
-    def _validate_points(cls: Type, points: Union[list, np.ndarray]):
+    def _validate_points(
+        cls: Type, points: Optional[Union[list, np.ndarray]]
+    ) -> Optional[np.ndarray]:
+        if points is None:
+            return None
         if isinstance(points, list):
             points = np.array(points, dtype=float)
         if points.ndim != 2:
@@ -39,7 +51,11 @@ class Prompt(pydantic.BaseModel):
 
     @pydantic.field_validator("point_labels", mode="before")
     @classmethod
-    def _validate_point_labels(cls: Type, point_labels: Union[list, np.ndarray]):
+    def _validate_point_labels(
+        cls: Type, point_labels: Optional[Union[list, np.ndarray]]
+    ) -> Optional[np.ndarray]:
+        if point_labels is None:
+            return None
         if isinstance(point_labels, list):
             point_labels = np.array(point_labels, dtype=int)
         if point_labels.ndim != 1:
