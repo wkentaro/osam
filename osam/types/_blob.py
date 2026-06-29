@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import os
 import shutil
+import time
 import urllib.parse
 from collections.abc import Callable
 from typing import Final
@@ -93,29 +94,42 @@ class Blob:
         endpoints = _resolve_endpoints()
 
         def _download(url: str, path: str, hash: str, filename: str) -> None:
+            N_RETRIES: Final = 3
             gdown_progress = _gdown_progress(filename)
             errors: list[str] = []
             last_error: Exception | None = None
-            for endpoint in endpoints:
-                source = _build_endpoint_url(endpoint=endpoint, url=url, hash=hash)
-                try:
-                    gdown.cached_download(
-                        url=source,
-                        path=path,
-                        hash=hash,
-                        progress=gdown_progress,
-                    )
-                    return
-                except Exception as e:
-                    last_error = e
-                    reason = " ".join(str(e).split())
+            for attempt in range(N_RETRIES):
+                errors = []
+                for endpoint in endpoints:
+                    source = _build_endpoint_url(endpoint=endpoint, url=url, hash=hash)
+                    try:
+                        gdown.cached_download(
+                            url=source,
+                            path=path,
+                            hash=hash,
+                            progress=gdown_progress,
+                        )
+                        return
+                    except Exception as e:
+                        last_error = e
+                        reason = " ".join(str(e).split())
+                        logger.warning(
+                            "Failed to download {!r} from {!r}: {}",
+                            filename,
+                            source,
+                            reason,
+                        )
+                        errors.append(f"{source}: {reason}")
+                if attempt < N_RETRIES - 1:
                     logger.warning(
-                        "Failed to download {!r} from {!r}: {}",
+                        "Download of {!r} failed on all endpoints "
+                        "(attempt {}/{}), retrying in {}s",
                         filename,
-                        source,
-                        reason,
+                        attempt + 1,
+                        N_RETRIES,
+                        2**attempt,
                     )
-                    errors.append(f"{source}: {reason}")
+                    time.sleep(2**attempt)
             message = (
                 f"Failed to download {filename!r} from all endpoints: "
                 f"{'; '.join(errors)}."
