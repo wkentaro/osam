@@ -108,6 +108,7 @@ class Blob:
                             path=path,
                             hash=hash,
                             progress=gdown_progress,
+                            quiet=gdown_progress is not None,
                         )
                         return
                     except Exception as e:
