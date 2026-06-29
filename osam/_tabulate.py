@@ -1,7 +1,7 @@
 import collections
 
 
-def tabulate(rows, headers):
+def tabulate(rows: list[list[str]], headers: list[str]) -> str:
     col_widths = collections.defaultdict(int)
     for row in [headers] + rows:
         for c, item in enumerate(row):
