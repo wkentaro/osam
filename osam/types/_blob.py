@@ -5,9 +5,26 @@ import os
 import shutil
 import urllib.parse
 from collections.abc import Callable
+from typing import Final
 
 import gdown
 from loguru import logger
+
+_BLOB_ENDPOINT_ENV: Final = "OSAM_BLOB_ENDPOINT"
+_DIRECT: Final = "direct"
+
+
+def _resolve_endpoints() -> list[str]:
+    raw = os.environ.get(_BLOB_ENDPOINT_ENV, "")
+    endpoints = [entry.strip() for entry in raw.split(",") if entry.strip()]
+    return endpoints or [_DIRECT]
+
+
+def _build_endpoint_url(endpoint: str, url: str, hash: str) -> str:
+    if endpoint == _DIRECT:
+        return url
+    digest = hash.split(":", maxsplit=1)[-1]
+    return f"{endpoint.rstrip('/')}/{digest}"
 
 
 @dataclasses.dataclass
@@ -73,13 +90,42 @@ class Blob:
                 filename, bytes_so_far, bytes_total
             )
 
+        endpoints = _resolve_endpoints()
+
         def _download(url: str, path: str, hash: str, filename: str) -> None:
-            gdown.cached_download(
-                url=url,
-                path=path,
-                hash=hash,
-                progress=_gdown_progress(filename),
+            gdown_progress = _gdown_progress(filename)
+            errors: list[str] = []
+            last_error: Exception | None = None
+            for endpoint in endpoints:
+                source = _build_endpoint_url(endpoint=endpoint, url=url, hash=hash)
+                try:
+                    gdown.cached_download(
+                        url=source,
+                        path=path,
+                        hash=hash,
+                        progress=gdown_progress,
+                    )
+                    return
+                except Exception as e:
+                    last_error = e
+                    reason = " ".join(str(e).split())
+                    logger.warning(
+                        "Failed to download {!r} from {!r}: {}",
+                        filename,
+                        source,
+                        reason,
+                    )
+                    errors.append(f"{source}: {reason}")
+            message = (
+                f"Failed to download {filename!r} from all endpoints: "
+                f"{'; '.join(errors)}."
             )
+            if os.environ.get(_BLOB_ENDPOINT_ENV) and _DIRECT not in endpoints:
+                message += (
+                    f" Add {_DIRECT!r} to {_BLOB_ENDPOINT_ENV} to fall back to "
+                    f"the canonical URL."
+                )
+            raise RuntimeError(message) from last_error
 
         if self.attachments:
             blob_dir: str = os.path.dirname(self.path)
@@ -87,28 +133,22 @@ class Blob:
                 logger.warning("Removing file {!r} to create blob directory", blob_dir)
                 os.remove(blob_dir)
             os.makedirs(blob_dir, exist_ok=True)
-            _download(
-                url=self.url,
-                path=self.path,
-                hash=self.hash,
-                filename=self.filename,
+
+        _download(
+            url=self.url,
+            path=self.path,
+            hash=self.hash,
+            filename=self.filename,
+        )
+        for attachment in self.attachments:
+            attachment_path: str = os.path.join(
+                os.path.dirname(self.path), attachment.filename
             )
-            for attachment in self.attachments:
-                attachment_path: str = os.path.join(
-                    os.path.dirname(self.path), attachment.filename
-                )
-                _download(
-                    url=attachment.url,
-                    path=attachment_path,
-                    hash=attachment.hash,
-                    filename=attachment.filename,
-                )
-        else:
             _download(
-                url=self.url,
-                path=self.path,
-                hash=self.hash,
-                filename=self.filename,
+                url=attachment.url,
+                path=attachment_path,
+                hash=attachment.hash,
+                filename=attachment.filename,
             )
 
     def remove(self):

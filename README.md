@@ -69,6 +69,24 @@ Here are models that can be downloaded:
 
 PS. `sam`, `efficientsam` is equivalent to `sam:latest`, `efficientsam:latest`.
 
+### Custom download endpoint
+
+Models are downloaded from their canonical URLs by default. To download from a
+mirror instead (for example, in networks where the canonical hosts are blocked),
+set `OSAM_BLOB_ENDPOINT` to a comma-separated list of endpoints tried in order:
+
+```bash
+# Try the mirror first, then fall back to the canonical host.
+export OSAM_BLOB_ENDPOINT="https://mirror.example.com,direct"
+```
+
+Each blob is fetched from `<endpoint>/<sha256-hex>`; the reserved value `direct`
+uses the model's canonical URL. Downloads are verified by SHA-256 regardless of
+the endpoint, so a mirror cannot serve corrupted data. When unset, only `direct`
+is used. Omit `direct` from the list (for example
+`OSAM_BLOB_ENDPOINT="https://mirror.example.com"`) to disable the canonical
+fallback and serve every blob from the mirror only.
+
 ## Usage
 
 ### CLI
