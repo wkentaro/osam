@@ -50,7 +50,7 @@ class SamBase(types.Model):
         del request
 
         if prompt.points is None or prompt.point_labels is None:
-            raise ValueError("Prompt must contain points and point_labels: %r", prompt)
+            raise ValueError(f"Prompt must contain points and point_labels: {prompt!r}")
 
         mask: npt.NDArray[np.bool_] = self._generate_mask_from_image_embedding(
             image_embedding=image_embedding, prompt=prompt

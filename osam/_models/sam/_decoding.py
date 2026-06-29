@@ -16,7 +16,7 @@ def generate_mask_from_image_embedding(
     input_size: int,
 ) -> npt.NDArray[np.bool_]:
     if prompt.points is None or prompt.point_labels is None:
-        raise ValueError("Prompt must contain points and point_labels: %r" % prompt)
+        raise ValueError(f"Prompt must contain points and point_labels: {prompt!r}")
 
     onnx_coord: npt.NDArray[np.float32] = np.concatenate(
         [prompt.points, np.array([[0.0, 0.0]])], axis=0
