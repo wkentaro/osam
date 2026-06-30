@@ -69,6 +69,14 @@ allow-direct-references = true
 content-type = "text/markdown"
 fragments = [{ path = "README.md" }]
 
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = 'src="(?!https?://)([^"]+)"'
+replacement = 'src="https://raw.githubusercontent.com/wkentaro/osam/main/\1"'
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '!\[([^\]]*)\]\((?!https?://)([^)]+)\)'
+replacement = '![\1](https://raw.githubusercontent.com/wkentaro/osam/main/\2)'
+
 [tool.hatch.version]
 source = "vcs"
 
