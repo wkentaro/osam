@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-30
+
 ### Added
 
 - `OSAM_BLOB_ENDPOINT` to download model blobs from content-addressed mirrors. It takes a comma-separated list of endpoints (plus `direct` for the canonical URL) tried in order (#63).
@@ -155,4 +157,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.3.1]: https://github.com/wkentaro/osam/compare/v0.3.0...v0.3.1
 [0.4.0]: https://github.com/wkentaro/osam/compare/v0.3.1...v0.4.0
 [0.4.1]: https://github.com/wkentaro/osam/compare/v0.4.0...v0.4.1
-[unreleased]: https://github.com/wkentaro/osam/compare/v0.4.1...HEAD
+[0.5.0]: https://github.com/wkentaro/osam/compare/v0.4.1...v0.5.0
+[unreleased]: https://github.com/wkentaro/osam/compare/v0.5.0...HEAD
