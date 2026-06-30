@@ -8,7 +8,7 @@ endif
 PYTEST_ARGS ?= --numprocesses=auto
 
 define exec
-	@uv run --no-sync python -c "import sys;print('\033[1;36m'+' '.join(sys.argv[1:])+'\033[0m')" $(1)
+	@uv run --no-sync python -c "print('\033[1;36m$(1)\033[0m')"
 	@$(1)
 endef
 
@@ -21,17 +21,17 @@ setup:  # Setup the development environment
 format:  # Format code
 	$(call exec,uv run ruff format)
 	$(call exec,uv run ruff check --fix)
-	$(call exec,uv run taplo fmt $(shell git ls-files "*.toml"))
-	$(call exec,uv run mdformat $(shell git ls-files "*.md"))
-	$(call exec,uv run yamlfix $(shell git ls-files "*.yml" "*.yaml"))
+	$(call exec,git ls-files "*.toml" | xargs uv run taplo fmt)
+	$(call exec,git ls-files "*.md" | xargs uv run mdformat)
+	$(call exec,git ls-files "*.yml" "*.yaml" | xargs uv run yamlfix)
 
 lint:  # Lint code
 	$(call exec,uv run ruff format --check)
 	$(call exec,uv run ruff check)
 	$(call exec,uv run ty check --no-progress)
-	$(call exec,uv run taplo fmt --check $(shell git ls-files "*.toml"))
-	$(call exec,uv run mdformat --check $(shell git ls-files "*.md"))
-	$(call exec,uv run yamlfix --check $(shell git ls-files "*.yml" "*.yaml"))
+	$(call exec,git ls-files "*.toml" | xargs uv run taplo fmt --check)
+	$(call exec,git ls-files "*.md" | xargs uv run mdformat --check)
+	$(call exec,git ls-files "*.yml" "*.yaml" | xargs uv run yamlfix --check)
 	$(call exec,uv run typos)
 
 test:  # Run tests
