@@ -153,8 +153,8 @@ Image.fromarray(mask).save("mask.png")
 osam serve
 
 # POST request
-curl 127.0.0.1:11368/api/generate -X POST \
-  -H "Content-Type: application/json" \
-  -d "{\"model\": \"efficientsam\", \"image\": \"$(cat examples/_images/dogs.jpg | base64)\"}" \
-  | jq -r .mask | base64 --decode > mask.png
+base64 < examples/_images/dogs.jpg \
+  | jq -Rs '{model: "efficientsam", image: gsub("\n"; "")}' \
+  | curl 127.0.0.1:11368/api/generate -X POST --json @- \
+  | jq -r '.annotations[0].mask' | base64 --decode > mask.png
 ```
