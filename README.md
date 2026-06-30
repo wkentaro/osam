@@ -3,9 +3,15 @@
   <p>
     Get up and running with promptable vision models locally.
   </p>
+  <p>
+    <a href="https://pypi.python.org/pypi/osam"><img src="https://img.shields.io/pypi/v/osam.svg"></a>
+    <a href="https://pypi.org/project/osam"><img src="https://img.shields.io/pypi/pyversions/osam.svg"></a>
+    <a href="https://github.com/wkentaro/osam/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/osam.svg"></a>
+  </p>
   <br>
-  <br>
-  <br>
+  <img src="assets/dogs_sam3.png" width="32%">
+  <img src="assets/dogs_sam2.png" width="32%">
+  <img src="assets/dogs_efficientsam.png" width="32%">
 </div>
 
 *Osam* (/oʊˈsɑm/) is a tool to run open-source promptable vision models locally
@@ -20,9 +26,6 @@
 ## Installation
 
 ### Pip
-
-<a href="https://pypi.org/project/osam"><img src="https://img.shields.io/pypi/pyversions/osam.svg"></a>
-<a href="https://pypi.python.org/pypi/osam"><img src="https://img.shields.io/pypi/v/osam.svg"></a>
 
 ```bash
 pip install osam
