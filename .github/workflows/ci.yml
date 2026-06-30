@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   setup:
     runs-on: ${{ matrix.os }}
@@ -16,6 +19,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
       - run: make setup
       - run: |
           uv build
@@ -32,6 +36,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
       - run: make setup
       - run: make lint
   test:
@@ -55,5 +60,12 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/osam/models/blobs
+          key: osam-models-${{ runner.os }}-${{ hashFiles('osam/_models/**') }}
+          restore-keys: |
+            osam-models-${{ runner.os }}-
       - run: make setup
       - run: make test PYTEST_ARGS="${{ matrix.pytest-args }}"
