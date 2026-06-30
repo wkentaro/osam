@@ -1,5 +1,4 @@
 <div align="center">
-  <img alt="logo" height="200px" src="https://github.com/wkentaro/osam/raw/main/.readme/icon.png" >
   <h1>Osam</h1>
   <p>
     Get up and running with promptable vision models locally.
@@ -117,7 +116,7 @@ osam run sam3 --image examples/_images/dogs.jpg \
   > sam3_box.png
 ```
 
-<img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam.png" width="24%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam2.png" width="24%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam3.png" width="24%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_sam3_box.png" width="24%">\
+<img src="assets/dogs_efficientsam.png" width="24%"> <img src="assets/dogs_sam2.png" width="24%"> <img src="assets/dogs_sam3.png" width="24%"> <img src="assets/dogs_sam3_box.png" width="24%">\
 <i>Output images: 'efficientsam_point.png', 'sam2_box.png', 'sam3_text.png', 'sam3_box.png'</i>
 
 ### Python
@@ -142,7 +141,7 @@ mask[bbox.ymin:bbox.ymax + 1, bbox.xmin:bbox.xmax + 1] = annotation.mask
 Image.fromarray(mask).save("mask.png")
 ```
 
-<img src="https://github.com/wkentaro/osam/raw/main/examples/_images/dogs.jpg" width="35%"> <img src="https://github.com/wkentaro/osam/raw/main/.readme/dogs_efficientsam_mask.png" width="35%">\
+<img src="examples/_images/dogs.jpg" width="35%"> <img src="assets/dogs_efficientsam_mask.png" width="35%">\
 <i>Input and output images ('dogs.jpg', 'mask.png').</i>
 
 ### HTTP
