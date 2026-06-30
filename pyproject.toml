@@ -87,8 +87,6 @@ osam = "osam:__main__.cli"
 ignore_missing_imports = true
 
 [tool.ruff]
-exclude = [".conda", ".git", "src"]
-
 line-length = 88
 indent-width = 4
 
