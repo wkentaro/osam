@@ -41,6 +41,10 @@ def get_model_type_by_name(name: str) -> Type[types.Model]:
     return cls
 
 
+def get_model_metadata(name: str) -> types.ModelMetadata:
+    return get_model_type_by_name(name=name).metadata
+
+
 def generate(request: types.GenerateRequest) -> types.GenerateResponse:
     global running_model
 

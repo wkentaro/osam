@@ -46,7 +46,7 @@ jobs:
         include:
           - os: ubuntu-latest
             python-version: '3.10'
-            pytest-args: -n 3  # memory is insufficient to run in full parallel (4)
+            pytest-args: -n 2  # large models exceed runner memory with 3 workers
           - os: macos-latest
             python-version: '3.10'
             pytest-args: -n 4 -m 'not extra'    # minimum version by 'not extra'

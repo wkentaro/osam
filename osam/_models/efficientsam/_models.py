@@ -9,6 +9,13 @@ from . import _encoding
 
 
 class EfficientSam(SamBase):
+    metadata = types.ModelMetadata(
+        license_name="Apache License 2.0",
+        license_url="https://github.com/wkentaro/efficient-sam/blob/6aebcba09318c4dfe2f9560f7a3f8c42d8b01657/LICENSE",
+        source_url="https://github.com/wkentaro/efficient-sam/tree/6aebcba09318c4dfe2f9560f7a3f8c42d8b01657",
+        license_spdx="Apache-2.0",
+    )
+
     def encode_image(self, image: np.ndarray) -> types.ImageEmbedding:
         return _encoding.compute_image_embedding_from_image(
             encoder_session=self._inference_sessions["encoder"],

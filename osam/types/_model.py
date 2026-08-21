@@ -15,10 +15,12 @@ from ._blob import Blob
 from ._generate import GenerateRequest
 from ._generate import GenerateResponse
 from ._image_embedding import ImageEmbedding
+from ._model_metadata import ModelMetadata
 
 
 class Model(abc.ABC):
     name: str
+    metadata: ModelMetadata
 
     _blobs: Dict[str, Blob]
     _inference_sessions: Dict[str, onnxruntime.InferenceSession]

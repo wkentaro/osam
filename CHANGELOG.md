@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `osam.apis.get_model_metadata` and `types.ModelMetadata` exposing each model's license name, SPDX identifier, license URL, and export source URL, all pinned to immutable revisions (#77).
+
+### Changed
+
+- SAM3 blobs download from a pinned Hugging Face revision instead of `main` (#77).
+
 ## [0.5.0] - 2026-06-30
 
 ### Added
