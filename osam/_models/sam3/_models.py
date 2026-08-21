@@ -12,30 +12,35 @@ from ..yoloworld.clip import tokenize
 
 class Sam3(types.Model):
     name = "sam3:latest"
+    metadata = types.ModelMetadata(
+        license_name="SAM License",
+        license_url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/blob/895f3980b24a88249898cbe5a44571b15dec2a7f/LICENSE",
+        source_url="https://github.com/wkentaro/sam3-onnx/tree/8d9855a958127c6c1d2561c4b20ce3a3e1674387",
+    )
 
     _blobs = {
         "image_encoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/main/sam3_image_encoder.onnx",
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/895f3980b24a88249898cbe5a44571b15dec2a7f/sam3_image_encoder.onnx",
             hash="sha256:c6f3769e9d42573806c34b663d6100b3827a4c0ecba6f45dbf39b8f3906be725",
             attachments=[
                 types.Blob(
-                    url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/main/sam3_image_encoder.onnx.data",
+                    url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/895f3980b24a88249898cbe5a44571b15dec2a7f/sam3_image_encoder.onnx.data",
                     hash="sha256:03bd50b0703e2b04e2193ca831b7f9d5ecf40bc5287cc59b1970f56ab800c995",
                 ),
             ],
         ),
         "language_encoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/main/sam3_language_encoder.onnx",
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/895f3980b24a88249898cbe5a44571b15dec2a7f/sam3_language_encoder.onnx",
             hash="sha256:b3b465935c9bf4cf5efd950589741f3da5eec9e9bfe459576989cbe565331b53",
             attachments=[
                 types.Blob(
-                    url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/main/sam3_language_encoder.onnx.data",
+                    url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/895f3980b24a88249898cbe5a44571b15dec2a7f/sam3_language_encoder.onnx.data",
                     hash="sha256:1b03dabc657c1f2887d1b8ce2a3537467d4c033ea1f8c8be141fbca55e4b95f7",
                 ),
             ],
         ),
         "decoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/main/sam3_decoder.onnx",
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/895f3980b24a88249898cbe5a44571b15dec2a7f/sam3_decoder.onnx",
             hash="sha256:bbc216dbf3de4742f692c2a0a0fd215ea8957956002a05f28150040a88b5dc1a",
         ),
     }

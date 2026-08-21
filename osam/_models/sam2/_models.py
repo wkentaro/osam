@@ -9,6 +9,13 @@ from . import _encoding
 
 
 class Sam2(SamBase):
+    metadata = types.ModelMetadata(
+        license_name="Apache License 2.0",
+        license_url="https://github.com/facebookresearch/sam2/blob/3a7889d905e38ca043c9b5a571ec1635bab678ac/LICENSE",
+        source_url="https://github.com/ryouchinsa/sam-cpp-macos/tree/d7399261aab3de35e01172e90da6da4e3191df4e",
+        license_spdx="Apache-2.0",
+    )
+
     def encode_image(self, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         return _encoding.compute_image_embedding_from_image(
             encoder_session=self._inference_sessions["encoder"], image=image

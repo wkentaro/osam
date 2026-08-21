@@ -11,6 +11,13 @@ from . import clip
 
 
 class _YoloWorld(types.Model):
+    metadata = types.ModelMetadata(
+        license_name="GNU General Public License v3.0",
+        license_url="https://github.com/wkentaro/yolo-world-onnx/blob/959674c1f64095e78ee3d9bb246d01f2443caf35/LICENSE",
+        source_url="https://github.com/wkentaro/yolo-world-onnx/blob/959674c1f64095e78ee3d9bb246d01f2443caf35/ARTIFACTS.md",
+        license_spdx="GPL-3.0-only",
+    )
+
     _input_size: int
 
     def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:

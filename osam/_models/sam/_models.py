@@ -12,6 +12,13 @@ from . import _encoding
 
 
 class SamBase(types.Model):
+    metadata = types.ModelMetadata(
+        license_name="Apache License 2.0",
+        license_url="https://github.com/wkentaro/segment-anything/blob/13b8480edd05cde9bcf29f9c8a6040b2abe8db56/LICENSE",
+        source_url="https://github.com/wkentaro/segment-anything/tree/13b8480edd05cde9bcf29f9c8a6040b2abe8db56",
+        license_spdx="Apache-2.0",
+    )
+
     @abc.abstractmethod
     def _generate_mask_from_image_embedding(
         self, image_embedding: types.ImageEmbedding, prompt: types.Prompt
