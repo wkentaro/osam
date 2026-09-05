@@ -51,31 +51,29 @@ class Blob:
             return os.path.join(base, safe_hash)
 
     @property
+    def _files(self) -> list[tuple[Blob, str]]:
+        blob_dir = os.path.dirname(self.path)
+        return [(self, self.path)] + [
+            (attachment, os.path.join(blob_dir, attachment.filename))
+            for attachment in self.attachments
+        ]
+
+    @property
     def size(self) -> int | None:
-        if not os.path.exists(self.path):
-            return None
-        total = os.stat(self.path).st_size
-        for attachment in self.attachments:
-            attachment_path: str = os.path.join(
-                os.path.dirname(self.path), attachment.filename
-            )
-            if not os.path.exists(attachment_path):
+        total = 0
+        for _, path in self._files:
+            if not os.path.exists(path):
                 return None
-            total += os.stat(attachment_path).st_size
+            total += os.stat(path).st_size
         return total
 
     @property
     def modified_at(self) -> float | None:
-        if not os.path.exists(self.path):
-            return None
-        latest = os.stat(self.path).st_mtime
-        for attachment in self.attachments:
-            attachment_path: str = os.path.join(
-                os.path.dirname(self.path), attachment.filename
-            )
-            if not os.path.exists(attachment_path):
+        latest: float = 0
+        for _, path in self._files:
+            if not os.path.exists(path):
                 return None
-            latest = max(latest, os.stat(attachment_path).st_mtime)
+            latest = max(latest, os.stat(path).st_mtime)
         return latest
 
     def pull(
@@ -93,20 +91,22 @@ class Blob:
 
         endpoints = _resolve_endpoints()
 
-        def _download(url: str, path: str, hash: str, filename: str) -> None:
+        def _download(blob: Blob, path: str) -> None:
             N_RETRIES: Final = 3
-            gdown_progress = _gdown_progress(filename)
+            gdown_progress = _gdown_progress(blob.filename)
             errors: list[str] = []
             last_error: Exception | None = None
             for attempt in range(N_RETRIES):
                 errors = []
                 for endpoint in endpoints:
-                    source = _build_endpoint_url(endpoint=endpoint, url=url, hash=hash)
+                    source = _build_endpoint_url(
+                        endpoint=endpoint, url=blob.url, hash=blob.hash
+                    )
                     try:
                         gdown.cached_download(
                             url=source,
                             path=path,
-                            hash=hash,
+                            hash=blob.hash,
                             progress=gdown_progress,
                             quiet=gdown_progress is not None,
                         )
@@ -116,7 +116,7 @@ class Blob:
                         reason = " ".join(str(e).split())
                         logger.warning(
                             "Failed to download {!r} from {!r}: {}",
-                            filename,
+                            blob.filename,
                             source,
                             reason,
                         )
@@ -125,14 +125,14 @@ class Blob:
                     logger.warning(
                         "Download of {!r} failed on all endpoints "
                         "(attempt {}/{}), retrying in {}s",
-                        filename,
+                        blob.filename,
                         attempt + 1,
                         N_RETRIES,
                         2**attempt,
                     )
                     time.sleep(2**attempt)
             message = (
-                f"Failed to download {filename!r} from all endpoints: "
+                f"Failed to download {blob.filename!r} from all endpoints: "
                 f"{'; '.join(errors)}."
             )
             if os.environ.get(_BLOB_ENDPOINT_ENV) and _DIRECT not in endpoints:
@@ -149,22 +149,8 @@ class Blob:
                 os.remove(blob_dir)
             os.makedirs(blob_dir, exist_ok=True)
 
-        _download(
-            url=self.url,
-            path=self.path,
-            hash=self.hash,
-            filename=self.filename,
-        )
-        for attachment in self.attachments:
-            attachment_path: str = os.path.join(
-                os.path.dirname(self.path), attachment.filename
-            )
-            _download(
-                url=attachment.url,
-                path=attachment_path,
-                hash=attachment.hash,
-                filename=attachment.filename,
-            )
+        for blob, path in self._files:
+            _download(blob=blob, path=path)
 
     def remove(self):
         if self.attachments:
