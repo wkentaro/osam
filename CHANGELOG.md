@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `OSAM_ONNX_PROVIDERS` to choose onnxruntime execution providers as a comma-separated list tried in order, for example CoreML or DirectML. Unset keeps the CUDA-or-CPU default (#82).
+
 ### Removed
 
 - `osam.types.ModelBase` and `osam.types.ModelBlob`, deprecated since July 2024; use `Model` and `Blob` (#80).
