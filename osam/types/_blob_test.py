@@ -291,3 +291,27 @@ def test_pull_quiets_gdown_only_when_progress_given(
         blob.pull(progress=lambda filename, bytes_so_far, bytes_total: None)
 
     assert quiets == [False, True]
+
+
+def test_size_and_modified_at_span_attachments(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    blob = Blob(
+        url="https://example.com/model.onnx",
+        hash="sha256:main",
+        attachments=[Blob(url="https://example.com/extra.bin", hash="sha256:extra")],
+    )
+    os.makedirs(os.path.dirname(blob.path))
+    pathlib.Path(blob.path).write_bytes(b"abc")
+
+    assert blob.size is None
+    assert blob.modified_at is None
+
+    attachment_path = pathlib.Path(blob.path).with_name("extra.bin")
+    attachment_path.write_bytes(b"de")
+    os.utime(attachment_path, (2_000_000_000, 2_000_000_000))
+
+    assert blob.size == 5
+    assert blob.modified_at == 2_000_000_000
