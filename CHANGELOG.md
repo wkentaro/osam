@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.7.0 - 2026-09-06
+
+### Added
+
+- Added `OSAM_ONNX_PROVIDERS` to choose onnxruntime execution providers as a comma-separated list tried in order, for example CoreML or DirectML. Unset keeps the CUDA-or-CPU default. ([#82](https://github.com/wkentaro/osam/pull/82))
+
+### Removed
+
+- `osam.types.ModelBase` and `osam.types.ModelBlob`, deprecated since July 2024, were removed; use `Model` and `Blob`. ([#80](https://github.com/wkentaro/osam/pull/80))
+
+### Fixed
+
+- Fixed ImageNet normalization before SAM2 image encoding, improving segmentation quality. ([#87](https://github.com/wkentaro/osam/pull/87))
+
 ## 0.6.0 - 2026-08-21
 
 ### Added
