@@ -59,6 +59,7 @@ dev = [
   "yamlfix>=1.19.1",
   "typos>=1.45.1",
   "pytest-cov>=7.1.0",
+  "towncrier>=24.8",
 ]
 
 [tool.hatch.metadata]
@@ -81,6 +82,21 @@ source = "vcs"
 
 [project.scripts]
 osam = "osam:__main__.cli"
+
+[tool.towncrier]
+directory = "changelog.d"
+filename = "CHANGELOG.md"
+title_format = "## {version} - {project_date}"
+issue_format = "[#{issue}](https://github.com/wkentaro/osam/pull/{issue})"
+ignore = ["README.md"]
+type = [
+  { directory = "added", name = "Added", showcontent = true },
+  { directory = "changed", name = "Changed", showcontent = true },
+  { directory = "deprecated", name = "Deprecated", showcontent = true },
+  { directory = "removed", name = "Removed", showcontent = true },
+  { directory = "fixed", name = "Fixed", showcontent = true },
+  { directory = "security", name = "Security", showcontent = true },
+]
 
 [tool.mypy]
 ignore_missing_imports = true

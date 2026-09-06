@@ -5,17 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0/).
 
-## [Unreleased]
+## Unreleased
 
-### Added
+<!-- towncrier release notes start -->
 
-- `OSAM_ONNX_PROVIDERS` to choose onnxruntime execution providers as a comma-separated list tried in order, for example CoreML or DirectML. Unset keeps the CUDA-or-CPU default (#82).
-
-### Removed
-
-- `osam.types.ModelBase` and `osam.types.ModelBlob`, deprecated since July 2024; use `Model` and `Blob` (#80).
-
-## [0.6.0] - 2026-08-21
+## 0.6.0 - 2026-08-21
 
 ### Added
 
@@ -25,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - SAM3 blobs download from a pinned Hugging Face revision instead of `main` (#77).
 
-## [0.5.0] - 2026-06-30
+## 0.5.0 - 2026-06-30
 
 ### Added
 
@@ -42,13 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Guard `None` values in `Prompt` point serializers and validators (#59).
 - Format `ValueError` messages instead of passing args positionally (#57).
 
-## [0.4.1] - 2026-06-04
+## 0.4.1 - 2026-06-04
 
 ### Fixed
 
 - Make standalone model blob cache paths Windows-safe by sanitizing `sha256:<hash>` to `sha256-<hash>`.
 
-## [0.4.0] - 2026-04-15
+## 0.4.0 - 2026-04-15
 
 ### Added
 
@@ -63,13 +57,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Use `os.path.join` for Windows path compatibility.
 
-## [0.3.1] - 2026-01-29
+## 0.3.1 - 2026-01-29
 
 ### Changed
 
 - Bump `imgviz` to `>=2.0.0`.
 
-## [0.3.0] - 2026-01-18
+## 0.3.0 - 2026-01-18
 
 ### Added
 
@@ -86,20 +80,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix ONNX external data loading on Windows by avoiding symlinks.
 
-## [0.2.5] - 2025-07-01
+## 0.2.5 - 2025-07-01
 
 ### Fixed
 
 - Remove the hack that hid `onnxruntime` error messages, so real errors surface (#33).
 - Fix a missing exception in an error message.
 
-## [0.2.4] - 2025-07-01
+## 0.2.4 - 2025-07-01
 
 ### Changed
 
 - Use the common license format for the MIT License.
 
-## [0.2.3] - 2025-03-15
+## 0.2.3 - 2025-03-15
 
 ### Added
 
@@ -114,20 +108,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix a typo in the README CLI example (`text` to `texts`) (#24).
 
-## [0.2.2] - 2024-08-01
+## 0.2.2 - 2024-08-01
 
 ### Added
 
 - `non_maximum_suppression()` in `osam.apis` (#23).
 
-## [0.2.1] - 2024-07-30
+## 0.2.1 - 2024-07-30
 
 ### Changed
 
 - Move all modules back into the `osam` package (#21).
 - Make `osam serve` optional, installed with `pip install osam[serve]` (#22).
 
-## [0.2.0] - 2024-06-29
+## 0.2.0 - 2024-06-29
 
 ### Added
 
@@ -143,7 +137,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Support an empty `bounding_box`.
 
-## [0.1.1] - 2024-02-13
+## 0.1.1 - 2024-02-13
 
 ### Added
 
@@ -159,22 +153,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix the SAM 308M model size typo.
 - Avoid in-place modification of the request object in the generate function.
 
-## [0.1.0] - 2024-02-05
+## 0.1.0 - 2024-02-05
 
 - Initial release: run promptable vision models (SAM, EfficientSAM) locally via a CLI and an HTTP API.
-
-[0.1.0]: https://github.com/wkentaro/osam/releases/tag/v0.1.0
-[0.1.1]: https://github.com/wkentaro/osam/compare/v0.1.0...v0.1.1
-[0.2.0]: https://github.com/wkentaro/osam/compare/v0.1.1...v0.2.0
-[0.2.1]: https://github.com/wkentaro/osam/compare/v0.2.0...v0.2.1
-[0.2.2]: https://github.com/wkentaro/osam/compare/v0.2.1...v0.2.2
-[0.2.3]: https://github.com/wkentaro/osam/compare/v0.2.2...v0.2.3
-[0.2.4]: https://github.com/wkentaro/osam/compare/v0.2.3...v0.2.4
-[0.2.5]: https://github.com/wkentaro/osam/compare/v0.2.4...v0.2.5
-[0.3.0]: https://github.com/wkentaro/osam/compare/v0.2.5...v0.3.0
-[0.3.1]: https://github.com/wkentaro/osam/compare/v0.3.0...v0.3.1
-[0.4.0]: https://github.com/wkentaro/osam/compare/v0.3.1...v0.4.0
-[0.4.1]: https://github.com/wkentaro/osam/compare/v0.4.0...v0.4.1
-[0.5.0]: https://github.com/wkentaro/osam/compare/v0.4.1...v0.5.0
-[0.6.0]: https://github.com/wkentaro/osam/compare/v0.5.0...v0.6.0
-[unreleased]: https://github.com/wkentaro/osam/compare/v0.6.0...HEAD
