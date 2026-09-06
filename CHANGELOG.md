@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- `osam.types.ModelBase` and `osam.types.ModelBlob`, deprecated since July 2024; use `Model` and `Blob` (#80).
+
 ## [0.6.0] - 2026-08-21
 
 ### Added
