@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import abc
 import hashlib
+import os
 from collections.abc import Callable
 from typing import Dict
+from typing import Final
 from typing import Optional
 from typing import Sequence
 
@@ -16,6 +18,18 @@ from ._generate import GenerateRequest
 from ._generate import GenerateResponse
 from ._image_embedding import ImageEmbedding
 from ._model_metadata import ModelMetadata
+
+_PROVIDERS_ENV: Final = "OSAM_ONNX_PROVIDERS"
+
+
+def resolve_providers() -> list[str]:
+    raw = os.environ.get(_PROVIDERS_ENV, "")
+    providers = [entry.strip() for entry in raw.split(",") if entry.strip()]
+    if providers:
+        return providers
+    if "CUDAExecutionProvider" in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    return ["CPUExecutionProvider"]
 
 
 class Model(abc.ABC):
@@ -97,12 +111,8 @@ def _load_inference_session(
     blob: Blob, providers: list[str] | None = None
 ) -> onnxruntime.InferenceSession:
     try:
-        # Try to use all of the available providers e.g., cuda, tensorrt.
         if providers is None:
-            if "CUDAExecutionProvider" in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
-                providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            else:
-                providers = ["CPUExecutionProvider"]
+            providers = resolve_providers()
         inference_session = onnxruntime.InferenceSession(blob.path, providers=providers)
     except Exception as e:
         # Even though there is fallback in onnxruntime, it won't always work.

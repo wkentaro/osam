@@ -89,6 +89,22 @@ is used. Omit `direct` from the list (for example
 `OSAM_BLOB_ENDPOINT="https://mirror.example.com"`) to disable the canonical
 fallback and serve every blob from the mirror only.
 
+### Execution providers
+
+Inference runs on `CUDAExecutionProvider` when the installed onnxruntime has it,
+otherwise on `CPUExecutionProvider`. To use another accelerator (CoreML on
+macOS, DirectML on Windows, TensorRT, ROCm), set `OSAM_ONNX_PROVIDERS` to a
+comma-separated list tried in the given order:
+
+```bash
+export OSAM_ONNX_PROVIDERS="CoreMLExecutionProvider,CPUExecutionProvider"
+```
+
+The provider package must be installed separately (for example
+`onnxruntime-gpu`, `onnxruntime-directml`, or `onnxruntime-silicon`). If a
+session cannot be created with the given list, osam logs the error and falls
+back to `CPUExecutionProvider`.
+
 ## Usage
 
 ### CLI
