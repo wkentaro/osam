@@ -31,10 +31,9 @@ class Sam2(SamBase):
             )
             / 255
         )
-        #
-        input_ = input_ - np.array([0.485, 0.456, 0.406], dtype=np.float32) / np.array(
-            [0.229, 0.224, 0.225], dtype=np.float32
-        )
+        input_ = (
+            input_ - np.array([0.485, 0.456, 0.406], dtype=np.float32)
+        ) / np.array([0.229, 0.224, 0.225], dtype=np.float32)
         input_ = input_.transpose(2, 0, 1)[None]
 
         outputs = encoder_session.run(output_names=None, input_feed={"input": input_})
