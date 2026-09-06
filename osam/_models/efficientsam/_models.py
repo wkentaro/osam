@@ -1,11 +1,10 @@
+from typing import cast
+
 import numpy as np
 import numpy.typing as npt
 
 from osam import types
 from osam._models.sam import SamBase
-
-from . import _decoding
-from . import _encoding
 
 
 class EfficientSam(SamBase):
@@ -16,10 +15,22 @@ class EfficientSam(SamBase):
         license_spdx="Apache-2.0",
     )
 
-    def encode_image(self, image: np.ndarray) -> types.ImageEmbedding:
-        return _encoding.compute_image_embedding_from_image(
-            encoder_session=self._inference_sessions["encoder"],
-            image=image,
+    def _encode_image(self, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
+        batched_images: npt.NDArray[np.float32] = (
+            image.transpose(2, 0, 1)[None].astype(np.float32) / 255
+        )
+        outputs = self._inference_sessions["encoder"].run(
+            output_names=None,
+            input_feed={"batched_images": batched_images},
+        )
+        image_embedding: npt.NDArray[np.float32] = cast(
+            npt.NDArray[np.float32], outputs[0]
+        )[0]  # (embedding_dim, height, width)
+
+        return types.ImageEmbedding(
+            original_height=image.shape[0],
+            original_width=image.shape[1],
+            embedding=image_embedding,
         )
 
     def _generate_mask_from_image_embedding(
@@ -27,11 +38,31 @@ class EfficientSam(SamBase):
         image_embedding: types.ImageEmbedding,
         prompt: types.Prompt,
     ) -> npt.NDArray[np.bool_]:
-        return _decoding.generate_mask_from_image_embedding(
-            decoder_session=self._inference_sessions["decoder"],
-            image_embedding=image_embedding,
-            prompt=prompt,
+        input_point: npt.NDArray[np.float32] = np.array(prompt.points, dtype=np.float32)
+        input_label: npt.NDArray[np.float32] = np.array(
+            prompt.point_labels, dtype=np.float32
         )
+
+        decoder_inputs = {
+            # batch_size, embedding_dim, height, width
+            "image_embeddings": image_embedding.embedding[None, :, :, :],
+            # batch_size, num_queries, num_points, 2
+            "batched_point_coords": input_point[None, None, :, :],
+            # batch_size, num_queries, num_points
+            "batched_point_labels": input_label[None, None, :],
+            "orig_im_size": np.array(
+                (image_embedding.original_height, image_embedding.original_width),
+                dtype=np.int64,
+            ),
+        }
+
+        masks, _, _ = self._inference_sessions["decoder"].run(None, decoder_inputs)
+        masks = cast(npt.NDArray[np.bool_], masks)
+        mask: npt.NDArray[np.bool_] = (
+            masks[0, 0, 0, :, :] > 0
+        )  # (1, 1, 3, H, W) -> (H, W)
+
+        return mask
 
 
 class EfficientSam10m(EfficientSam):
