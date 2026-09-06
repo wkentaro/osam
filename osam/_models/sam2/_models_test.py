@@ -6,8 +6,18 @@ import pytest
 from ._models import Sam2Tiny
 
 
-@pytest.mark.parametrize("pixel_value", [0, 255])
-def test_encode_image_normalizes_channels(pixel_value: int) -> None:
+@pytest.mark.parametrize(
+    "pixel_value, expected",
+    [
+        # torchvision Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        # applied to 0 and 1, so the test does not restate the formula under test.
+        (0, [-2.1179, -2.0357, -1.8044]),
+        (255, [2.2489, 2.4286, 2.6400]),
+    ],
+)
+def test_encode_image_normalizes_channels(
+    pixel_value: int, expected: list[float]
+) -> None:
     # Pass the encoder input through so normalization is checked without weights.
     graph = onnx.helper.make_graph(
         nodes=[
@@ -39,9 +49,8 @@ def test_encode_image_normalizes_channels(pixel_value: int) -> None:
 
     result = model.encode_image(image=np.full((5, 7, 3), pixel_value, dtype=np.uint8))
 
-    expected = (pixel_value / 255 - np.array([0.485, 0.456, 0.406])) / np.array(
-        [0.229, 0.224, 0.225]
-    )
     np.testing.assert_allclose(
-        result.embedding, np.broadcast_to(expected[:, None, None], (3, 8, 8)), rtol=1e-6
+        result.embedding,
+        np.broadcast_to(np.array(expected)[:, None, None], (3, 8, 8)),
+        atol=1e-4,
     )
