@@ -50,9 +50,10 @@ class Model(abc.ABC):
         cls,
         progress: Callable[[str, int, int | None], None] | None = None,
         cancel: threading.Event | None = None,
+        timeout: float | tuple[float, float] | None = 30,
     ) -> None:
         for blob in cls._blobs.values():
-            blob.pull(progress=progress, cancel=cancel)
+            blob.pull(progress=progress, cancel=cancel, timeout=timeout)
 
     @classmethod
     def remove(cls):

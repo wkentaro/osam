@@ -88,7 +88,12 @@ def test_pull_retries_transient_failure_then_succeeds(
     n_calls = 0
 
     def fake_cached_download(
-        url: str, path: str, hash: str, progress: object = None, quiet: bool = False
+        url: str,
+        path: str,
+        hash: str,
+        progress: object = None,
+        quiet: bool = False,
+        timeout: object = None,
     ) -> None:
         nonlocal n_calls
         n_calls += 1
@@ -126,7 +131,12 @@ def test_pull_falls_back_to_direct_when_mirror_fails(
     tried: list[str] = []
 
     def fake_cached_download(
-        url: str, path: str, hash: str, progress: object = None, quiet: bool = False
+        url: str,
+        path: str,
+        hash: str,
+        progress: object = None,
+        quiet: bool = False,
+        timeout: object = None,
     ) -> None:
         tried.append(url)
         if url.startswith("https://mirror.example.com"):
@@ -153,7 +163,12 @@ def test_pull_retries_whole_cycle_not_single_endpoint(
     n_direct = 0
 
     def fake_cached_download(
-        url: str, path: str, hash: str, progress: object = None, quiet: bool = False
+        url: str,
+        path: str,
+        hash: str,
+        progress: object = None,
+        quiet: bool = False,
+        timeout: object = None,
     ) -> None:
         nonlocal n_direct
         tried.append(url)
@@ -231,7 +246,12 @@ def test_pull_uses_mirror_without_contacting_canonical(
     tried: list[str] = []
 
     def fake_cached_download(
-        url: str, path: str, hash: str, progress: object = None, quiet: bool = False
+        url: str,
+        path: str,
+        hash: str,
+        progress: object = None,
+        quiet: bool = False,
+        timeout: object = None,
     ) -> None:
         tried.append(url)
 
@@ -259,7 +279,12 @@ def test_pull_attachments_use_per_attachment_hash(
     tried: list[str] = []
 
     def fake_cached_download(
-        url: str, path: str, hash: str, progress: object = None, quiet: bool = False
+        url: str,
+        path: str,
+        hash: str,
+        progress: object = None,
+        quiet: bool = False,
+        timeout: object = None,
     ) -> None:
         tried.append(url)
 
@@ -283,7 +308,12 @@ def test_pull_quiets_gdown_only_when_progress_given(
     quiets: list[bool] = []
 
     def fake_cached_download(
-        url: str, path: str, hash: str, progress: object = None, quiet: bool = False
+        url: str,
+        path: str,
+        hash: str,
+        progress: object = None,
+        quiet: bool = False,
+        timeout: object = None,
     ) -> None:
         quiets.append(quiet)
 
@@ -329,7 +359,12 @@ def test_pull_cancel_interrupts_retry_backoff(
     cancel = threading.Event()
 
     def fake_cached_download(
-        url: str, path: str, hash: str, progress: object = None, quiet: bool = False
+        url: str,
+        path: str,
+        hash: str,
+        progress: object = None,
+        quiet: bool = False,
+        timeout: object = None,
     ) -> None:
         cancel.set()
         raise RuntimeError("blocked")
@@ -360,6 +395,7 @@ def test_pull_cancel_aborts_a_download_in_flight(
         hash: str,
         progress: Callable[[int, int | None], None] | None = None,
         quiet: bool = False,
+        timeout: object = None,
     ) -> None:
         tried.append(url)
         assert progress is not None
@@ -382,3 +418,19 @@ def test_pull_cancel_aborts_a_download_in_flight(
     # mistaken for a download failure worth another endpoint.
     assert reported == [("model.onnx", 1024, 4096)]
     assert tried == ["https://mirror.example.com/abc123"]
+
+
+def test_pull_forwards_timeout_to_gdown(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OSAM_BLOB_ENDPOINT", raising=False)
+    blob = Blob(url="https://example.com/model.onnx", hash="sha256:abc")
+
+    with mock.patch("osam.types._blob.gdown.cached_download") as cached_download:
+        blob.pull()
+        blob.pull(timeout=(5, 60))
+        blob.pull(timeout=None)
+
+    assert [call.kwargs["timeout"] for call in cached_download.call_args_list] == [
+        30,
+        (5, 60),
+        None,
+    ]
