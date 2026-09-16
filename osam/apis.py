@@ -1,3 +1,5 @@
+import pathlib
+from typing import Final
 from typing import Optional
 from typing import Type
 from typing import cast
@@ -10,6 +12,12 @@ from . import _models
 from . import types
 
 running_model: Optional[types.Model] = None
+
+# A single NonMaxSuppression node with no weights, so it ships with the package
+# instead of being downloaded.
+_NON_MAXIMUM_SUPPRESSION_ONNX: Final = (
+    pathlib.Path(__file__).parent / "_data" / "non_maximum_suppression.onnx"
+)
 
 registered_model_types: list[Type[types.Model]] = [
     _models.EfficientSam10m,
@@ -73,13 +81,8 @@ def non_maximum_suppression(
 ]:
     global _non_maximum_suppression_inference_session
     if _non_maximum_suppression_inference_session is None:
-        blob = types.Blob(
-            url="https://github.com/wkentaro/yolo-world-onnx/releases/download/v0.1.0/non_maximum_suppression.onnx",  # noqa
-            hash="sha256:328310ba8fdd386c7ca63fc9df3963cc47b1268909647abd469e8ebdf7f3d20a",
-        )
-        blob.pull()
         _non_maximum_suppression_inference_session = onnxruntime.InferenceSession(
-            blob.path, providers=["CPUExecutionProvider"]
+            str(_NON_MAXIMUM_SUPPRESSION_ONNX), providers=["CPUExecutionProvider"]
         )
     inference_session = _non_maximum_suppression_inference_session
 
