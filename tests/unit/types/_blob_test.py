@@ -2,6 +2,9 @@ import os
 import pathlib
 import threading
 from collections.abc import Callable
+from collections.abc import Iterator
+from http.server import BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer
 from unittest import mock
 
 import pytest
@@ -434,3 +437,57 @@ def test_pull_forwards_timeout_to_gdown(monkeypatch: pytest.MonkeyPatch) -> None
         (5, 60),
         None,
     ]
+
+
+@pytest.fixture
+def _serve_stalled_download(
+    cancel_attempt: int,
+) -> Iterator[tuple[str, list[str], threading.Event]]:
+    paths: list[str] = []
+    cancel = threading.Event()
+    stop = threading.Event()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            paths.append(self.path)
+            if len(paths) != cancel_attempt:
+                self.send_error(503)
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", "1")
+            self.end_headers()
+            # No body means cancellation must be observed without a progress callback.
+            cancel.set()
+            stop.wait()
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            yield f"http://127.0.0.1:{server.server_port}", paths, cancel
+        finally:
+            stop.set()
+            server.shutdown()
+            thread.join()
+
+
+@pytest.mark.parametrize("cancel_attempt", [1, 3])
+def test_pull_cancel_during_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    cancel_attempt: int,
+    _serve_stalled_download: tuple[str, list[str], threading.Event],
+) -> None:
+    url, paths, cancel = _serve_stalled_download
+    endpoint = f"{url}/mirror"
+    monkeypatch.setenv(
+        "OSAM_BLOB_ENDPOINT",
+        f"{endpoint},direct" if cancel_attempt == 1 else endpoint,
+    )
+    monkeypatch.setattr(Blob, "path", property(lambda self: str(tmp_path / "blob")))
+    blob = Blob(url=f"{url}/direct", hash="sha256:abc")
+
+    with pytest.raises(PullCancelledError):
+        blob.pull(cancel=cancel, timeout=0.1)
+
+    assert paths == ["/mirror/abc"] * cancel_attempt
