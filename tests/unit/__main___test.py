@@ -1,15 +1,16 @@
 import io
-import os
-import shlex
+import pathlib
 import subprocess
 
 import PIL.Image
 
-here = os.path.dirname(os.path.abspath(__file__))
+image_path = (
+    pathlib.Path(__file__).resolve().parents[2] / "examples" / "_images" / "dogs.jpg"
+)
 
 
 def test_run():
-    cmd = f"osam run efficientsam:10m --image {here}/../../examples/_images/dogs.jpg"
-    output = subprocess.check_output(shlex.split(cmd))
+    cmd = ["osam", "run", "efficientsam:10m", "--image", str(image_path)]
+    output = subprocess.check_output(cmd)
     image = PIL.Image.open(io.BytesIO(output))
     assert image.size == (2560, 1600)
