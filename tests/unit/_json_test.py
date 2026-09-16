@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from . import _json
+from osam import _json
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-from ._tabulate import tabulate
+from osam._tabulate import tabulate
 
 
 def test_tabulate_aligns_columns_across_rows() -> None:

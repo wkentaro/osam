@@ -3,7 +3,7 @@ import onnx
 import onnxruntime
 import pytest
 
-from ._models import Sam2Tiny
+from osam._models.sam2._models import Sam2Tiny
 
 
 @pytest.mark.parametrize(

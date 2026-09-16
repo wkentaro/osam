@@ -5,10 +5,10 @@ import imgviz
 import numpy as np
 import pytest
 
-from . import apis
-from . import types
+from osam import apis
+from osam import types
 
-here = pathlib.Path(__file__).resolve().parent
+data_dir = pathlib.Path(__file__).resolve().parents[1] / "data"
 
 
 @pytest.mark.parametrize(
@@ -26,7 +26,7 @@ here = pathlib.Path(__file__).resolve().parent
     ],
 )
 def test_generate_point_to_mask(model: str) -> None:
-    image = imgviz.io.imread(here / "_data" / "dogs.jpg")
+    image = imgviz.io.imread(data_dir / "dogs.jpg")
     request: types.GenerateRequest = types.GenerateRequest(model=model, image=image)
     response: types.GenerateResponse = apis.generate(request=request)
 
@@ -51,7 +51,7 @@ def test_generate_point_to_mask(model: str) -> None:
     ],
 )
 def test_generate_text_to_bounding_box(model: str, has_mask: bool) -> None:
-    image = imgviz.io.imread(here / "_data" / "dogs.jpg")
+    image = imgviz.io.imread(data_dir / "dogs.jpg")
     request: types.GenerateRequest = types.GenerateRequest(
         model=model, image=image, prompt=types.Prompt(texts=["dog"])
     )
@@ -78,7 +78,7 @@ def test_generate_text_to_bounding_box(model: str, has_mask: bool) -> None:
 
 @pytest.mark.parametrize("model", ["sam2:tiny"])
 def test_generate_box_to_mask_sam2(model: str) -> None:
-    image = imgviz.io.imread(here / "_data" / "dogs.jpg")
+    image = imgviz.io.imread(data_dir / "dogs.jpg")
     request: types.GenerateRequest = types.GenerateRequest(
         model=model,
         image=image,
@@ -104,7 +104,7 @@ def test_generate_box_to_mask_sam2(model: str) -> None:
 
 @pytest.mark.parametrize("model", ["sam3:latest"])
 def test_generate_box_to_mask_sam3(model: str) -> None:
-    image = imgviz.io.imread(here / "_data" / "dogs.jpg")
+    image = imgviz.io.imread(data_dir / "dogs.jpg")
     request: types.GenerateRequest = types.GenerateRequest(
         model=model,
         image=image,

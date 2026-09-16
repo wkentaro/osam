@@ -1,6 +1,6 @@
 import pytest
 
-from ._model import resolve_providers
+from osam.types._model import resolve_providers
 
 
 def test_resolve_providers_unset_ends_with_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
