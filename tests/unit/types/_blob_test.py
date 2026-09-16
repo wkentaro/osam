@@ -4,10 +4,10 @@ from unittest import mock
 
 import pytest
 
-from . import _blob
-from ._blob import Blob
-from ._blob import _build_endpoint_url
-from ._blob import _resolve_endpoints
+from osam.types import _blob
+from osam.types._blob import Blob
+from osam.types._blob import _build_endpoint_url
+from osam.types._blob import _resolve_endpoints
 
 
 @pytest.fixture(autouse=True)

@@ -35,10 +35,10 @@ lint:  # Lint code
 	$(call exec,uv run typos)
 
 test:  # Run tests
-	$(call exec,uv run pytest -v osam/ $(PYTEST_ARGS))
+	$(call exec,uv run pytest -v tests/ $(PYTEST_ARGS))
 
 coverage:  # Run tests with coverage
-	$(call exec,uv run pytest -v osam/ --numprocesses=auto --cov=osam --cov-report=term-missing)
+	$(call exec,uv run pytest -v tests/ --numprocesses=auto --cov=osam --cov-report=term-missing)
 
 release:  # Prepare a release: make release VERSION=X.Y.Z
 	@test -n "$(VERSION)" || { \

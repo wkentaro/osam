@@ -2,8 +2,8 @@ import datetime
 
 import pytest
 
-from ._humanize import naturalsize
-from ._humanize import naturaltime
+from osam._humanize import naturalsize
+from osam._humanize import naturaltime
 
 
 @pytest.mark.parametrize(

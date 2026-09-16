@@ -4,7 +4,7 @@ import numpy as np
 import pydantic
 import pytest
 
-from ._prompt import Prompt
+from osam.types._prompt import Prompt
 
 
 def test_model_dump_with_texts_only_serializes_none_points() -> None:
