@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.8.0 - 2026-09-16
+
+### Added
+
+- `Blob.pull()` and `Model.pull()` accept `cancel`, a `threading.Event` that aborts a download in flight and raises `osam.types.PullCancelledError`. ([#92](https://github.com/wkentaro/osam/pull/92))
+- `Blob.pull()` and `Model.pull()` accept a requests-style `timeout`, defaulting to 30 seconds, so a stalled download server no longer blocks a pull forever; requires gdown 6.3.0 or later. ([#95](https://github.com/wkentaro/osam/pull/95))
+
+### Changed
+
+- `osam.apis.non_maximum_suppression()` no longer downloads an ONNX file; the graph now ships with the package, so it works offline and on first call. ([#91](https://github.com/wkentaro/osam/pull/91))
+
+### Fixed
+
+- Stop including development-only tests and their image fixture in wheels. ([#93](https://github.com/wkentaro/osam/pull/93))
+- Cancelling a stalled model download raises `PullCancelledError` when the transfer times out, without trying another mirror or reporting a generic failure on the final retry. ([#97](https://github.com/wkentaro/osam/pull/97))
+
 ## 0.7.0 - 2026-09-06
 
 ### Added
