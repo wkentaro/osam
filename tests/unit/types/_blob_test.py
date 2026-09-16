@@ -382,3 +382,23 @@ def test_pull_cancel_aborts_a_download_in_flight(
     # mistaken for a download failure worth another endpoint.
     assert reported == [("model.onnx", 1024, 4096)]
     assert tried == ["https://mirror.example.com/abc123"]
+
+
+def test_is_pulled_requires_every_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    blob = Blob(
+        url="https://example.com/model.onnx",
+        hash="sha256:main",
+        attachments=[Blob(url="https://example.com/extra.bin", hash="sha256:extra")],
+    )
+    assert not blob.is_pulled()
+
+    os.makedirs(os.path.dirname(blob.path))
+    pathlib.Path(blob.path).write_bytes(b"weights")
+    assert not blob.is_pulled()
+
+    pathlib.Path(blob.path).with_name("extra.bin").write_bytes(b"extra")
+    assert blob.is_pulled()

@@ -81,6 +81,12 @@ class Blob:
             latest = max(latest, os.stat(path).st_mtime)
         return latest
 
+    def is_pulled(self) -> bool:
+        # Existence is enough: every writer checks the hash before moving the
+        # file into place, and a file corrupted later is caught when pull()
+        # re-verifies it on load.
+        return all(os.path.isfile(path) for _, path in self._files)
+
     def pull(
         self,
         progress: Callable[[str, int, int | None], None] | None = None,

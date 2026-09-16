@@ -55,6 +55,10 @@ class Model(abc.ABC):
             blob.pull(progress=progress, cancel=cancel)
 
     @classmethod
+    def is_pulled(cls) -> bool:
+        return all(blob.is_pulled() for blob in cls._blobs.values())
+
+    @classmethod
     def remove(cls):
         for blob in cls._blobs.values():
             blob.remove()
