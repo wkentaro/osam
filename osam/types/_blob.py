@@ -85,6 +85,7 @@ class Blob:
         self,
         progress: Callable[[str, int, int | None], None] | None = None,
         cancel: threading.Event | None = None,
+        timeout: float | tuple[float, float] | None = 30,
     ) -> None:
         def _gdown_progress(
             filename: str,
@@ -126,6 +127,9 @@ class Blob:
                             hash=blob.hash,
                             progress=gdown_progress,
                             quiet=progress is not None,
+                            # Without a read timeout a server that stops sending
+                            # bytes blocks forever, and the cancel check with it.
+                            timeout=timeout,
                         )
                         return
                     except PullCancelledError:
