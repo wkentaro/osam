@@ -6,13 +6,18 @@ import pytest
 
 from . import _blob
 from ._blob import Blob
-from ._blob import _build_endpoint_url
-from ._blob import _resolve_endpoints
+from ._blob import build_endpoint_url
+from ._blob import resolve_endpoints
 
 
 @pytest.fixture(autouse=True)
 def _no_backoff_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_blob.time, "sleep", lambda seconds: None)
+
+
+def test_endpoint_helpers_keep_private_aliases() -> None:
+    assert _blob._resolve_endpoints is resolve_endpoints
+    assert _blob._build_endpoint_url is build_endpoint_url
 
 
 def test_path_standalone_has_no_colon() -> None:
@@ -41,22 +46,22 @@ def test_path_with_attachments_has_no_colon() -> None:
 
 def test_resolve_endpoints_unset_is_direct(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OSAM_BLOB_ENDPOINT", raising=False)
-    assert _resolve_endpoints() == ["direct"]
+    assert resolve_endpoints() == ["direct"]
 
 
 def test_resolve_endpoints_blank_is_direct(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OSAM_BLOB_ENDPOINT", "  ,  ")
-    assert _resolve_endpoints() == ["direct"]
+    assert resolve_endpoints() == ["direct"]
 
 
 def test_resolve_endpoints_keeps_order(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OSAM_BLOB_ENDPOINT", " https://mirror.example.com , direct ")
-    assert _resolve_endpoints() == ["https://mirror.example.com", "direct"]
+    assert resolve_endpoints() == ["https://mirror.example.com", "direct"]
 
 
 def test_build_endpoint_url_direct_returns_canonical() -> None:
     assert (
-        _build_endpoint_url(
+        build_endpoint_url(
             endpoint="direct",
             url="https://example.com/model.onnx",
             hash="sha256:abc123",
@@ -67,7 +72,7 @@ def test_build_endpoint_url_direct_returns_canonical() -> None:
 
 def test_build_endpoint_url_mirror_is_hash_keyed() -> None:
     assert (
-        _build_endpoint_url(
+        build_endpoint_url(
             endpoint="https://mirror.example.com/",
             url="https://example.com/model.onnx",
             hash="sha256:abc123",

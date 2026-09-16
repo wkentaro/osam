@@ -15,17 +15,22 @@ _BLOB_ENDPOINT_ENV: Final = "OSAM_BLOB_ENDPOINT"
 _DIRECT: Final = "direct"
 
 
-def _resolve_endpoints() -> list[str]:
+def resolve_endpoints() -> list[str]:
     raw = os.environ.get(_BLOB_ENDPOINT_ENV, "")
     endpoints = [entry.strip() for entry in raw.split(",") if entry.strip()]
     return endpoints or [_DIRECT]
 
 
-def _build_endpoint_url(endpoint: str, url: str, hash: str) -> str:
+def build_endpoint_url(endpoint: str, url: str, hash: str) -> str:
     if endpoint == _DIRECT:
         return url
     digest = hash.split(":", maxsplit=1)[-1]
     return f"{endpoint.rstrip('/')}/{digest}"
+
+
+# Kept for callers that reached into the private names before they were public.
+_resolve_endpoints = resolve_endpoints
+_build_endpoint_url = build_endpoint_url
 
 
 @dataclasses.dataclass
@@ -89,7 +94,7 @@ class Blob:
                 filename, bytes_so_far, bytes_total
             )
 
-        endpoints = _resolve_endpoints()
+        endpoints = resolve_endpoints()
 
         def _download(blob: Blob, path: str) -> None:
             N_RETRIES: Final = 3
@@ -99,7 +104,7 @@ class Blob:
             for attempt in range(N_RETRIES):
                 errors = []
                 for endpoint in endpoints:
-                    source = _build_endpoint_url(
+                    source = build_endpoint_url(
                         endpoint=endpoint, url=blob.url, hash=blob.hash
                     )
                     try:
