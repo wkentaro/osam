@@ -135,6 +135,11 @@ class Blob:
                     except PullCancelledError:
                         raise
                     except Exception as e:
+                        # A stalled transfer can time out before reporting progress.
+                        if cancel is not None and cancel.is_set():
+                            raise PullCancelledError(
+                                f"Download of {blob.filename!r} was cancelled"
+                            ) from e
                         last_error = e
                         reason = " ".join(str(e).split())
                         logger.warning(
