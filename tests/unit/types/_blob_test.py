@@ -1,11 +1,14 @@
 import os
 import pathlib
+import threading
+from collections.abc import Callable
 from unittest import mock
 
 import pytest
 
 from osam.types import _blob
 from osam.types._blob import Blob
+from osam.types._blob import PullCancelledError
 from osam.types._blob import _build_endpoint_url
 from osam.types._blob import _resolve_endpoints
 
@@ -289,8 +292,9 @@ def test_pull_quiets_gdown_only_when_progress_given(
     ):
         blob.pull()
         blob.pull(progress=lambda filename, bytes_so_far, bytes_total: None)
+        blob.pull(cancel=threading.Event())
 
-    assert quiets == [False, True]
+    assert quiets == [False, True, False]
 
 
 def test_size_and_modified_at_span_attachments(
@@ -315,3 +319,66 @@ def test_size_and_modified_at_span_attachments(
 
     assert blob.size == 5
     assert blob.modified_at == 2_000_000_000
+
+
+def test_pull_cancel_interrupts_retry_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OSAM_BLOB_ENDPOINT", raising=False)
+    blob = Blob(url="https://example.com/model.onnx", hash="sha256:abc")
+    cancel = threading.Event()
+
+    def fake_cached_download(
+        url: str, path: str, hash: str, progress: object = None, quiet: bool = False
+    ) -> None:
+        cancel.set()
+        raise RuntimeError("blocked")
+
+    with mock.patch(
+        "osam.types._blob.gdown.cached_download", side_effect=fake_cached_download
+    ) as cached_download:
+        with pytest.raises(PullCancelledError):
+            blob.pull(cancel=cancel)
+
+    # The backoff returns as soon as the event is set and no retry follows.
+    assert cached_download.call_count == 1
+
+
+def test_pull_cancel_aborts_a_download_in_flight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OSAM_BLOB_ENDPOINT", "https://mirror.example.com,direct")
+    blob = Blob(url="https://example.com/model.onnx", hash="sha256:abc123")
+    cancel = threading.Event()
+
+    tried: list[str] = []
+    reported: list[tuple[str, int, int | None]] = []
+
+    def fake_cached_download(
+        url: str,
+        path: str,
+        hash: str,
+        progress: Callable[[int, int | None], None] | None = None,
+        quiet: bool = False,
+    ) -> None:
+        tried.append(url)
+        assert progress is not None
+        progress(1024, 4096)
+        cancel.set()
+        progress(2048, 4096)
+
+    with mock.patch(
+        "osam.types._blob.gdown.cached_download", side_effect=fake_cached_download
+    ):
+        with pytest.raises(PullCancelledError):
+            blob.pull(
+                progress=lambda filename, bytes_so_far, bytes_total: reported.append(
+                    (filename, bytes_so_far, bytes_total)
+                ),
+                cancel=cancel,
+            )
+
+    # Progress still reaches the caller until the cancel, and the cancel is not
+    # mistaken for a download failure worth another endpoint.
+    assert reported == [("model.onnx", 1024, 4096)]
+    assert tried == ["https://mirror.example.com/abc123"]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import hashlib
 import os
+import threading
 from collections.abc import Callable
 from typing import Dict
 from typing import Final
@@ -48,9 +49,10 @@ class Model(abc.ABC):
     def pull(
         cls,
         progress: Callable[[str, int, int | None], None] | None = None,
+        cancel: threading.Event | None = None,
     ) -> None:
         for blob in cls._blobs.values():
-            blob.pull(progress=progress)
+            blob.pull(progress=progress, cancel=cancel)
 
     @classmethod
     def remove(cls):

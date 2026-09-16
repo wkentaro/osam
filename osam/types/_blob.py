@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import os
 import shutil
+import threading
 import time
 import urllib.parse
 from collections.abc import Callable
@@ -26,6 +27,10 @@ def _build_endpoint_url(endpoint: str, url: str, hash: str) -> str:
         return url
     digest = hash.split(":", maxsplit=1)[-1]
     return f"{endpoint.rstrip('/')}/{digest}"
+
+
+class PullCancelledError(RuntimeError):
+    pass
 
 
 @dataclasses.dataclass
@@ -79,15 +84,23 @@ class Blob:
     def pull(
         self,
         progress: Callable[[str, int, int | None], None] | None = None,
+        cancel: threading.Event | None = None,
     ) -> None:
         def _gdown_progress(
             filename: str,
         ) -> Callable[[int, int | None], None] | None:
-            if progress is None:
+            if progress is None and cancel is None:
                 return None
-            return lambda bytes_so_far, bytes_total: progress(
-                filename, bytes_so_far, bytes_total
-            )
+
+            # gdown calls this after every chunk and aborts the download when it
+            # raises, which is the only way to stop a transfer already in flight.
+            def report(bytes_so_far: int, bytes_total: int | None) -> None:
+                if cancel is not None and cancel.is_set():
+                    raise PullCancelledError(f"Download of {filename!r} was cancelled")
+                if progress is not None:
+                    progress(filename, bytes_so_far, bytes_total)
+
+            return report
 
         endpoints = _resolve_endpoints()
 
@@ -97,6 +110,10 @@ class Blob:
             errors: list[str] = []
             last_error: Exception | None = None
             for attempt in range(N_RETRIES):
+                if cancel is not None and cancel.is_set():
+                    raise PullCancelledError(
+                        f"Download of {blob.filename!r} was cancelled"
+                    )
                 errors = []
                 for endpoint in endpoints:
                     source = _build_endpoint_url(
@@ -108,9 +125,11 @@ class Blob:
                             path=path,
                             hash=blob.hash,
                             progress=gdown_progress,
-                            quiet=gdown_progress is not None,
+                            quiet=progress is not None,
                         )
                         return
+                    except PullCancelledError:
+                        raise
                     except Exception as e:
                         last_error = e
                         reason = " ".join(str(e).split())
@@ -130,7 +149,12 @@ class Blob:
                         N_RETRIES,
                         2**attempt,
                     )
-                    time.sleep(2**attempt)
+                    if cancel is None:
+                        time.sleep(2**attempt)
+                    else:
+                        # Returns as soon as the caller cancels; the next
+                        # attempt raises.
+                        cancel.wait(2**attempt)
             message = (
                 f"Failed to download {blob.filename!r} from all endpoints: "
                 f"{'; '.join(errors)}."
