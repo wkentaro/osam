@@ -97,6 +97,7 @@ def test_pull_retries_transient_failure_then_succeeds(
         progress: object = None,
         quiet: bool = False,
         timeout: object = None,
+        cancel: object = None,
     ) -> None:
         nonlocal n_calls
         n_calls += 1
@@ -140,6 +141,7 @@ def test_pull_falls_back_to_direct_when_mirror_fails(
         progress: object = None,
         quiet: bool = False,
         timeout: object = None,
+        cancel: object = None,
     ) -> None:
         tried.append(url)
         if url.startswith("https://mirror.example.com"):
@@ -172,6 +174,7 @@ def test_pull_retries_whole_cycle_not_single_endpoint(
         progress: object = None,
         quiet: bool = False,
         timeout: object = None,
+        cancel: object = None,
     ) -> None:
         nonlocal n_direct
         tried.append(url)
@@ -255,6 +258,7 @@ def test_pull_uses_mirror_without_contacting_canonical(
         progress: object = None,
         quiet: bool = False,
         timeout: object = None,
+        cancel: object = None,
     ) -> None:
         tried.append(url)
 
@@ -288,6 +292,7 @@ def test_pull_attachments_use_per_attachment_hash(
         progress: object = None,
         quiet: bool = False,
         timeout: object = None,
+        cancel: object = None,
     ) -> None:
         tried.append(url)
 
@@ -317,6 +322,7 @@ def test_pull_quiets_gdown_only_when_progress_given(
         progress: object = None,
         quiet: bool = False,
         timeout: object = None,
+        cancel: object = None,
     ) -> None:
         quiets.append(quiet)
 
@@ -359,7 +365,7 @@ def test_pull_cancel_interrupts_retry_backoff(
 ) -> None:
     monkeypatch.delenv("OSAM_BLOB_ENDPOINT", raising=False)
     blob = Blob(url="https://example.com/model.onnx", hash="sha256:abc")
-    cancel = threading.Event()
+    cancel_event = threading.Event()
 
     def fake_cached_download(
         url: str,
@@ -368,15 +374,16 @@ def test_pull_cancel_interrupts_retry_backoff(
         progress: object = None,
         quiet: bool = False,
         timeout: object = None,
+        cancel: object = None,
     ) -> None:
-        cancel.set()
+        cancel_event.set()
         raise RuntimeError("blocked")
 
     with mock.patch(
         "osam.types._blob.gdown.cached_download", side_effect=fake_cached_download
     ) as cached_download:
         with pytest.raises(PullCancelledError):
-            blob.pull(cancel=cancel)
+            blob.pull(cancel=cancel_event)
 
     # The backoff returns as soon as the event is set and no retry follows.
     assert cached_download.call_count == 1
@@ -387,7 +394,7 @@ def test_pull_cancel_aborts_a_download_in_flight(
 ) -> None:
     monkeypatch.setenv("OSAM_BLOB_ENDPOINT", "https://mirror.example.com,direct")
     blob = Blob(url="https://example.com/model.onnx", hash="sha256:abc123")
-    cancel = threading.Event()
+    cancel_event = threading.Event()
 
     tried: list[str] = []
     reported: list[tuple[str, int, int | None]] = []
@@ -399,11 +406,12 @@ def test_pull_cancel_aborts_a_download_in_flight(
         progress: Callable[[int, int | None], None] | None = None,
         quiet: bool = False,
         timeout: object = None,
+        cancel: object = None,
     ) -> None:
         tried.append(url)
         assert progress is not None
         progress(1024, 4096)
-        cancel.set()
+        cancel_event.set()
         progress(2048, 4096)
 
     with mock.patch(
@@ -414,7 +422,7 @@ def test_pull_cancel_aborts_a_download_in_flight(
                 progress=lambda filename, bytes_so_far, bytes_total: reported.append(
                     (filename, bytes_so_far, bytes_total)
                 ),
-                cancel=cancel,
+                cancel=cancel_event,
             )
 
     # Progress still reaches the caller until the cancel, and the cancel is not
@@ -491,3 +499,64 @@ def test_pull_cancel_during_timeout(
         blob.pull(cancel=cancel, timeout=0.1)
 
     assert paths == ["/mirror/abc"] * cancel_attempt
+
+
+@pytest.fixture
+def _serve_partial_download() -> Iterator[tuple[str, threading.Event]]:
+    release = threading.Event()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Length", str(1024 * 1024))
+            self.end_headers()
+            self.wfile.write(b"x" * (512 * 1024))
+            self.wfile.flush()
+            release.wait()
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            yield f"http://127.0.0.1:{server.server_port}/model", release
+        finally:
+            release.set()
+            server.shutdown()
+            thread.join()
+
+
+def test_pull_cancel_interrupts_stalled_read(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    _serve_partial_download: tuple[str, threading.Event],
+) -> None:
+    url, release = _serve_partial_download
+    monkeypatch.delenv("OSAM_BLOB_ENDPOINT", raising=False)
+    path = tmp_path / "blob"
+    monkeypatch.setattr(Blob, "path", property(lambda self: str(path)))
+    blob = Blob(url=url, hash="sha256:abc")
+    cancel = threading.Event()
+    received = threading.Event()
+    finished = threading.Event()
+    errors: list[Exception] = []
+
+    def pull() -> None:
+        try:
+            blob.pull(progress=lambda *_: received.set(), cancel=cancel)
+        except Exception as error:
+            errors.append(error)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=pull)
+    worker.start()
+    try:
+        assert received.wait(5), "Download did not receive the partial body"
+        cancel.set()
+        assert finished.wait(1), "Cancellation is waiting for the read timeout"
+        assert len(errors) == 1
+        assert isinstance(errors[0], PullCancelledError)
+        assert not path.exists()
+    finally:
+        release.set()
+        worker.join(5)

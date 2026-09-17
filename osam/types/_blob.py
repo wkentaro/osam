@@ -93,8 +93,6 @@ class Blob:
             if progress is None and cancel is None:
                 return None
 
-            # gdown calls this after every chunk and aborts the download when it
-            # raises, which is the only way to stop a transfer already in flight.
             def report(bytes_so_far: int, bytes_total: int | None) -> None:
                 if cancel is not None and cancel.is_set():
                     raise PullCancelledError(f"Download of {filename!r} was cancelled")
@@ -127,9 +125,8 @@ class Blob:
                             hash=blob.hash,
                             progress=gdown_progress,
                             quiet=progress is not None,
-                            # Without a read timeout a server that stops sending
-                            # bytes blocks forever, and the cancel check with it.
                             timeout=timeout,
+                            cancel=cancel,
                         )
                         return
                     except PullCancelledError:
