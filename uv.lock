@@ -508,8 +508,8 @@ wheels = [
 
 [[package]]
 name = "gdown"
-version = "6.3.1.dev7+g9cd2540f9"
-source = { git = "https://github.com/wkentaro/gdown?rev=9cd2540f966f8e2dc2d136b23f79c39c02beb3ef#9cd2540f966f8e2dc2d136b23f79c39c02beb3ef" }
+version = "6.3.1.dev13+gbb18facf5"
+source = { git = "https://github.com/wkentaro/gdown?rev=bb18facf531f034569f659660fd61089c761977d#bb18facf531f034569f659660fd61089c761977d" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "filelock" },
@@ -1444,7 +1444,7 @@ dev = [
 requires-dist = [
     { name = "click" },
     { name = "fastapi", marker = "extra == 'serve'" },
-    { name = "gdown", git = "https://github.com/wkentaro/gdown?rev=9cd2540f966f8e2dc2d136b23f79c39c02beb3ef" },
+    { name = "gdown", git = "https://github.com/wkentaro/gdown?rev=bb18facf531f034569f659660fd61089c761977d" },
     { name = "imgviz", specifier = ">=2.0.0" },
     { name = "loguru" },
     { name = "onnxruntime", specifier = ">=1.23.2" },
