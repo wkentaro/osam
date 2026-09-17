@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.8.1 - 2026-09-17
+
+### Fixed
+
+- Cancelling a model download interrupts stalled response reads promptly instead of waiting for the network timeout. ([#101](https://github.com/wkentaro/osam/pull/101))
+
 ## 0.8.0 - 2026-09-16
 
 ### Added
