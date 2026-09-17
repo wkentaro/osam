@@ -29,7 +29,7 @@ classifiers = [
 ]
 dependencies = [
   "click",
-  "gdown @ git+https://github.com/wkentaro/gdown@ff77e20100fbf91d43a83e5f29f6f676f1c947b7",
+  "gdown @ git+https://github.com/wkentaro/gdown@9cd2540f966f8e2dc2d136b23f79c39c02beb3ef",
   "imgviz>=2.0.0",
   "loguru",
   "onnxruntime>=1.23.2",
