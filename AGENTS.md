@@ -10,7 +10,7 @@ Issues are tracked in GitHub Issues (`gh` CLI) for `wkentaro/osam`; external PRs
 
 ### Triage labels
 
-Canonical triage roles use their default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+Issue triage and PR verdicts use the canonical label strings. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
