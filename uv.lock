@@ -508,8 +508,8 @@ wheels = [
 
 [[package]]
 name = "gdown"
-version = "6.3.1.dev13+gbb18facf5"
-source = { git = "https://github.com/wkentaro/gdown?rev=bb18facf531f034569f659660fd61089c761977d#bb18facf531f034569f659660fd61089c761977d" }
+version = "6.4.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "filelock" },
@@ -517,6 +517,10 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions", marker = "python_full_version < '3.12'" },
     { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/56/1f/b66dad734e7a8538120f3a4e82976e1bf54ea39c900c358830fcfd9cf0c2/gdown-6.4.0.tar.gz", hash = "sha256:e0c901a4d847b3dd482f556e716726fbf6baca1c7b046757d948b247eeb7c822", size = 356106, upload-time = "2026-09-17T09:16:28.941Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/e9/c5d0eb6cb3453ac056322cf8a16a4e37631a7952ef18bd1ba442cb7ff4a8/gdown-6.4.0-py3-none-any.whl", hash = "sha256:a0f6dd1d23119e36d594822421d151c832641b92dd32bb8d30e870d24fe55149", size = 50754, upload-time = "2026-09-17T09:16:27.433Z" },
 ]
 
 [[package]]
@@ -1444,7 +1448,7 @@ dev = [
 requires-dist = [
     { name = "click" },
     { name = "fastapi", marker = "extra == 'serve'" },
-    { name = "gdown", git = "https://github.com/wkentaro/gdown?rev=bb18facf531f034569f659660fd61089c761977d" },
+    { name = "gdown", specifier = ">=6.4.0" },
     { name = "imgviz", specifier = ">=2.0.0" },
     { name = "loguru" },
     { name = "onnxruntime", specifier = ">=1.23.2" },
