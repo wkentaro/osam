@@ -87,19 +87,14 @@ class Blob:
         cancel: threading.Event | None = None,
         timeout: float | tuple[float, float] | None = 30,
     ) -> None:
-        def _gdown_progress(
+        def _make_gdown_progress(
             filename: str,
         ) -> Callable[[int, int | None], None] | None:
-            if progress is None and cancel is None:
+            if progress is None:
                 return None
 
-            # gdown calls this after every chunk and aborts the download when it
-            # raises, which is the only way to stop a transfer already in flight.
             def report(bytes_so_far: int, bytes_total: int | None) -> None:
-                if cancel is not None and cancel.is_set():
-                    raise PullCancelledError(f"Download of {filename!r} was cancelled")
-                if progress is not None:
-                    progress(filename, bytes_so_far, bytes_total)
+                progress(filename, bytes_so_far, bytes_total)
 
             return report
 
@@ -107,7 +102,7 @@ class Blob:
 
         def _download(blob: Blob, path: str) -> None:
             N_RETRIES: Final = 3
-            gdown_progress = _gdown_progress(blob.filename)
+            gdown_progress = _make_gdown_progress(blob.filename)
             errors: list[str] = []
             last_error: Exception | None = None
             for attempt in range(N_RETRIES):
@@ -127,15 +122,13 @@ class Blob:
                             hash=blob.hash,
                             progress=gdown_progress,
                             quiet=progress is not None,
-                            # Without a read timeout a server that stops sending
-                            # bytes blocks forever, and the cancel check with it.
                             timeout=timeout,
+                            cancel=cancel,
                         )
                         return
-                    except PullCancelledError:
-                        raise
                     except Exception as e:
-                        # A stalled transfer can time out before reporting progress.
+                        # gdown signals a cancel by raising with the event set,
+                        # and a cancel can also race with a network failure.
                         if cancel is not None and cancel.is_set():
                             raise PullCancelledError(
                                 f"Download of {blob.filename!r} was cancelled"
