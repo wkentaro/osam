@@ -45,6 +45,11 @@ After finalizing a PR, the agent applies exactly one mutually exclusive verdict:
 | `recommend-merge` | The agent finalized the PR and endorses review and merge |
 | `recommend-close` | The agent recommends closing it because it is broken, abandoned, superseded, or out of scope |
 | `recommend-triage` | The code is sound, but the maintainer must make the product or scope decision |
+| `needs-changes` | Review found defects; the PR author must revise and push |
+
+`needs-info` is the shared issue/PR state for waiting on an outside human; it is
+not an agent verdict. A draft PR is still being built or iterated and does not
+carry a verdict label.
 
 `maintainer-approved` is a separate, explicit-human-only verdict. A maintainer
 may apply it after reviewing the current PR head; an agent must never infer it
