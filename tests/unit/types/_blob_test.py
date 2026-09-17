@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler
 from http.server import ThreadingHTTPServer
 from unittest import mock
 
+import gdown
 import pytest
 
 from osam.types import _blob
@@ -389,7 +390,7 @@ def test_pull_cancel_interrupts_retry_backoff(
     assert cached_download.call_count == 1
 
 
-def test_pull_cancel_aborts_a_download_in_flight(
+def test_pull_translates_gdown_cancellation_without_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OSAM_BLOB_ENDPOINT", "https://mirror.example.com,direct")
@@ -411,8 +412,7 @@ def test_pull_cancel_aborts_a_download_in_flight(
         tried.append(url)
         assert progress is not None
         progress(1024, 4096)
-        cancel_event.set()
-        progress(2048, 4096)
+        raise gdown.DownloadCancelled("Download cancelled")
 
     with mock.patch(
         "osam.types._blob.gdown.cached_download", side_effect=fake_cached_download

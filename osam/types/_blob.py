@@ -87,17 +87,14 @@ class Blob:
         cancel: threading.Event | None = None,
         timeout: float | tuple[float, float] | None = 30,
     ) -> None:
-        def _gdown_progress(
+        def _make_gdown_progress(
             filename: str,
         ) -> Callable[[int, int | None], None] | None:
-            if progress is None and cancel is None:
+            if progress is None:
                 return None
 
             def report(bytes_so_far: int, bytes_total: int | None) -> None:
-                if cancel is not None and cancel.is_set():
-                    raise PullCancelledError(f"Download of {filename!r} was cancelled")
-                if progress is not None:
-                    progress(filename, bytes_so_far, bytes_total)
+                progress(filename, bytes_so_far, bytes_total)
 
             return report
 
@@ -105,7 +102,7 @@ class Blob:
 
         def _download(blob: Blob, path: str) -> None:
             N_RETRIES: Final = 3
-            gdown_progress = _gdown_progress(blob.filename)
+            gdown_progress = _make_gdown_progress(blob.filename)
             errors: list[str] = []
             last_error: Exception | None = None
             for attempt in range(N_RETRIES):
@@ -129,10 +126,14 @@ class Blob:
                             cancel=cancel,
                         )
                         return
+                    except gdown.DownloadCancelled as e:
+                        raise PullCancelledError(
+                            f"Download of {blob.filename!r} was cancelled"
+                        ) from e
                     except PullCancelledError:
                         raise
                     except Exception as e:
-                        # A stalled transfer can time out before reporting progress.
+                        # Cancellation can race with an ordinary network failure.
                         if cancel is not None and cancel.is_set():
                             raise PullCancelledError(
                                 f"Download of {blob.filename!r} was cancelled"
