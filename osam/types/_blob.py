@@ -126,14 +126,9 @@ class Blob:
                             cancel=cancel,
                         )
                         return
-                    except gdown.DownloadCancelled as e:
-                        raise PullCancelledError(
-                            f"Download of {blob.filename!r} was cancelled"
-                        ) from e
-                    except PullCancelledError:
-                        raise
                     except Exception as e:
-                        # Cancellation can race with an ordinary network failure.
+                        # gdown signals a cancel by raising with the event set,
+                        # and a cancel can also race with a network failure.
                         if cancel is not None and cancel.is_set():
                             raise PullCancelledError(
                                 f"Download of {blob.filename!r} was cancelled"

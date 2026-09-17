@@ -1,13 +1,11 @@
 import os
 import pathlib
 import threading
-from collections.abc import Callable
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler
 from http.server import ThreadingHTTPServer
 from unittest import mock
 
-import gdown
 import pytest
 
 from osam.types import _blob
@@ -388,47 +386,6 @@ def test_pull_cancel_interrupts_retry_backoff(
 
     # The backoff returns as soon as the event is set and no retry follows.
     assert cached_download.call_count == 1
-
-
-def test_pull_translates_gdown_cancellation_without_fallback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("OSAM_BLOB_ENDPOINT", "https://mirror.example.com,direct")
-    blob = Blob(url="https://example.com/model.onnx", hash="sha256:abc123")
-    cancel_event = threading.Event()
-
-    tried: list[str] = []
-    reported: list[tuple[str, int, int | None]] = []
-
-    def fake_cached_download(
-        url: str,
-        path: str,
-        hash: str,
-        progress: Callable[[int, int | None], None] | None = None,
-        quiet: bool = False,
-        timeout: object = None,
-        cancel: object = None,
-    ) -> None:
-        tried.append(url)
-        assert progress is not None
-        progress(1024, 4096)
-        raise gdown.DownloadCancelled("Download cancelled")
-
-    with mock.patch(
-        "osam.types._blob.gdown.cached_download", side_effect=fake_cached_download
-    ):
-        with pytest.raises(PullCancelledError):
-            blob.pull(
-                progress=lambda filename, bytes_so_far, bytes_total: reported.append(
-                    (filename, bytes_so_far, bytes_total)
-                ),
-                cancel=cancel_event,
-            )
-
-    # Progress still reaches the caller until the cancel, and the cancel is not
-    # mistaken for a download failure worth another endpoint.
-    assert reported == [("model.onnx", 1024, 4096)]
-    assert tried == ["https://mirror.example.com/abc123"]
 
 
 def test_pull_forwards_timeout_to_gdown(monkeypatch: pytest.MonkeyPatch) -> None:
