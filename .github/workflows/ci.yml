@@ -17,11 +17,14 @@ jobs:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
       - uses: actions/checkout@v4
+      - uses: extractions/setup-just@4a174aa1487e2bcb3f86a8fe24a05361a4f4fff1
+        with:
+          just-version: 1.58.0
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-      - run: make setup
+      - run: just setup
       - run: |
           uv build
           uv pip install dist/*.tar.gz
@@ -34,12 +37,15 @@ jobs:
         python-version: ['3.10']
     steps:
       - uses: actions/checkout@v4
+      - uses: extractions/setup-just@4a174aa1487e2bcb3f86a8fe24a05361a4f4fff1
+        with:
+          just-version: 1.58.0
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-      - run: make setup
-      - run: make lint
+      - run: just setup
+      - run: just lint
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -58,6 +64,9 @@ jobs:
             pytest-args: -n 0 -m 'not extra'
     steps:
       - uses: actions/checkout@v4
+      - uses: extractions/setup-just@4a174aa1487e2bcb3f86a8fe24a05361a4f4fff1
+        with:
+          just-version: 1.58.0
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -68,5 +77,5 @@ jobs:
           key: osam-models-${{ runner.os }}-${{ hashFiles('osam/_models/**') }}
           restore-keys: |
             osam-models-${{ runner.os }}-
-      - run: make setup
-      - run: make test PYTEST_ARGS="${{ matrix.pytest-args }}"
+      - run: just setup
+      - run: just test ${{ matrix.pytest-args }}
