@@ -32,20 +32,43 @@ dependencies = [
   "gdown>=6.4.0",
   "imgviz>=2.0.0",
   "loguru",
-  "onnxruntime>=1.23.2",
-  # onnxruntime dropped cp310 wheels at 1.24, which is also the first release
-  # with cp314 wheels; pin 3.10 below that boundary.
-  "onnxruntime<1.24; python_version < '3.11'",
   "Pillow",
   "pydantic",
 ]
 dynamic = ["readme", "version"]
 
 [project.optional-dependencies]
+# onnxruntime and onnxruntime-gpu install into the same package directory, so
+# osam leaves the choice of build to the user.
+cpu = [
+  "onnxruntime>=1.23.2",
+  # onnxruntime dropped cp310 wheels at 1.24, which is also the first release
+  # with cp314 wheels; pin 3.10 below that boundary.
+  "onnxruntime<1.24; python_version < '3.11'",
+]
+gpu = [
+  # 1.23.2 cannot create CUDA sessions for SAM3's opset-21 models (#43), so
+  # SAM3 falls back to CPU on Python 3.10.
+  "onnxruntime-gpu[cuda,cudnn]>=1.24.1; python_version >= '3.11'",
+  "onnxruntime-gpu[cuda,cudnn]>=1.23.2,<1.24; python_version < '3.11'",
+]
 serve = ["fastapi", "uvicorn"]
+
+[tool.uv]
+conflicts = [
+  [
+    { extra = "cpu" },
+    { extra = "gpu" },
+  ],
+  [
+    { extra = "gpu" },
+    { group = "dev" },
+  ],
+]
 
 [dependency-groups]
 dev = [
+  "osam[cpu]",
   "mypy>=1.15.0",
   "pytest-xdist>=3.6.1",
   "pytest>=8.3.4",

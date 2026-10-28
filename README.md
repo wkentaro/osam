@@ -28,13 +28,17 @@
 ### Pip
 
 ```bash
-pip install osam
+pip install osam[cpu]  # or osam[gpu] for NVIDIA GPUs
 ```
+
+`osam[gpu]` installs `onnxruntime-gpu` together with the CUDA and cuDNN
+libraries, so no system CUDA install is needed. Install only one onnxruntime
+build: `onnxruntime` and `onnxruntime-gpu` overwrite each other's files.
 
 **For `osam serve`**:
 
 ```bash
-pip install osam[serve]
+pip install osam[cpu,serve]
 ```
 
 ## Quickstart
@@ -100,10 +104,10 @@ comma-separated list tried in the given order:
 export OSAM_ONNX_PROVIDERS="CoreMLExecutionProvider,CPUExecutionProvider"
 ```
 
-The provider package must be installed separately (for example
-`onnxruntime-gpu`, `onnxruntime-directml`, or `onnxruntime-silicon`). If a
-session cannot be created with the given list, osam logs the error and falls
-back to `CPUExecutionProvider`.
+CoreML ships in the `osam[cpu]` build on macOS. For DirectML and other
+builds, install `osam` without extras plus the matching onnxruntime package
+(for example `onnxruntime-directml`). If a session cannot be created with the
+given list, osam logs the error and falls back to `CPUExecutionProvider`.
 
 ## Usage
 
@@ -166,7 +170,7 @@ Image.fromarray(mask).save("mask.png")
 ### HTTP
 
 ```bash
-# pip install osam[serve]  # required for `osam serve`
+# pip install osam[cpu,serve]  # required for `osam serve`
 
 # Get up the server
 osam serve
