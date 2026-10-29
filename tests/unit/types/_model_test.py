@@ -152,6 +152,7 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
         "CoreMLExecutionProvider",
         "CPUExecutionProvider",
         "CPUExecutionProvider",
+        "CPUExecutionProvider",
     ]
 
 
