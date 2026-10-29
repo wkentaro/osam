@@ -23,18 +23,21 @@ import osam
 IMAGE_PATH = pathlib.Path(__file__).parent / "_images" / "dogs.jpg"
 
 PROMPTS: dict[str, osam.types.Prompt] = {
-    "point": osam.types.Prompt(points=[[1439, 504]], point_labels=[1]),
-    "box": osam.types.Prompt(points=[[1233, 376], [1649, 691]], point_labels=[2, 3]),
+    "point": osam.types.Prompt(
+        points=np.array([[1439, 504]]), point_labels=np.array([1])
+    ),
+    "box": osam.types.Prompt(
+        points=np.array([[1233, 376], [1649, 691]]), point_labels=np.array([2, 3])
+    ),
     "negative box": osam.types.Prompt(
-        points=[[1233, 376], [1649, 691], [1400, 500], [1500, 600]],
-        point_labels=[2, 3, 4, 5],
+        points=np.array([[1233, 376], [1649, 691], [1400, 500], [1500, 600]]),
+        point_labels=np.array([2, 3, 4, 5]),
     ),
     "text": osam.types.Prompt(texts=["dog"]),
 }
 
 
 def _median_ms(fn: typing.Callable[[], object], repeat: int) -> float:
-    fn()
     times = []
     for _ in range(repeat):
         t0 = time.perf_counter()
@@ -47,14 +50,15 @@ def _benchmark(
     model_name: str, device: str, image: np.ndarray, repeat: int
 ) -> list[str]:
     try:
-        model = osam.apis.get_model_type_by_name(model_name)(device=device)
+        model_type = osam.apis.get_model_type_by_name(model_name)
+        model = model_type(device=typing.cast(osam.types.Device, device))
     except Exception as e:
         print(f"{model_name} on {device}: {e}", file=sys.stderr)
         return [model_name, device, "fails to load"] + [""] * len(PROMPTS)
 
     try:
+        embedding = model.encode_image(image)  # also the warm-up
         encode_ms = _median_ms(lambda: model.encode_image(image), repeat)
-        embedding = model.encode_image(image)
     except NotImplementedError:
         encode_ms = None
         embedding = None
@@ -68,7 +72,7 @@ def _benchmark(
             prompt=prompt,
         )
         try:
-            model.generate(request)
+            model.generate(request)  # also the warm-up
         except ValueError:
             row.append("✗")
             continue
