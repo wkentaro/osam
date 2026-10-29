@@ -221,6 +221,8 @@ def _create_device_session(
     provider: str = providers[0] if isinstance(providers[0], str) else providers[0][0]
     if provider not in session.get_providers():
         raise RuntimeError(f"{provider} failed to load {blob.path}")
+    # Raise on a provider failure in run() too, instead of retrying on CPU.
+    session.disable_fallback()
     return session
 
 

@@ -120,6 +120,9 @@ def fake_sessions(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
         def get_providers(self) -> list[str]:
             return self._providers
 
+        def disable_fallback(self) -> None:
+            sessions.append((self._providers[0], "fallback disabled"))
+
     ort: Any = onnxruntime
     monkeypatch.setattr(ort, "InferenceSession", FakeSession)
     monkeypatch.setattr(
@@ -143,8 +146,13 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
         for path, providers in fake_sessions
         if providers[0][0] == "CoreMLExecutionProvider"
     ]
-    assert len(fake_sessions) == 3
     assert coreml == [Sam3._blobs["image_encoder"].path]
+    disabled = [p for p, providers in fake_sessions if providers == "fallback disabled"]
+    assert disabled == [
+        "CoreMLExecutionProvider",
+        "CPUExecutionProvider",
+        "CPUExecutionProvider",
+    ]
 
 
 def test_device_unavailable_raises(
