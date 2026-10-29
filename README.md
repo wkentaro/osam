@@ -95,7 +95,21 @@ fallback and serve every blob from the mirror only.
 
 ### Execution providers
 
-Inference runs on `CUDAExecutionProvider` when the installed onnxruntime has it,
+Pick a device per model with `--device` on the CLI or `device=` in Python:
+
+```bash
+osam run sam3 --image examples/_images/dogs.jpg --text dog --device coreml
+```
+
+```python
+model = osam.apis.get_model_type_by_name("sam3")(device="cuda")
+```
+
+`cpu`, `cuda` and `coreml` are supported. An unavailable device raises an
+error instead of falling back to CPU. With `coreml`, SAM3 runs only its image
+encoder on CoreML and the rest on CPU.
+
+Without a device, inference runs on `CUDAExecutionProvider` when the installed onnxruntime has it,
 otherwise on `CPUExecutionProvider`. To use another accelerator (CoreML on
 macOS, DirectML on Windows, TensorRT, ROCm), set `OSAM_ONNX_PROVIDERS` to a
 comma-separated list tried in the given order:
@@ -122,21 +136,25 @@ osam run efficientsam --image examples/_images/dogs.jpg --json
 # {"model": "efficientsam", "mask": "..."}
 
 # Give a prompt
-# 1. point prompt (background=0, foreground=1)
+# 1. point prompt (x,y[,label]: foreground=1 by default, background=0)
 osam run efficientsam --image examples/_images/dogs.jpg \
-  --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}' \
-  > efficientsam_point.png
-# 2. box prompt with sam2 (lt=2, rb=3)
+  --point 1439,504 --point 1439,1289 > efficientsam_point.png
+# 2. box prompt with sam2 (x1,y1,x2,y2)
 osam run sam2 --image examples/_images/dogs.jpg \
-  --prompt '{"points": [[1233, 376], [1649, 691]], "point_labels": [2, 3]}' \
-  > sam2_box.png
+  --box 1233,376,1649,691 > sam2_box.png
 # 3. text prompt
-osam run sam3 --image examples/_images/dogs.jpg --prompt '{"texts": ["dog"]}' \
-  > sam3_text.png
-# 4. box prompt with sam3 (lt=2, rb=3)
+osam run sam3 --image examples/_images/dogs.jpg --text dog > sam3_text.png
+# 4. box prompt with sam3
 osam run sam3 --image examples/_images/dogs.jpg \
-  --prompt '{"points": [[1233, 376], [1649, 691]], "point_labels": [2, 3]}' \
-  > sam3_box.png
+  --box 1233,376,1649,691 > sam3_box.png
+# 5. text prompt with sam3, excluding a region
+osam run sam3 --image examples/_images/dogs.jpg \
+  --text dog --negative-box 1200,400,1700,1400 > sam3_negative_box.png
+
+# Or give the whole prompt as JSON (point labels: background=0, foreground=1,
+# box=2,3, negative box=4,5)
+osam run sam2 --image examples/_images/dogs.jpg \
+  --prompt '{"points": [[1233, 376], [1649, 691]], "point_labels": [2, 3]}'
 ```
 
 <img src="assets/dogs_efficientsam.png" width="24%"> <img src="assets/dogs_sam2.png" width="24%"> <img src="assets/dogs_sam3.png" width="24%"> <img src="assets/dogs_sam3_box.png" width="24%">\
