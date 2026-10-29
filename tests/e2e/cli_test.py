@@ -67,3 +67,14 @@ def test_run_point_label_rejected():
     )
     assert result.returncode == 2
     assert "label must be 0 or 1" in result.stderr
+
+
+def test_run_filter_without_prompt_rejected():
+    result = subprocess.run(
+        ["osam", "run", "efficientsam:10m", "--image", str(image_path)]
+        + ["--score-threshold", "0.5"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "need --point, --box, --negative-box or --text" in result.stderr

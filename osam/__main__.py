@@ -188,6 +188,11 @@ def run(
                 xy += [box[:2], box[2:]]
                 labels += box_labels
         prompt_flags.update(points=xy, point_labels=labels)
+    if prompt_flags and not (texts or points or boxes or negative_boxes):
+        raise click.UsageError(
+            "--score-threshold, --iou-threshold and --max-annotations need "
+            "--point, --box, --negative-box or --text"
+        )
     if prompt is not None and prompt_flags:
         raise click.UsageError("--prompt can't be combined with other prompt options")
 
