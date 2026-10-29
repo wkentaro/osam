@@ -28,7 +28,7 @@ lint:
 
 # Run tests
 test *pytest_args="--numprocesses=auto":
-    uv run pytest -v tests/ "$@"
+    uv run pytest -v --dist loadgroup tests/ "$@"
 
 # Run tests with coverage
 coverage:
