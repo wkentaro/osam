@@ -15,33 +15,21 @@ class Sam3(types.Model):
     metadata = types.ModelMetadata(
         license_name="SAM License",
         license_url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/blob/895f3980b24a88249898cbe5a44571b15dec2a7f/LICENSE",
-        source_url="https://github.com/wkentaro/sam3-onnx/tree/8d9855a958127c6c1d2561c4b20ce3a3e1674387",
+        source_url="https://github.com/wkentaro/sam3-onnx/tree/e61ac895c1a2db25c60e5a590460cbe4713e446f",
     )
 
     _blobs = {
         "image_encoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/895f3980b24a88249898cbe5a44571b15dec2a7f/sam3_image_encoder.onnx",
-            hash="sha256:c6f3769e9d42573806c34b663d6100b3827a4c0ecba6f45dbf39b8f3906be725",
-            attachments=[
-                types.Blob(
-                    url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/895f3980b24a88249898cbe5a44571b15dec2a7f/sam3_image_encoder.onnx.data",
-                    hash="sha256:03bd50b0703e2b04e2193ca831b7f9d5ecf40bc5287cc59b1970f56ab800c995",
-                ),
-            ],
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.5.0/resolve/6ce19ce4483dd101b68a1f37b466b4e37ff2a1b2/sam3_image_encoder.onnx",
+            hash="sha256:348e15d031626656c992fd2cb26a3b2a3fe03e6f038ac62b997e3e24827748bb",
         ),
         "language_encoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/895f3980b24a88249898cbe5a44571b15dec2a7f/sam3_language_encoder.onnx",
-            hash="sha256:b3b465935c9bf4cf5efd950589741f3da5eec9e9bfe459576989cbe565331b53",
-            attachments=[
-                types.Blob(
-                    url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/895f3980b24a88249898cbe5a44571b15dec2a7f/sam3_language_encoder.onnx.data",
-                    hash="sha256:1b03dabc657c1f2887d1b8ce2a3537467d4c033ea1f8c8be141fbca55e4b95f7",
-                ),
-            ],
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.5.0/resolve/6ce19ce4483dd101b68a1f37b466b4e37ff2a1b2/sam3_language_encoder.onnx",
+            hash="sha256:41236a2adaa762d7403781fb549b9215086c0ee3b6ee49904ef3c2955043c169",
         ),
         "decoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/resolve/895f3980b24a88249898cbe5a44571b15dec2a7f/sam3_decoder.onnx",
-            hash="sha256:bbc216dbf3de4742f692c2a0a0fd215ea8957956002a05f28150040a88b5dc1a",
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.5.0/resolve/6ce19ce4483dd101b68a1f37b466b4e37ff2a1b2/sam3_decoder.onnx",
+            hash="sha256:83c08119ec82aba0277ac8fbf5d08f7300ad7421934da5f0809e53ab74891eee",
         ),
     }
 
@@ -127,39 +115,34 @@ class Sam3(types.Model):
         language_mask: NDArray[np.bool_] = cast(NDArray[np.bool_], outputs[0])
         language_features: NDArray[np.float32] = cast(NDArray[np.float32], outputs[1])
 
-        box_coords: NDArray[np.float32]
-        box_labels: NDArray[np.int64]
-        box_masks: NDArray[np.bool_]
-        if prompt.points is None and prompt.point_labels is None:
-            box_coords = np.array([[[0, 0, 0, 0]]], dtype=np.float32)
-            box_labels = np.array([[1]], dtype=np.int64)
-            box_masks = np.array([[True]], dtype=np.bool_)  # masked out
-        elif prompt.points is None or prompt.point_labels is None:
-            raise ValueError(
-                "both points and point_labels must be provided together: "
-                f"{prompt.points=}, {prompt.point_labels=}"
-            )
-        else:
-            if len(prompt.points) != 2 or prompt.points.shape[1] != 2:
+        # The decoder takes a fixed number of boxes, and masks out the unused ones.
+        (box_input,) = [
+            i
+            for i in self._inference_sessions["decoder"].get_inputs()
+            if i.name == "box_coords"
+        ]
+        max_boxes: int = box_input.shape[0]
+        box_coords: NDArray[np.float32] = np.zeros((max_boxes, 1, 4), np.float32)
+        box_labels: NDArray[np.int64] = np.ones((max_boxes, 1), np.int64)
+        box_masks: NDArray[np.bool_] = np.ones((1, max_boxes), np.bool_)
+        if prompt.points is not None and prompt.point_labels is not None:
+            num_boxes: int = len(prompt.points) // 2
+            if prompt.point_labels.tolist() != [2, 3] * num_boxes or num_boxes == 0:
                 raise ValueError(
-                    "only two point prompts (left-top, right-bottom) are supported: "
-                    f"{prompt.points=}, {prompt.point_labels=}"
+                    "only box prompts are supported, as point label pairs "
+                    f"(2: left-top, 3: right-bottom): {prompt.point_labels=}"
                 )
-            if prompt.point_labels.tolist() != [2, 3]:
-                raise ValueError(
-                    "only point labels for box prompts (2: left-top, 3: right-bottom) "
-                    f"are supported: {prompt.point_labels=}"
-                )
-            points_normalized: NDArray[np.float32] = (
-                prompt.points / [original_width, original_height]
-            ).astype(np.float32)
+            if num_boxes > max_boxes:
+                raise ValueError(f"at most {max_boxes} boxes are supported")
+            corners: NDArray[np.floating] = prompt.points.reshape(num_boxes, 2, 2) / [
+                original_width,
+                original_height,
+            ]
             # (x_center, y_center, width, height)
-            box_coords = np.r_[
-                (points_normalized[0] + points_normalized[1]) / 2,
-                points_normalized[1] - points_normalized[0],
-            ][None, None]
-            box_labels = np.array([[1]], dtype=np.int64)
-            box_masks = np.array([[False]], dtype=np.bool_)
+            box_coords[:num_boxes, 0] = np.c_[
+                corners.mean(axis=1), corners[:, 1] - corners[:, 0]
+            ]
+            box_masks[0, :num_boxes] = False
 
         outputs = self._inference_sessions["decoder"].run(
             None,

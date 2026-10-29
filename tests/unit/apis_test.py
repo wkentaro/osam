@@ -105,14 +105,22 @@ def test_generate_box_to_mask_sam2(model: str) -> None:
 
 
 @pytest.mark.parametrize("model", ["sam3:latest"])
-def test_generate_box_to_mask_sam3(model: str) -> None:
+@pytest.mark.parametrize(
+    "points",
+    [
+        [[1233, 376], [1649, 691]],
+        # two example dogs
+        [[1706, 613], [2227, 1438], [450, 551], [1059, 1421]],
+    ],
+)
+def test_generate_box_to_mask_sam3(model: str, points: list[list[int]]) -> None:
     image = imgviz.io.imread(image_path)
     request: types.GenerateRequest = types.GenerateRequest(
         model=model,
         image=image,
         prompt=types.Prompt(
-            points=np.array([[1233, 376], [1649, 691]], dtype=np.float32),
-            point_labels=np.array([2, 3], dtype=np.int32),
+            points=np.array(points, dtype=np.float32),
+            point_labels=np.array([2, 3] * (len(points) // 2), dtype=np.int32),
         ),
     )
     response: types.GenerateResponse = apis.generate(request=request)
