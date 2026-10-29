@@ -11,6 +11,7 @@ from collections.abc import Callable
 from typing import Any
 from typing import Dict
 from typing import Final
+from typing import Literal
 from typing import Optional
 from typing import Sequence
 from typing import cast
@@ -26,6 +27,21 @@ from ._image_embedding import ImageEmbedding
 from ._model_metadata import ModelMetadata
 
 _PROVIDERS_ENV: Final = "OSAM_ONNX_PROVIDERS"
+
+Device = Literal["cpu", "cuda", "coreml"]
+_Providers = Sequence[str | tuple[str, dict[str, str]]]
+
+_DEVICE_PROVIDERS: Final[dict[str, str]] = {
+    "cpu": "CPUExecutionProvider",
+    "cuda": "CUDAExecutionProvider",
+    "coreml": "CoreMLExecutionProvider",
+}
+# MLProgram supports more operators than the default NeuralNetwork, and leaving
+# out the Neural Engine keeps the GPU's accuracy and speed.
+_COREML_OPTIONS: Final[dict[str, str]] = {
+    "ModelFormat": "MLProgram",
+    "MLComputeUnits": "CPUAndGPU",
+}
 
 
 def resolve_providers() -> list[str]:
@@ -72,12 +88,39 @@ class Model(abc.ABC):
     metadata: ModelMetadata
 
     _blobs: Dict[str, Blob]
+    # Blobs that run on CoreML with device="coreml", all when None; the others
+    # run on CPU.
+    _coreml_blobs: Optional[frozenset[str]] = None
     _inference_sessions: Dict[str, onnxruntime.InferenceSession]
 
-    def __init__(self):
+    def __init__(self, device: Device | None = None):
+        """Load the model.
+
+        device: "cpu", "cuda", or "coreml". None picks OSAM_ONNX_PROVIDERS, or
+        CUDA when available, falling back to CPU.
+        """
         logger.debug("Initializing model {name}", name=self.name)
         self.pull()
-        self._inference_sessions = _load_inference_sessions(blobs=self._blobs)
+        if device is None:
+            self._inference_sessions = _load_inference_sessions(blobs=self._blobs)
+            return
+        self._inference_sessions = {
+            key: _create_device_session(
+                blob=blob,
+                providers=_device_providers(
+                    device=device,
+                    coreml=self._coreml_blobs is None or key in self._coreml_blobs,
+                ),
+            )
+            for key, blob in self._blobs.items()
+        }
+        logger.info(
+            "Initialized inference sessions on {device!r}: {providers!r}",
+            device=device,
+            providers={
+                k: s.get_providers()[0] for k, s in self._inference_sessions.items()
+            },
+        )
 
     @classmethod
     def pull(
@@ -144,18 +187,48 @@ def _load_inference_sessions(
     return inference_sessions
 
 
+def _device_providers(device: str, coreml: bool = True) -> _Providers:
+    if device not in _DEVICE_PROVIDERS:
+        raise ValueError(
+            f"device must be one of {', '.join(_DEVICE_PROVIDERS)}: {device!r}"
+        )
+    provider: str = _DEVICE_PROVIDERS[device]
+    if provider not in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
+        raise RuntimeError(f"{provider} is unavailable in the installed onnxruntime")
+    if device == "cpu" or (device == "coreml" and not coreml):
+        return ["CPUExecutionProvider"]
+    if device == "coreml":
+        return [(provider, _COREML_OPTIONS), "CPUExecutionProvider"]
+    return [provider, "CPUExecutionProvider"]
+
+
+def _create_session(blob: Blob, providers: _Providers) -> onnxruntime.InferenceSession:
+    sess_options = onnxruntime.SessionOptions()  # type: ignore[possibly-missing-attribute]
+    if "CUDAExecutionProvider" in providers and _setup_cuda():
+        sess_options.add_session_config_entry("session.use_env_allocators", "1")
+    return onnxruntime.InferenceSession(blob.path, sess_options, providers=providers)
+
+
+def _create_device_session(
+    blob: Blob, providers: _Providers
+) -> onnxruntime.InferenceSession:
+    session: onnxruntime.InferenceSession = _create_session(
+        blob=blob, providers=providers
+    )
+    # onnxruntime silently drops a provider it can't use.
+    provider: str = providers[0] if isinstance(providers[0], str) else providers[0][0]
+    if provider not in session.get_providers():
+        raise RuntimeError(f"{provider} failed to load {blob.path}")
+    return session
+
+
 def _load_inference_session(
     blob: Blob, providers: list[str] | None = None
 ) -> onnxruntime.InferenceSession:
     try:
         if providers is None:
             providers = resolve_providers()
-        sess_options = onnxruntime.SessionOptions()  # type: ignore[possibly-missing-attribute]
-        if "CUDAExecutionProvider" in providers and _setup_cuda():
-            sess_options.add_session_config_entry("session.use_env_allocators", "1")
-        inference_session = onnxruntime.InferenceSession(
-            blob.path, sess_options, providers=providers
-        )
+        inference_session = _create_session(blob=blob, providers=providers)
     except Exception as e:
         # Even though there is fallback in onnxruntime, it won't always work.
         # e.g., CUDA is installed and CUDA_PATH is set, but CUDA_VISIBLE_DEVICES

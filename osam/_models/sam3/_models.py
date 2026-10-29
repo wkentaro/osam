@@ -14,9 +14,12 @@ class Sam3(types.Model):
     name = "sam3:latest"
     metadata = types.ModelMetadata(
         license_name="SAM License",
-        license_url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/blob/895f3980b24a88249898cbe5a44571b15dec2a7f/LICENSE",
+        license_url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.5.0/blob/4160188c62b17bcdc8512e0fa2b6d2b53608af3d/LICENSE",
         source_url="https://github.com/wkentaro/sam3-onnx/tree/e61ac895c1a2db25c60e5a590460cbe4713e446f",
     )
+
+    # The decoders take longer to compile for CoreML than it saves them.
+    _coreml_blobs = frozenset({"image_encoder"})
 
     _blobs = {
         "image_encoder": types.Blob(
