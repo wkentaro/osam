@@ -11,6 +11,7 @@ encoding is timed once per model; prompts reuse the image embedding.
 import argparse
 import pathlib
 import statistics
+import sys
 import time
 import typing
 
@@ -45,7 +46,11 @@ def _median_ms(fn: typing.Callable[[], object], repeat: int) -> float:
 def _benchmark(
     model_name: str, device: str, image: np.ndarray, repeat: int
 ) -> list[str]:
-    model = osam.apis.get_model_type_by_name(model_name)(device=device)
+    try:
+        model = osam.apis.get_model_type_by_name(model_name)(device=device)
+    except Exception as e:
+        print(f"{model_name} on {device}: {e}", file=sys.stderr)
+        return [model_name, device, "fails to load"] + [""] * len(PROMPTS)
 
     try:
         encode_ms = _median_ms(lambda: model.encode_image(image), repeat)
