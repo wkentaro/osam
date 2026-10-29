@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import abc
+import contextlib
+import functools
 import hashlib
 import os
+import sys
 import threading
 from collections.abc import Callable
+from typing import Any
 from typing import Dict
 from typing import Final
 from typing import Optional
 from typing import Sequence
+from typing import cast
 
 import numpy as np
 import onnxruntime
@@ -31,6 +36,35 @@ def resolve_providers() -> list[str]:
     if "CUDAExecutionProvider" in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
     return ["CPUExecutionProvider"]
+
+
+@functools.cache
+def _setup_cuda() -> bool:
+    if "CUDAExecutionProvider" not in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
+        return False
+    ort = cast(Any, onnxruntime)  # ty cannot see these members
+    try:
+        # Load the CUDA libraries from the nvidia-* wheels of osam[gpu]. It
+        # prints failures to stdout, which would break `osam run --json`.
+        with contextlib.redirect_stdout(sys.stderr):
+            ort.preload_dlls()
+        # Share one CUDA arena across sessions. With an arena per session,
+        # SAM3's three sessions run out of memory on a 12 GB GPU.
+        ort.create_and_register_allocator_v2(
+            "CUDAExecutionProvider",
+            ort.OrtMemoryInfo(
+                "Cuda",
+                ort.OrtAllocatorType.ORT_ARENA_ALLOCATOR,
+                0,
+                ort.OrtMemType.DEFAULT,
+            ),
+            {},
+            ort.OrtArenaCfg({"arena_extend_strategy": 1}),  # kSameAsRequested
+        )
+    except Exception as e:
+        logger.warning("Failed to set up a shared CUDA arena: {e}", e=e)
+        return False
+    return True
 
 
 class Model(abc.ABC):
@@ -116,7 +150,12 @@ def _load_inference_session(
     try:
         if providers is None:
             providers = resolve_providers()
-        inference_session = onnxruntime.InferenceSession(blob.path, providers=providers)
+        sess_options = onnxruntime.SessionOptions()  # type: ignore[possibly-missing-attribute]
+        if "CUDAExecutionProvider" in providers and _setup_cuda():
+            sess_options.add_session_config_entry("session.use_env_allocators", "1")
+        inference_session = onnxruntime.InferenceSession(
+            blob.path, sess_options, providers=providers
+        )
     except Exception as e:
         # Even though there is fallback in onnxruntime, it won't always work.
         # e.g., CUDA is installed and CUDA_PATH is set, but CUDA_VISIBLE_DEVICES
