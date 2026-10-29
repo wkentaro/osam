@@ -75,6 +75,41 @@ Here are models that can be downloaded:
 
 PS. `sam`, `efficientsam` is equivalent to `sam:latest`, `efficientsam:latest`.
 
+### Prompts
+
+| Model | Point | Box | Negative box | Text |
+| ------------ | :---: | :---: | :---: | :---: |
+| SAM | ✓ | ✓ | | |
+| SAM2 | ✓ | ✓ | | |
+| SAM3 | ✓ | ✓ | ✓ | ✓ |
+| EfficientSAM | ✓ | ✓ | | |
+| YOLO-World | | | | ✓ |
+
+### Speed
+
+Milliseconds to encode the image + run one prompt (point; text for SAM3 and
+YOLO-World, which has no separate encoding), median of 5 runs after a warm-up,
+excluding model loading:
+
+| Model | CPU<br>i9-12900K | CUDA<br>RTX 3080 Ti | CPU<br>Apple M5 | CoreML<br>Apple M5 |
+| ---------------- | ---: | ---: | ---: | ---: |
+| SAM 100M | 1255 + 32 | 692 + 20 | 2267 + 47 | 257678 + 84 |
+| SAM 300M | 2633 + 33 | 2125 + 23 | 6778 + 53 | > 15 min |
+| SAM 600M | 4165 + 34 | 4197 + 27 | 11023 + 52 | > 15 min |
+| SAM2 Tiny | 569 + 40 | 65 + 16 | 1627 + 59 | 277 + 66 |
+| SAM2 Small | 651 + 44 | 74 + 17 | 2119 + 58 | 320 + 61 |
+| SAM2 BasePlus | 1237 + 50 | 104 + 17 | 2923 + 51 | 570 + 65 |
+| SAM2 Large | 2414 + 43 | 151 + 17 | 7596 + 48 | 1281 + 60 |
+| SAM3 | 6512 + 1174 | 348 + 75 | 31904 + 3024 | 3362 + 2917 |
+| EfficientSAM 10M | 399 + 45 | 55 + 16 | 781 + 34 | fails to load |
+| EfficientSAM 30M | 948 + 46 | 74 + 15 | 1767 + 35 | fails to load |
+| YOLO-World XL | 774 | 42 | 1829 | fails to load |
+
+Measured on `examples/_images/dogs.jpg` (2560x1600) with onnxruntime 1.23.2
+(onnxruntime-gpu 1.31.1 for CUDA).
+Run `python examples/benchmark.py --device cpu --device cuda` to measure on
+your machine.
+
 ### Custom download endpoint
 
 Models are downloaded from their canonical URLs by default. To download from a
