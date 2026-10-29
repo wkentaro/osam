@@ -52,9 +52,9 @@ def help(ctx, subcommand):
         click.echo(subcommand_obj.get_help(ctx))
 
 
-@cli.command(help="List models")
+@cli.command(name="list", help="List models")
 @click.option("--all", "-a", "show_all", is_flag=True, help="show all models")
-def list(show_all):
+def list_(show_all):
     rows = []
     for model_type in apis.registered_model_types:
         size = model_type.get_size()
