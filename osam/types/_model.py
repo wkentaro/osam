@@ -100,6 +100,8 @@ class Model(abc.ABC):
         CUDA when available, falling back to CPU.
         """
         logger.debug("Initializing model {name}", name=self.name)
+        if device is not None:
+            _device_providers(device=device)  # fail before downloading
         self.pull()
         if device is None:
             self._inference_sessions = _load_inference_sessions(blobs=self._blobs)

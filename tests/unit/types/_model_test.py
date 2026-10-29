@@ -147,8 +147,15 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
     assert coreml == [Sam3._blobs["image_encoder"].path]
 
 
-def test_device_unavailable_raises(fake_sessions: list[tuple[str, Any]]) -> None:
+def test_device_unavailable_raises(
+    monkeypatch: pytest.MonkeyPatch, fake_sessions: list[tuple[str, Any]]
+) -> None:
     from osam._models.sam3._models import Sam3
+
+    def pull(cls: Any) -> None:
+        raise AssertionError("downloaded before checking the device")
+
+    monkeypatch.setattr(_model.Model, "pull", classmethod(pull))
 
     with pytest.raises(RuntimeError, match="CUDAExecutionProvider is unavailable"):
         Sam3(device="cuda")
