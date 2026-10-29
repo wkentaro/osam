@@ -57,11 +57,13 @@ def generate(request: types.GenerateRequest) -> types.GenerateResponse:
     global running_model
 
     model_type = get_model_type_by_name(name=request.model)
-    if running_model is None or running_model.name != model_type.name:
-        running_model = model_type()
-    assert running_model is not None
+    model: types.Model | None = running_model
+    if model is None or model.name != model_type.name:
+        # Release the previous model first, so two models are never loaded at once.
+        model = running_model = None
+        model = running_model = model_type()
 
-    response: types.GenerateResponse = running_model.generate(request=request)
+    response: types.GenerateResponse = model.generate(request=request)
     return response
 
 
