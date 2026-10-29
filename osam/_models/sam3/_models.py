@@ -50,7 +50,10 @@ class Sam3(types.Model):
         original_height: int = image.shape[0]
         original_width: int = image.shape[1]
 
-        pil_image: PIL.Image.Image = PIL.Image.fromarray(image).resize((1008, 1008))
+        # SAM3 resizes with bilinear interpolation, not PIL's default bicubic.
+        pil_image: PIL.Image.Image = PIL.Image.fromarray(image).resize(
+            (1008, 1008), resample=PIL.Image.Resampling.BILINEAR
+        )
         image_input: NDArray[np.uint8] = np.asarray(pil_image).transpose(
             2, 0, 1
         )  # HWC → CHW
