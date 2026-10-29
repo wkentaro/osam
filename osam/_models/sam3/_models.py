@@ -130,10 +130,16 @@ class Sam3(types.Model):
         box_masks: NDArray[np.bool_] = np.ones((1, max_boxes), np.bool_)
         if prompt.points is not None and prompt.point_labels is not None:
             num_boxes: int = len(prompt.points) // 2
-            if prompt.point_labels.tolist() != [2, 3] * num_boxes or num_boxes == 0:
+            pairs: list[list[int]] = (
+                []
+                if len(prompt.points) % 2
+                else prompt.point_labels.reshape(-1, 2).tolist()
+            )
+            if not pairs or any(pair not in ([2, 3], [4, 5]) for pair in pairs):
                 raise ValueError(
                     "only box prompts are supported, as point label pairs "
-                    f"(2: left-top, 3: right-bottom): {prompt.point_labels=}"
+                    "(2, 3: positive left-top, right-bottom; 4, 5: negative): "
+                    f"{prompt.point_labels=}"
                 )
             if num_boxes > max_boxes:
                 raise ValueError(f"at most {max_boxes} boxes are supported")
@@ -145,6 +151,7 @@ class Sam3(types.Model):
             box_coords[:num_boxes, 0] = np.c_[
                 corners.mean(axis=1), corners[:, 1] - corners[:, 0]
             ]
+            box_labels[:num_boxes, 0] = [pair == [2, 3] for pair in pairs]
             box_masks[0, :num_boxes] = False
 
         outputs = self._inference_sessions["decoder"].run(

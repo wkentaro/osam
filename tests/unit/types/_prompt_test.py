@@ -61,3 +61,11 @@ def test_points_without_point_labels_is_rejected() -> None:
 def test_point_labels_outside_allowed_set_is_rejected() -> None:
     with pytest.raises(pydantic.ValidationError):
         Prompt(points=np.array([[1.0, 2.0]]), point_labels=np.array([7]))
+
+
+def test_negative_box_labels_are_accepted() -> None:
+    prompt = Prompt(
+        points=np.array([[1.0, 2.0], [3.0, 4.0]]), point_labels=np.array([4, 5])
+    )
+    assert prompt.point_labels is not None
+    assert prompt.point_labels.tolist() == [4, 5]

@@ -10,7 +10,8 @@ class Prompt(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     points: Optional[np.ndarray] = pydantic.Field(default=None)
-    # point_labels: ignore=-1, background=0, foreground=1, box_lt=2, box_rb=3
+    # point_labels: background=0, foreground=1, box_lt=2, box_rb=3,
+    # negative_box_lt=4, negative_box_rb=5
     point_labels: Optional[np.ndarray] = pydantic.Field(default=None)
     texts: Optional[list[str]] = pydantic.Field(default=None)
 
@@ -60,8 +61,8 @@ class Prompt(pydantic.BaseModel):
             point_labels = np.array(point_labels, dtype=int)
         if point_labels.ndim != 1:
             raise ValueError("point_labels must be 1-dimensional")
-        if not set(np.unique(point_labels).tolist()).issubset({0, 1, 2, 3}):
-            raise ValueError("point_labels must contain only 0, 1, 2, or 3")
+        if not set(np.unique(point_labels).tolist()).issubset({0, 1, 2, 3, 4, 5}):
+            raise ValueError("point_labels must contain only 0, 1, 2, 3, 4, or 5")
         return point_labels
 
     @pydantic.model_validator(mode="after")

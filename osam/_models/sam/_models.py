@@ -69,6 +69,8 @@ class SamBase(types.Model):
 
         if prompt.points is None or prompt.point_labels is None:
             raise ValueError(f"Prompt must contain points and point_labels: {prompt!r}")
+        if np.isin(prompt.point_labels, [4, 5]).any():
+            raise ValueError(f"{self.name} does not support negative boxes (4, 5)")
 
         mask: npt.NDArray[np.bool_] = self._generate_mask_from_image_embedding(
             image_embedding=image_embedding, prompt=prompt
