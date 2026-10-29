@@ -1,5 +1,6 @@
 from typing import Final
 
+import pytest
 from loguru import logger
 
 import osam
@@ -27,3 +28,11 @@ def pytest_configure(config):
             continue
         model.pull()
     logger.info("Finished pulling all registered model types")
+
+
+@pytest.hookimpl(tryfirst=True)  # before xdist reads the groups
+def pytest_collection_modifyitems(items):
+    # Two SAM3 models don't fit in a CI runner's memory, so one worker runs them.
+    for item in items:
+        if "sam3" in item.nodeid:
+            item.add_marker(pytest.mark.xdist_group("sam3"))
