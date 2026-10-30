@@ -100,7 +100,7 @@ excluding model loading:
 | SAM2 Small | 651 + 44 | 74 + 17 | 2119 + 58 | 320 + 61 |
 | SAM2 BasePlus | 1237 + 50 | 104 + 17 | 2923 + 51 | 570 + 65 |
 | SAM2 Large | 2414 + 43 | 151 + 17 | 7596 + 48 | 1281 + 60 |
-| SAM3 | 6512 + 1174 | 348 + 75 | 31904 + 3024 | 3362 + 2917 |
+| SAM3 | 6512 + 1174 | 348 + 75 | 15233 + 1426 | 2425 + 373 |
 | EfficientSAM 10M | 399 + 45 | 55 + 16 | 781 + 34 | fails to load |
 | EfficientSAM 30M | 948 + 46 | 74 + 15 | 1767 + 35 | fails to load |
 | YOLO-World XL | 774 | 42 | 1829 | fails to load |
@@ -109,6 +109,8 @@ Measured on `examples/_images/dogs.jpg` (2560x1600) with onnxruntime 1.23.2
 (onnxruntime-gpu 1.31.1 for CUDA).
 Run `python examples/benchmark.py --device cpu --device cuda` to measure on
 your machine.
+See [docs/benchmark.md](docs/benchmark.md) for SAM3 per prompt, load times
+and CPU/CoreML parity.
 
 ### Custom download endpoint
 
