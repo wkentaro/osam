@@ -200,3 +200,75 @@ def test_non_maximum_suppression_runs_without_downloading(
     assert labels.tolist() == [0, 0, 1, 1]
     assert kept_scores.tolist() == pytest.approx([0.9, 0.3, 0.7, 0.6])
     assert kept_boxes.tolist() == boxes[[0, 2, 2, 3]].tolist()
+
+
+def test_generate_negative_box_sam3() -> None:
+    image = imgviz.io.imread(image_path)
+    # A positive box on one dog and a negative box on another
+    request: types.GenerateRequest = types.GenerateRequest(
+        model="sam3:latest",
+        image=image,
+        prompt=types.Prompt(
+            points=np.array(
+                [[1706, 613], [2227, 1438], [450, 551], [1059, 1421]],
+                dtype=np.float32,
+            ),
+            point_labels=np.array([2, 3, 4, 5], dtype=np.int32),
+        ),
+    )
+    response: types.GenerateResponse = apis.generate(request=request)
+
+    [annotation] = response.annotations
+    assert annotation.bounding_box is not None
+    assert annotation.bounding_box.xmin > 1059
+
+
+def test_generate_negative_box_rejected_by_sam2() -> None:
+    image = imgviz.io.imread(image_path)
+    request: types.GenerateRequest = types.GenerateRequest(
+        model="sam2:tiny",
+        image=image,
+        prompt=types.Prompt(
+            points=np.array([[450, 551], [1059, 1421]], dtype=np.float32),
+            point_labels=np.array([4, 5], dtype=np.int32),
+        ),
+    )
+    with pytest.raises(ValueError, match="does not support negative boxes"):
+        apis.generate(request=request)
+
+
+def test_generate_point_to_mask_sam3() -> None:
+    image = imgviz.io.imread(image_path)
+    request: types.GenerateRequest = types.GenerateRequest(
+        model="sam3:latest",
+        image=image,
+        prompt=types.Prompt(
+            points=np.array([[1439, 504], [1439, 1289]], dtype=np.float32),
+            point_labels=np.array([1, 1], dtype=np.int32),
+        ),
+    )
+    response: types.GenerateResponse = apis.generate(request=request)
+
+    [annotation] = response.annotations
+    assert annotation.text is None
+    assert annotation.score is not None and annotation.score > 0.5
+    assert annotation.mask is not None
+    assert annotation.bounding_box is not None
+    bb = annotation.bounding_box
+    assert bb.xmin < 1439 < bb.xmax
+    assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
+
+
+def test_generate_point_with_text_rejected_by_sam3() -> None:
+    image = imgviz.io.imread(image_path)
+    request: types.GenerateRequest = types.GenerateRequest(
+        model="sam3:latest",
+        image=image,
+        prompt=types.Prompt(
+            texts=["dog"],
+            points=np.array([[1439, 504]], dtype=np.float32),
+            point_labels=np.array([1], dtype=np.int32),
+        ),
+    )
+    with pytest.raises(ValueError, match="can't be combined with text"):
+        apis.generate(request=request)

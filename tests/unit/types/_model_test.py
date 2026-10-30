@@ -106,3 +106,80 @@ def test_load_session_keeps_providers_when_cuda_setup_fails(
     assert used_providers == providers
     with pytest.raises(RuntimeError, match="does not have configuration"):
         sess_options.get_session_config_entry("session.use_env_allocators")
+
+
+@pytest.fixture
+def fake_sessions(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
+    sessions: list[tuple[str, Any]] = []
+
+    class FakeSession:
+        def __init__(self, path: str, sess_options: Any, providers: Any) -> None:
+            sessions.append((path, providers))
+            self._providers = [p if isinstance(p, str) else p[0] for p in providers]
+
+        def get_providers(self) -> list[str]:
+            return self._providers
+
+        def disable_fallback(self) -> None:
+            sessions.append((self._providers[0], "fallback disabled"))
+
+    ort: Any = onnxruntime
+    monkeypatch.setattr(ort, "InferenceSession", FakeSession)
+    monkeypatch.setattr(
+        ort,
+        "get_available_providers",
+        lambda: ["CoreMLExecutionProvider", "CPUExecutionProvider"],
+    )
+    monkeypatch.setattr(_model.Model, "pull", classmethod(lambda cls: None))
+    return sessions
+
+
+def test_device_coreml_runs_only_coreml_blobs_on_coreml(
+    fake_sessions: list[tuple[str, Any]],
+) -> None:
+    from osam._models.sam3._models import Sam3
+
+    Sam3(device="coreml")
+
+    coreml = [
+        path
+        for path, providers in fake_sessions
+        if providers[0][0] == "CoreMLExecutionProvider"
+    ]
+    assert coreml == [Sam3._blobs["image_encoder"].path]
+    disabled = [p for p, providers in fake_sessions if providers == "fallback disabled"]
+    assert disabled == [
+        "CoreMLExecutionProvider",
+        "CPUExecutionProvider",
+        "CPUExecutionProvider",
+        "CPUExecutionProvider",
+    ]
+
+
+def test_device_unavailable_raises(
+    monkeypatch: pytest.MonkeyPatch, fake_sessions: list[tuple[str, Any]]
+) -> None:
+    from osam._models.sam3._models import Sam3
+
+    def pull(cls: Any) -> None:
+        raise AssertionError("downloaded before checking the device")
+
+    monkeypatch.setattr(_model.Model, "pull", classmethod(pull))
+
+    with pytest.raises(RuntimeError, match="CUDAExecutionProvider is unavailable"):
+        Sam3(device="cuda")
+    with pytest.raises(ValueError, match="device must be one of"):
+        Sam3(device="gpu")  # type: ignore[invalid-argument-type]
+
+
+def test_device_dropped_provider_raises(
+    monkeypatch: pytest.MonkeyPatch, fake_sessions: list[tuple[str, Any]]
+) -> None:
+    from osam._models.sam3._models import Sam3
+
+    ort: Any = onnxruntime
+    monkeypatch.setattr(
+        ort.InferenceSession, "get_providers", lambda self: ["CPUExecutionProvider"]
+    )
+    with pytest.raises(RuntimeError, match="CoreMLExecutionProvider failed to load"):
+        Sam3(device="coreml")

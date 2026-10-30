@@ -1,5 +1,6 @@
 from typing import cast
 
+import imgviz
 import numpy as np
 import PIL.Image
 from loguru import logger
@@ -14,9 +15,12 @@ class Sam3(types.Model):
     name = "sam3:latest"
     metadata = types.ModelMetadata(
         license_name="SAM License",
-        license_url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.3.0/blob/895f3980b24a88249898cbe5a44571b15dec2a7f/LICENSE",
+        license_url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.5.0/blob/4160188c62b17bcdc8512e0fa2b6d2b53608af3d/LICENSE",
         source_url="https://github.com/wkentaro/sam3-onnx/tree/e61ac895c1a2db25c60e5a590460cbe4713e446f",
     )
+
+    # The decoders take longer to compile for CoreML than it saves them.
+    _coreml_blobs = frozenset({"image_encoder"})
 
     _blobs = {
         "image_encoder": types.Blob(
@@ -30,6 +34,10 @@ class Sam3(types.Model):
         "decoder": types.Blob(
             url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.5.0/resolve/6ce19ce4483dd101b68a1f37b466b4e37ff2a1b2/sam3_decoder.onnx",
             hash="sha256:83c08119ec82aba0277ac8fbf5d08f7300ad7421934da5f0809e53ab74891eee",
+        ),
+        "point_decoder": types.Blob(
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.5.0/resolve/6ce19ce4483dd101b68a1f37b466b4e37ff2a1b2/sam3_point_decoder.onnx",
+            hash="sha256:bf85d055c0e3fd29bf536fd750945664004b231f39e30f2d83dea3c2244ffcd5",
         ),
     }
 
@@ -63,11 +71,21 @@ class Sam3(types.Model):
             NDArray[np.float32], outputs[5]
         ).squeeze(axis=0)
 
+        # image_embeddings, high_res_features1, high_res_features2 for points
+        point_features: list[NDArray[np.float32]] = [
+            cast(NDArray[np.float32], output).squeeze(axis=0) for output in outputs[6:9]
+        ]
+
         return types.ImageEmbedding(
             original_height=original_height,
             original_width=original_width,
             embedding=backbone_fpn_0,
-            extra_features=[backbone_fpn_1, backbone_fpn_2, vision_pos_enc_2],
+            extra_features=[
+                backbone_fpn_1,
+                backbone_fpn_2,
+                vision_pos_enc_2,
+                *point_features,
+            ],
         )
 
     def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
@@ -95,6 +113,20 @@ class Sam3(types.Model):
             )
         else:
             prompt = request.prompt
+
+        if (
+            prompt.points is not None
+            and prompt.point_labels is not None
+            and len(prompt.point_labels) > 0
+            and np.isin(prompt.point_labels, [0, 1]).all()
+        ):
+            if prompt.texts:
+                raise ValueError("point prompts can't be combined with text")
+            return self._generate_from_points(
+                image_embedding=image_embedding,
+                points=prompt.points,
+                point_labels=prompt.point_labels,
+            )
 
         text_prompt: str = "visual"
         if prompt.texts:
@@ -127,10 +159,17 @@ class Sam3(types.Model):
         box_masks: NDArray[np.bool_] = np.ones((1, max_boxes), np.bool_)
         if prompt.points is not None and prompt.point_labels is not None:
             num_boxes: int = len(prompt.points) // 2
-            if prompt.point_labels.tolist() != [2, 3] * num_boxes or num_boxes == 0:
+            pairs: list[list[int]] = (
+                []
+                if len(prompt.points) % 2
+                else prompt.point_labels.reshape(-1, 2).tolist()
+            )
+            if not pairs or any(pair not in ([2, 3], [4, 5]) for pair in pairs):
                 raise ValueError(
-                    "only box prompts are supported, as point label pairs "
-                    f"(2: left-top, 3: right-bottom): {prompt.point_labels=}"
+                    "points (labels 0, 1) or boxes as point label pairs "
+                    "(2, 3: positive left-top, right-bottom; 4, 5: negative) "
+                    "are supported, not both: "
+                    f"{prompt.point_labels=}"
                 )
             if num_boxes > max_boxes:
                 raise ValueError(f"at most {max_boxes} boxes are supported")
@@ -142,6 +181,7 @@ class Sam3(types.Model):
             box_coords[:num_boxes, 0] = np.c_[
                 corners.mean(axis=1), corners[:, 1] - corners[:, 0]
             ]
+            box_labels[:num_boxes, 0] = [pair == [2, 3] for pair in pairs]
             box_masks[0, :num_boxes] = False
 
         outputs = self._inference_sessions["decoder"].run(
@@ -207,6 +247,68 @@ class Sam3(types.Model):
                 )
             )
 
+        return types.GenerateResponse(
+            model=self.name,
+            image_embedding=image_embedding,
+            annotations=annotations,
+        )
+
+    def _generate_from_points(
+        self,
+        image_embedding: types.ImageEmbedding,
+        points: NDArray[np.floating],
+        point_labels: NDArray[np.integer],
+    ) -> types.GenerateResponse:
+        if len(image_embedding.extra_features) < 6:
+            raise ValueError(
+                "point prompts need an image embedding from this osam version, "
+                "encode the image again"
+            )
+        height: int = image_embedding.original_height
+        width: int = image_embedding.original_width
+        inputs: dict[str, NDArray] = {
+            "image_embeddings": image_embedding.extra_features[3][None],
+            "high_res_features1": image_embedding.extra_features[4][None],
+            "high_res_features2": image_embedding.extra_features[5][None],
+            "point_coords": (points / [width, height] * 1008).astype(np.float32)[None],
+            "point_labels": point_labels.astype(np.float32)[None],
+            "mask_input": np.zeros((1, 1, 288, 288), dtype=np.float32),
+            "has_mask_input": np.array([0], dtype=np.float32),
+        }
+        session = self._inference_sessions["point_decoder"]
+        iou_predictions, low_res_masks = cast(
+            list[NDArray[np.float32]], session.run(None, inputs)
+        )
+        # Refine with the best mask from the first pass as the mask prompt.
+        inputs["mask_input"] = low_res_masks[:, [iou_predictions[0].argmax()]]
+        inputs["has_mask_input"] = np.array([1], dtype=np.float32)
+        iou_predictions, low_res_masks = cast(
+            list[NDArray[np.float32]], session.run(None, inputs)
+        )
+        best: int = int(iou_predictions[0].argmax())
+
+        # ponytail: no filling of small background holes, unlike SAM2's
+        # postprocessing; add it if masks show pinholes.
+        mask: NDArray[np.bool_] = (
+            np.asarray(
+                PIL.Image.fromarray(low_res_masks[0, best]).resize(
+                    (width, height), resample=PIL.Image.Resampling.BILINEAR
+                )
+            )
+            > 0
+        )
+        annotations: list[types.Annotation] = []
+        if mask.any():
+            ymin, xmin, ymax, xmax = imgviz.masks_to_bboxes(masks=[mask])[0].astype(int)
+            annotations.append(
+                types.Annotation(
+                    mask=mask[ymin : ymax + 1, xmin : xmax + 1],
+                    bounding_box=types.BoundingBox(
+                        xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax
+                    ),
+                    score=float(iou_predictions[0, best]),
+                )
+            )
         return types.GenerateResponse(
             model=self.name,
             image_embedding=image_embedding,
