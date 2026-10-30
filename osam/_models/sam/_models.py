@@ -36,6 +36,12 @@ class SamBase(types.Model):
     ) -> npt.NDArray[np.bool_]:
         pass
 
+    def default_prompt(self, height: int, width: int) -> types.Prompt:
+        return types.Prompt(
+            points=np.array([[width / 2, height / 2]], dtype=np.float32),
+            point_labels=np.array([1], dtype=np.int32),
+        )
+
     def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
         image_embedding: types.ImageEmbedding
         if request.image_embedding is None:
@@ -47,17 +53,9 @@ class SamBase(types.Model):
 
         prompt: types.Prompt
         if request.prompt is None:
-            prompt = types.Prompt(
-                points=np.array(
-                    [
-                        [
-                            image_embedding.original_width / 2,
-                            image_embedding.original_height / 2,
-                        ]
-                    ],
-                    dtype=np.float32,
-                ),
-                point_labels=np.array([1], dtype=np.int32),
+            prompt = self.default_prompt(
+                height=image_embedding.original_height,
+                width=image_embedding.original_width,
             )
             logger.warning(
                 "Prompt is not given, so using the center point as prompt: {prompt!r}",

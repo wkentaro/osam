@@ -20,9 +20,15 @@ class _YoloWorld(types.Model):
 
     _input_size: int
 
+    def default_prompt(self, height: int, width: int) -> types.Prompt:
+        return types.Prompt(texts=["anything"])
+
     def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
+        if request.image is None:
+            raise ValueError(f"request.image is required: request={request!r}")
         if request.prompt is None:
-            prompt = types.Prompt(texts=["anything"])
+            height, width = request.image.shape[:2]
+            prompt = self.default_prompt(height=height, width=width)
             logger.warning(
                 "Prompt is not given, so using 'anything' as prompt: {prompt!r}",
                 prompt=prompt,
@@ -39,8 +45,6 @@ class _YoloWorld(types.Model):
             text_features, ord=2, axis=1, keepdims=True
         )
         #
-        if request.image is None:
-            raise ValueError(f"request.image is required: request={request!r}")
         transformed_image, original_image_hw, padding_hw = _transform_image(
             image=request.image, input_size=self._input_size
         )

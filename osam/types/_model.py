@@ -25,6 +25,7 @@ from ._generate import GenerateRequest
 from ._generate import GenerateResponse
 from ._image_embedding import ImageEmbedding
 from ._model_metadata import ModelMetadata
+from ._prompt import Prompt
 
 _PROVIDERS_ENV: Final = "OSAM_ONNX_PROVIDERS"
 
@@ -164,6 +165,10 @@ class Model(abc.ABC):
         return modified_at
 
     def encode_image(self, image: np.ndarray) -> ImageEmbedding:
+        raise NotImplementedError
+
+    def default_prompt(self, height: int, width: int) -> Prompt:
+        """Return the prompt used when a request gives none."""
         raise NotImplementedError
 
     @abc.abstractmethod

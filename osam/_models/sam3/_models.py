@@ -88,6 +88,9 @@ class Sam3(types.Model):
             ],
         )
 
+    def default_prompt(self, height: int, width: int) -> types.Prompt:
+        return types.Prompt(texts=["visual"])
+
     def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
         image_embedding: types.ImageEmbedding
         if request.image_embedding is not None:
@@ -107,7 +110,7 @@ class Sam3(types.Model):
 
         prompt: types.Prompt
         if request.prompt is None:
-            prompt = types.Prompt(texts=["visual"])
+            prompt = self.default_prompt(height=original_height, width=original_width)
             logger.warning(
                 "Prompt is not given, so using 'visual' as prompt: {!r}", prompt
             )
