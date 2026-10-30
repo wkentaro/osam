@@ -190,6 +190,9 @@ osam run sam3 --image examples/_images/dogs.jpg \
 # box=2,3, negative box=4,5)
 osam run sam2 --image examples/_images/dogs.jpg \
   --prompt '{"points": [[1233, 376], [1649, 691]], "point_labels": [2, 3]}'
+# from a file (@prompt.json) or stdin (-), with a threshold on top
+osam run sam3 --image examples/_images/dogs.jpg --prompt @prompt.json \
+  --score-threshold 0.5
 ```
 
 <img src="assets/dogs_efficientsam.png" width="24%"> <img src="assets/dogs_sam2.png" width="24%"> <img src="assets/dogs_sam3.png" width="24%"> <img src="assets/dogs_sam3_box.png" width="24%">\
