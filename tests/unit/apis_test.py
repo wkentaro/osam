@@ -125,6 +125,7 @@ def test_generate_box_to_mask_sam2(model: str) -> None:
         assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
 
 
+@pytest.mark.extra
 @pytest.mark.parametrize("model", ["sam3:latest"])
 @pytest.mark.parametrize(
     "points",
@@ -224,6 +225,7 @@ def test_non_maximum_suppression_runs_without_downloading(
     assert kept_boxes.tolist() == boxes[[0, 2, 2, 3]].tolist()
 
 
+@pytest.mark.extra
 def test_generate_negative_box_sam3(
     sam3_text_response: types.GenerateResponse,
 ) -> None:
