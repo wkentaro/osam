@@ -211,7 +211,10 @@ def _device_providers(
         options: dict[str, str] = dict(_COREML_OPTIONS)
         if coreml_cache_path is not None:
             # Compiling takes seconds per model; reuse it on the next load.
-            options["ModelCacheDirectory"] = coreml_cache_path
+            # Models compiled by another onnxruntime version fail to run.
+            options["ModelCacheDirectory"] = os.path.join(
+                coreml_cache_path, onnxruntime.__version__
+            )
         return [(provider, options), "CPUExecutionProvider"]
     return [provider, "CPUExecutionProvider"]
 

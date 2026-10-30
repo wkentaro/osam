@@ -1,3 +1,4 @@
+import os
 from typing import Any
 from typing import Iterator
 
@@ -147,7 +148,10 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
         if providers[0][0] == "CoreMLExecutionProvider"
     ]
     assert coreml == [
-        (Sam3._blobs[key].path, Sam3._blobs[key].coreml_cache_path)
+        (
+            Sam3._blobs[key].path,
+            os.path.join(Sam3._blobs[key].coreml_cache_path, onnxruntime.__version__),
+        )
         for key in ("image_encoder", "language_encoder", "decoder")
     ]
     disabled = [p for p, providers in fake_sessions if providers == "fallback disabled"]
