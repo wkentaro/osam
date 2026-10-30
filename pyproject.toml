@@ -7,7 +7,7 @@ Homepage = "https://github.com/wkentaro/osam"
 
 [project]
 name = "osam"
-description = "Get up and running vision foundational models locally."
+description = "Run promptable vision models locally, on CPU, CUDA or CoreML."
 license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [{ name = "Kentaro Wada", email = "www.kentaro.wada@gmail.com" }]
