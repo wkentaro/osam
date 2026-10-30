@@ -2,7 +2,9 @@ import datetime
 import io
 import json
 import os
+import pathlib
 import sys
+import typing
 
 import click
 import imgviz
@@ -52,9 +54,9 @@ def help(ctx, subcommand):
         click.echo(subcommand_obj.get_help(ctx))
 
 
-@cli.command(help="List models")
+@cli.command(name="list", help="List models")
 @click.option("--all", "-a", "show_all", is_flag=True, help="show all models")
-def list(show_all):
+def list_(show_all):
     rows = []
     for model_type in apis.registered_model_types:
         size = model_type.get_size()
@@ -109,6 +111,19 @@ def serve(reload):
         sys.exit(1)
 
 
+def _load_json(ctx, param, value: str | None) -> dict | None:
+    if value is None:
+        return None
+    try:
+        if value == "-":
+            value = sys.stdin.read()
+        elif value.startswith("@"):
+            value = pathlib.Path(value[1:]).read_text()
+        return json.loads(value)
+    except (OSError, ValueError) as e:
+        raise click.BadParameter(str(e))
+
+
 @cli.command(help="Run a model")
 @click.argument("model_name", metavar="model", type=str)
 @click.option(
@@ -118,16 +133,103 @@ def serve(reload):
     help="image path",
     required=True,
 )
-@click.option("--prompt", type=json.loads, help="prompt")
+@click.option(
+    "--prompt",
+    callback=_load_json,
+    help="prompt as JSON, @file to read it from a file, or - for stdin",
+)
+@click.option(
+    "--point",
+    "points",
+    multiple=True,
+    callback=lambda ctx, param, value: [_floats(v, (2, 3)) for v in value],
+    help="x,y[,label]: label 1 (default) is foreground, 0 is background",
+)
+@click.option(
+    "--box",
+    "boxes",
+    multiple=True,
+    callback=lambda ctx, param, value: [_floats(v, (4,)) for v in value],
+    help="x1,y1,x2,y2",
+)
+@click.option(
+    "--negative-box",
+    "negative_boxes",
+    multiple=True,
+    callback=lambda ctx, param, value: [_floats(v, (4,)) for v in value],
+    help="x1,y1,x2,y2 to exclude (sam3)",
+)
+@click.option("--text", "texts", multiple=True, help="text prompt")
+@click.option("--score-threshold", type=float, help="minimum score (sam3, yoloworld)")
+@click.option("--iou-threshold", type=float, help="NMS IoU threshold (yoloworld)")
+@click.option(
+    "--max-annotations",
+    type=click.IntRange(min=0),
+    help="maximum number of annotations (sam3, yoloworld)",
+)
+@click.option(
+    "--device",
+    type=click.Choice(typing.get_args(types.Device)),
+    help="execution device (default: the onnxruntime providers available)",
+)
 @click.option("--json", is_flag=True, help="json output")
-def run(model_name: str, image_path: str, prompt, json: bool) -> None:
+def run(
+    model_name: str,
+    image_path: str,
+    prompt,
+    points: list[list[float]],
+    boxes: list[list[float]],
+    negative_boxes: list[list[float]],
+    texts: tuple[str, ...],
+    score_threshold: float | None,
+    iou_threshold: float | None,
+    max_annotations: int | None,
+    device: types.Device | None,
+    json: bool,
+) -> None:
     image: np.ndarray = np.asarray(PIL.Image.open(image_path))
 
-    try:
-        request: types.GenerateRequest = types.GenerateRequest(
-            model=model_name, image=image, prompt=prompt
+    thresholds: dict = {
+        "score_threshold": score_threshold,
+        "iou_threshold": iou_threshold,
+        "max_annotations": max_annotations,
+    }
+    thresholds = {k: v for k, v in thresholds.items() if v is not None}
+    prompt_flags: dict = {"texts": list(texts)} if texts else {}
+    if points or boxes or negative_boxes:
+        xy: list[list[float]] = []
+        labels: list[int] = []
+        for point in points:
+            xy.append(point[:2])
+            label = point[2] if len(point) == 3 else 1
+            if label not in (0, 1):
+                raise click.BadParameter("label must be 0 or 1", param_hint="--point")
+            labels.append(int(label))
+        for box_labels, box_list in [((2, 3), boxes), ((4, 5), negative_boxes)]:
+            for box in box_list:
+                xy += [box[:2], box[2:]]
+                labels += box_labels
+        prompt_flags.update(points=xy, point_labels=labels)
+    if prompt is not None and prompt_flags:
+        raise click.UsageError(
+            "--prompt can't be combined with --point, --box, --negative-box or --text"
         )
-        response: types.GenerateResponse = apis.generate(request=request)
+
+    try:
+        base: types.Prompt | None = None
+        if prompt_flags:
+            base = types.Prompt(**prompt_flags)
+        elif prompt is not None:
+            base = types.Prompt.model_validate(prompt)
+        model = apis.get_model_type_by_name(model_name)(device=device)
+        if base is None and thresholds:
+            base = model.default_prompt(height=image.shape[0], width=image.shape[1])
+        request: types.GenerateRequest = types.GenerateRequest(
+            model=model_name,
+            image=image,
+            prompt=base and base.model_copy(update=thresholds),
+        )
+        response: types.GenerateResponse = model.generate(request=request)
     except Exception:
         logger.exception("Failed to run model")
         sys.exit(1)
@@ -201,6 +303,16 @@ def run(model_name: str, image_path: str, prompt, json: bool) -> None:
         )
 
         sys.stdout.buffer.write(_image_ndarray_to_data(visualization))
+
+
+def _floats(value: str, lengths: tuple[int, ...]) -> list[float]:
+    try:
+        floats = [float(v) for v in value.split(",")]
+    except ValueError:
+        floats = []
+    if len(floats) not in lengths:
+        raise click.BadParameter(f"expected {' or '.join(map(str, lengths))} numbers")
+    return floats
 
 
 def _image_ndarray_to_data(ndarray: np.ndarray) -> bytes:

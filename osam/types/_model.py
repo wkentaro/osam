@@ -25,6 +25,7 @@ from ._generate import GenerateRequest
 from ._generate import GenerateResponse
 from ._image_embedding import ImageEmbedding
 from ._model_metadata import ModelMetadata
+from ._prompt import Prompt
 
 _PROVIDERS_ENV: Final = "OSAM_ONNX_PROVIDERS"
 
@@ -112,6 +113,7 @@ class Model(abc.ABC):
                 providers=_device_providers(
                     device=device,
                     coreml=self._coreml_blobs is None or key in self._coreml_blobs,
+                    coreml_cache_path=blob.coreml_cache_path,
                 ),
             )
             for key, blob in self._blobs.items()
@@ -166,6 +168,10 @@ class Model(abc.ABC):
     def encode_image(self, image: np.ndarray) -> ImageEmbedding:
         raise NotImplementedError
 
+    def default_prompt(self, height: int, width: int) -> Prompt:
+        """Return the prompt used when a request gives none."""
+        raise NotImplementedError
+
     @abc.abstractmethod
     def generate(self, request: GenerateRequest) -> GenerateResponse:
         pass
@@ -189,7 +195,9 @@ def _load_inference_sessions(
     return inference_sessions
 
 
-def _device_providers(device: str, coreml: bool = True) -> _Providers:
+def _device_providers(
+    device: str, coreml: bool = True, coreml_cache_path: str | None = None
+) -> _Providers:
     if device not in _DEVICE_PROVIDERS:
         raise ValueError(
             f"device must be one of {', '.join(_DEVICE_PROVIDERS)}: {device!r}"
@@ -200,7 +208,11 @@ def _device_providers(device: str, coreml: bool = True) -> _Providers:
     if device == "cpu" or (device == "coreml" and not coreml):
         return ["CPUExecutionProvider"]
     if device == "coreml":
-        return [(provider, _COREML_OPTIONS), "CPUExecutionProvider"]
+        options: dict[str, str] = dict(_COREML_OPTIONS)
+        if coreml_cache_path is not None:
+            # Compiling takes seconds per model; reuse it on the next load.
+            options["ModelCacheDirectory"] = coreml_cache_path
+        return [(provider, options), "CPUExecutionProvider"]
     return [provider, "CPUExecutionProvider"]
 
 

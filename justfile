@@ -48,7 +48,13 @@ release version="":
             remainder=${current#*.}
             minor=${remainder%%.*}
             patch=${remainder#*.}
-            if grep -q '\*\*Breaking:\*\*' "${fragments[@]}"; then
+            if test "$major" = 0; then
+                if grep -q '\*\*Breaking:\*\*' "${fragments[@]}"; then
+                    next=0.$((minor + 1)).0
+                else
+                    next=0.$minor.$((patch + 1))
+                fi
+            elif grep -q '\*\*Breaking:\*\*' "${fragments[@]}"; then
                 next=$((major + 1)).0.0
             else
                 minor_fragments=(changelog.d/*.{added,changed,deprecated,removed}.md)

@@ -5,6 +5,7 @@ from ._bounding_box import BoundingBox  # noqa: F401
 from ._generate import GenerateRequest  # noqa: F401
 from ._generate import GenerateResponse  # noqa: F401
 from ._image_embedding import ImageEmbedding  # noqa: F401
+from ._model import Device  # noqa: F401
 from ._model import Model  # noqa: F401
 from ._model_metadata import ModelMetadata  # noqa: F401
 from ._prompt import Prompt  # noqa: F401

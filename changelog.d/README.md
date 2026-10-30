@@ -13,7 +13,9 @@ the link from the filename. Prefix `**Breaking:**` for changes that bump the
 major version.
 
 Release a minor version for any ready backward-compatible improvement and a
-patch for backward-compatible fixes; there is no minimum release size.
+patch for backward-compatible fixes; there is no minimum release size. Before
+1.0, a breaking change bumps the minor version and every other change bumps
+the patch.
 
 To release version `X.Y.Z`:
 

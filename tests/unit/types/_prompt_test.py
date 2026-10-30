@@ -69,3 +69,8 @@ def test_negative_box_labels_are_accepted() -> None:
     )
     assert prompt.point_labels is not None
     assert prompt.point_labels.tolist() == [4, 5]
+
+
+def test_negative_max_annotations_is_rejected() -> None:
+    with pytest.raises(pydantic.ValidationError):
+        Prompt(texts=["dog"], max_annotations=-1)

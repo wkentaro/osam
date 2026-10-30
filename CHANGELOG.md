@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.9.0 - 2026-10-30
+
+### Added
+
+- Models take `device="cpu"`, `"cuda"`, or `"coreml"` to choose where they run, and raise when that device is unavailable. With CoreML, SAM3 runs its point decoder on CPU. ([#104](https://github.com/wkentaro/osam/pull/104))
+- SAM3 accepts negative example boxes as point label pairs `(4, 5)`, mixed with positive `(2, 3)` boxes and text. ([#105](https://github.com/wkentaro/osam/pull/105))
+- SAM3 accepts point prompts (labels `0` and `1`) through a new point decoder. ([#107](https://github.com/wkentaro/osam/pull/107))
+- Models expose `default_prompt(height, width)`, the prompt `generate` uses when a request has none. ([#108](https://github.com/wkentaro/osam/pull/108))
+- `osam run` accepts `--point`, `--box`, `--negative-box`, `--text`, `--score-threshold`, `--iou-threshold`, `--max-annotations` and `--device`; thresholds apply on top of any prompt, including the default one, and `--prompt` reads JSON from `@file` or `-` (stdin). ([#108](https://github.com/wkentaro/osam/pull/108))
+- `examples/benchmark.py` measures inference time per model, device and prompt; the README lists the results and the prompts each model accepts. ([#109](https://github.com/wkentaro/osam/pull/109))
+
+### Changed
+
+- SAM3 uses the v0.5.0 models, which are downloaded again on first use (about 3.6 GB), and box prompts take up to 16 example boxes as repeated `(2, 3)` point label pairs, with or without text. ([#103](https://github.com/wkentaro/osam/pull/103))
+- SAM3 runs text and box prompts on CoreML (about 0.4 s instead of 2 s on an M5) and caches the compiled CoreML models under `~/.cache/osam/coreml`, which `osam rm` deletes. ([#109](https://github.com/wkentaro/osam/pull/109))
+
+### Removed
+
+- **Breaking:** `onnxruntime` is no longer a dependency; install `osam[cpu]` or `osam[gpu]`. ([#102](https://github.com/wkentaro/osam/pull/102))
+
+### Fixed
+
+- SAM3 runs on CUDA with `osam[gpu]`, which brings onnxruntime-gpu 1.24.1+ with its CUDA and cuDNN libraries and shares one CUDA arena across sessions. ([#102](https://github.com/wkentaro/osam/pull/102))
+- `osam.apis.generate` releases the previous model before loading another, lowering peak memory when switching models. ([#103](https://github.com/wkentaro/osam/pull/103))
+- SAM3 resizes images with bilinear interpolation like its PyTorch processor, raising scores that were lower than PyTorch's. ([#103](https://github.com/wkentaro/osam/pull/103))
+- SAM3 honors `max_annotations`, keeping the highest-scoring annotations, and applies `score_threshold` and `max_annotations` to point prompts too. ([#108](https://github.com/wkentaro/osam/pull/108))
+
 ## 0.8.1 - 2026-09-17
 
 ### Fixed

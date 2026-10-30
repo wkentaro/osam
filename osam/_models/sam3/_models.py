@@ -19,8 +19,8 @@ class Sam3(types.Model):
         source_url="https://github.com/wkentaro/sam3-onnx/tree/e61ac895c1a2db25c60e5a590460cbe4713e446f",
     )
 
-    # The decoders take longer to compile for CoreML than it saves them.
-    _coreml_blobs = frozenset({"image_encoder"})
+    # CoreML can't load the point decoder: its point_coords dimension is unbounded.
+    _coreml_blobs = frozenset({"image_encoder", "language_encoder", "decoder"})
 
     _blobs = {
         "image_encoder": types.Blob(
@@ -88,6 +88,9 @@ class Sam3(types.Model):
             ],
         )
 
+    def default_prompt(self, height: int, width: int) -> types.Prompt:
+        return types.Prompt(texts=["visual"])
+
     def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
         image_embedding: types.ImageEmbedding
         if request.image_embedding is not None:
@@ -107,12 +110,16 @@ class Sam3(types.Model):
 
         prompt: types.Prompt
         if request.prompt is None:
-            prompt = types.Prompt(texts=["visual"])
+            prompt = self.default_prompt(height=original_height, width=original_width)
             logger.warning(
                 "Prompt is not given, so using 'visual' as prompt: {!r}", prompt
             )
         else:
             prompt = request.prompt
+
+        score_threshold: float = (
+            0 if prompt.score_threshold is None else prompt.score_threshold
+        )
 
         if (
             prompt.points is not None
@@ -126,6 +133,8 @@ class Sam3(types.Model):
                 image_embedding=image_embedding,
                 points=prompt.points,
                 point_labels=prompt.point_labels,
+                score_threshold=score_threshold,
+                max_annotations=prompt.max_annotations,
             )
 
         text_prompt: str = "visual"
@@ -135,10 +144,6 @@ class Sam3(types.Model):
                     "Only first text prompt is used, ignoring: {}", prompt.texts[1:]
                 )
             text_prompt = prompt.texts[0]
-
-        score_threshold: float = (
-            0 if prompt.score_threshold is None else prompt.score_threshold
-        )
 
         tokens: NDArray[np.int64] = tokenize(texts=[text_prompt], context_length=32)
         outputs = self._inference_sessions["language_encoder"].run(
@@ -213,8 +218,10 @@ class Sam3(types.Model):
             [mask_w, mask_h, mask_w, mask_h], dtype=np.float32
         )
 
+        # Keep the highest-scoring annotations, in the decoder's order.
+        keep = np.sort(np.argsort(-scores, kind="stable")[: prompt.max_annotations])
         annotations: list[types.Annotation] = []
-        for i in range(len(scores)):
+        for i in keep:
             if scores[i] < score_threshold:
                 continue
             box = boxes[i]
@@ -258,6 +265,8 @@ class Sam3(types.Model):
         image_embedding: types.ImageEmbedding,
         points: NDArray[np.floating],
         point_labels: NDArray[np.integer],
+        score_threshold: float,
+        max_annotations: int | None,
     ) -> types.GenerateResponse:
         if len(image_embedding.extra_features) < 6:
             raise ValueError(
@@ -297,8 +306,9 @@ class Sam3(types.Model):
             )
             > 0
         )
+        score = float(iou_predictions[0, best])
         annotations: list[types.Annotation] = []
-        if mask.any():
+        if mask.any() and score >= score_threshold and max_annotations != 0:
             ymin, xmin, ymax, xmax = imgviz.masks_to_bboxes(masks=[mask])[0].astype(int)
             annotations.append(
                 types.Annotation(
@@ -306,7 +316,7 @@ class Sam3(types.Model):
                     bounding_box=types.BoundingBox(
                         xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax
                     ),
-                    score=float(iou_predictions[0, best]),
+                    score=score,
                 )
             )
         return types.GenerateResponse(

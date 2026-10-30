@@ -75,6 +75,43 @@ Here are models that can be downloaded:
 
 PS. `sam`, `efficientsam` is equivalent to `sam:latest`, `efficientsam:latest`.
 
+### Prompts
+
+| Model | Point | Box | Negative box | Text |
+| ------------ | :---: | :---: | :---: | :---: |
+| SAM | ✓ | ✓ | | |
+| SAM2 | ✓ | ✓ | | |
+| SAM3 | ✓ | ✓ | ✓ | ✓ |
+| EfficientSAM | ✓ | ✓ | | |
+| YOLO-World | | | | ✓ |
+
+### Speed
+
+Milliseconds to encode the image + run one prompt (point; text for SAM3 and
+YOLO-World, which has no separate encoding), median of 5 runs after a warm-up,
+excluding model loading:
+
+| Model | CPU<br>i9-12900K | CUDA<br>RTX 3080 Ti | CPU<br>Apple M5 | CoreML<br>Apple M5 |
+| ---------------- | ---: | ---: | ---: | ---: |
+| SAM 100M | 1255 + 32 | 692 + 20 | 2267 + 47 | 257678 + 84 |
+| SAM 300M | 2633 + 33 | 2125 + 23 | 6778 + 53 | > 15 min |
+| SAM 600M | 4165 + 34 | 4197 + 27 | 11023 + 52 | > 15 min |
+| SAM2 Tiny | 569 + 40 | 65 + 16 | 1627 + 59 | 277 + 66 |
+| SAM2 Small | 651 + 44 | 74 + 17 | 2119 + 58 | 320 + 61 |
+| SAM2 BasePlus | 1237 + 50 | 104 + 17 | 2923 + 51 | 570 + 65 |
+| SAM2 Large | 2414 + 43 | 151 + 17 | 7596 + 48 | 1281 + 60 |
+| SAM3 | 6512 + 1174 | 348 + 75 | 15233 + 1426 | 2425 + 373 |
+| EfficientSAM 10M | 399 + 45 | 55 + 16 | 781 + 34 | fails to load |
+| EfficientSAM 30M | 948 + 46 | 74 + 15 | 1767 + 35 | fails to load |
+| YOLO-World XL | 774 | 42 | 1829 | fails to load |
+
+Measured on `examples/_images/dogs.jpg` (2560x1600) with onnxruntime 1.23.2
+(onnxruntime-gpu 1.31.1 for CUDA).
+Run `python examples/benchmark.py --device cpu --device cuda` to measure on
+your machine.
+See [docs/benchmark.md](docs/benchmark.md) for SAM3 per prompt, load times
+and CPU/CoreML parity.
+
 ### Custom download endpoint
 
 Models are downloaded from their canonical URLs by default. To download from a
@@ -95,7 +132,21 @@ fallback and serve every blob from the mirror only.
 
 ### Execution providers
 
-Inference runs on `CUDAExecutionProvider` when the installed onnxruntime has it,
+Pick a device per model with `--device` on the CLI or `device=` in Python:
+
+```bash
+osam run sam3 --image examples/_images/dogs.jpg --text dog --device coreml
+```
+
+```python
+model = osam.apis.get_model_type_by_name("sam3")(device="cuda")
+```
+
+`cpu`, `cuda` and `coreml` are supported. An unavailable device raises an
+error instead of falling back to CPU. With `coreml`, SAM3 runs its point
+decoder on CPU and the rest on CoreML.
+
+Without a device, inference runs on `CUDAExecutionProvider` when the installed onnxruntime has it,
 otherwise on `CPUExecutionProvider`. To use another accelerator (CoreML on
 macOS, DirectML on Windows, TensorRT, ROCm), set `OSAM_ONNX_PROVIDERS` to a
 comma-separated list tried in the given order:
@@ -122,21 +173,28 @@ osam run efficientsam --image examples/_images/dogs.jpg --json
 # {"model": "efficientsam", "mask": "..."}
 
 # Give a prompt
-# 1. point prompt (background=0, foreground=1)
+# 1. point prompt (x,y[,label]: foreground=1 by default, background=0)
 osam run efficientsam --image examples/_images/dogs.jpg \
-  --prompt '{"points": [[1439, 504], [1439, 1289]], "point_labels": [1, 1]}' \
-  > efficientsam_point.png
-# 2. box prompt with sam2 (lt=2, rb=3)
+  --point 1439,504 --point 1439,1289 > efficientsam_point.png
+# 2. box prompt with sam2 (x1,y1,x2,y2)
 osam run sam2 --image examples/_images/dogs.jpg \
-  --prompt '{"points": [[1233, 376], [1649, 691]], "point_labels": [2, 3]}' \
-  > sam2_box.png
+  --box 1233,376,1649,691 > sam2_box.png
 # 3. text prompt
-osam run sam3 --image examples/_images/dogs.jpg --prompt '{"texts": ["dog"]}' \
-  > sam3_text.png
-# 4. box prompt with sam3 (lt=2, rb=3)
+osam run sam3 --image examples/_images/dogs.jpg --text dog > sam3_text.png
+# 4. box prompt with sam3
 osam run sam3 --image examples/_images/dogs.jpg \
-  --prompt '{"points": [[1233, 376], [1649, 691]], "point_labels": [2, 3]}' \
-  > sam3_box.png
+  --box 1233,376,1649,691 > sam3_box.png
+# 5. text prompt with sam3, excluding a region
+osam run sam3 --image examples/_images/dogs.jpg \
+  --text dog --negative-box 1200,400,1700,1400 > sam3_negative_box.png
+
+# Or give the whole prompt as JSON (point labels: background=0, foreground=1,
+# box=2,3, negative box=4,5)
+osam run sam2 --image examples/_images/dogs.jpg \
+  --prompt '{"points": [[1233, 376], [1649, 691]], "point_labels": [2, 3]}'
+# from a file (@prompt.json) or stdin (-), with a threshold on top
+osam run sam3 --image examples/_images/dogs.jpg --prompt @prompt.json \
+  --score-threshold 0.5
 ```
 
 <img src="assets/dogs_efficientsam.png" width="24%"> <img src="assets/dogs_sam2.png" width="24%"> <img src="assets/dogs_sam3.png" width="24%"> <img src="assets/dogs_sam3_box.png" width="24%">\

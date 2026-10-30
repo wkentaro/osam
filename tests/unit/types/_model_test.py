@@ -142,16 +142,19 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
     Sam3(device="coreml")
 
     coreml = [
-        path
+        (path, providers[0][1]["ModelCacheDirectory"])
         for path, providers in fake_sessions
         if providers[0][0] == "CoreMLExecutionProvider"
     ]
-    assert coreml == [Sam3._blobs["image_encoder"].path]
+    assert coreml == [
+        (Sam3._blobs[key].path, Sam3._blobs[key].coreml_cache_path)
+        for key in ("image_encoder", "language_encoder", "decoder")
+    ]
     disabled = [p for p, providers in fake_sessions if providers == "fallback disabled"]
     assert disabled == [
         "CoreMLExecutionProvider",
-        "CPUExecutionProvider",
-        "CPUExecutionProvider",
+        "CoreMLExecutionProvider",
+        "CoreMLExecutionProvider",
         "CPUExecutionProvider",
     ]
 

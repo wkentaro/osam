@@ -248,6 +248,20 @@ def test_generate_negative_box_sam3(
     assert annotation.bounding_box.xmin > 1059
 
 
+def test_generate_max_annotations_sam3(
+    sam3_text_response: types.GenerateResponse,
+) -> None:
+    request: types.GenerateRequest = types.GenerateRequest(
+        model="sam3:latest",
+        image_embedding=sam3_text_response.image_embedding,
+        prompt=types.Prompt(texts=["dog"], max_annotations=1),
+    )
+    response: types.GenerateResponse = apis.generate(request=request)
+
+    [annotation] = response.annotations
+    assert annotation.score is not None and annotation.score > 0.95
+
+
 def test_generate_negative_box_rejected_by_sam2() -> None:
     image = imgviz.io.imread(image_path)
     request: types.GenerateRequest = types.GenerateRequest(
@@ -283,6 +297,26 @@ def test_generate_point_to_mask_sam3(
     bb = annotation.bounding_box
     assert bb.xmin < 1439 < bb.xmax
     assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
+
+
+@pytest.mark.parametrize(
+    "limits", [{"score_threshold": 0.99999}, {"max_annotations": 0}]
+)
+def test_generate_point_filtered_by_sam3(
+    limits: dict, sam3_text_response: types.GenerateResponse
+) -> None:
+    request: types.GenerateRequest = types.GenerateRequest(
+        model="sam3:latest",
+        image_embedding=sam3_text_response.image_embedding,
+        prompt=types.Prompt(
+            points=np.array([[1439, 504]], dtype=np.float32),
+            point_labels=np.array([1], dtype=np.int32),
+            **limits,
+        ),
+    )
+    response: types.GenerateResponse = apis.generate(request=request)
+
+    assert response.annotations == []
 
 
 def test_generate_point_with_text_rejected_by_sam3(
