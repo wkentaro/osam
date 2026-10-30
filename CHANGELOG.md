@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.9.1 - 2026-10-30
+
+### Fixed
+
+- CoreML runs no longer fail after an onnxruntime upgrade; osam keeps compiled CoreML models per onnxruntime version under `~/.cache/osam/coreml`. ([#118](https://github.com/wkentaro/osam/pull/118))
+
 ## 0.9.0 - 2026-10-30
 
 ### Added
