@@ -35,6 +35,11 @@ pip install osam[cpu]  # or osam[gpu] for NVIDIA GPUs
 libraries, so no system CUDA install is needed. Install only one onnxruntime
 build: `onnxruntime` and `onnxruntime-gpu` overwrite each other's files.
 
+For other GPUs (AMD, Intel, or NVIDIA without the CUDA libraries), install
+`osam[webgpu]` and run with `--device webgpu`. It runs on Vulkan, Direct3D 12
+or Metal, and needs Python 3.11 or later. On Linux it also needs the system
+Vulkan loader (`libvulkan.so.1`).
+
 **For `osam serve`**:
 
 ```bash
@@ -161,7 +166,7 @@ osam run sam3 --image examples/_images/dogs.jpg --text dog --device coreml
 model = osam.apis.get_model_type_by_name("sam3")(device="cuda")
 ```
 
-`cpu`, `cuda` and `coreml` are supported. An unavailable device raises an
+`cpu`, `cuda`, `coreml` and `webgpu` are supported. An unavailable device raises an
 error instead of falling back to CPU. With `coreml`, SAM3 runs its point
 decoder on CPU and the rest on CoreML.
 

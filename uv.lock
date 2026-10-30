@@ -6,16 +6,19 @@ resolution-markers = [
     "python_full_version >= '3.13' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
     "python_full_version == '3.12.*' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
     "python_full_version == '3.12.*' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
-    "python_full_version >= '3.11' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'group-4-osam-dev'",
+    "python_full_version >= '3.11' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-dev'",
     "python_full_version == '3.11.*' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
     "python_full_version == '3.11.*' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
-    "python_full_version < '3.11' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'group-4-osam-dev'",
+    "python_full_version < '3.11' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-dev'",
     "python_full_version < '3.11' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
     "python_full_version < '3.11' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
 ]
 conflicts = [[
     { package = "osam", extra = "cpu" },
     { package = "osam", extra = "gpu" },
+], [
+    { package = "osam", extra = "gpu" },
+    { package = "osam", extra = "webgpu" },
 ], [
     { package = "osam", extra = "gpu" },
     { package = "osam", group = "dev" },
@@ -44,9 +47,9 @@ name = "anyio"
 version = "4.12.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "exceptiongroup", marker = "python_full_version < '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "exceptiongroup", marker = "python_full_version < '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "idna" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/96/f0/5eb65b2bb0d09ac6776f2eb54adee6abe8228ea05b20a5ad0e4945de8aac/anyio-4.12.1.tar.gz", hash = "sha256:41cfcc3a4c85d3f05c932da7c26d0201ac36f72abd4435ba90d0464a3ffed703", size = 228685, upload-time = "2026-01-06T11:45:21.246Z" }
 wheels = [
@@ -269,7 +272,7 @@ name = "click"
 version = "8.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3d/fa/656b739db8587d7b5dfa22e22ed02566950fbfbcdc20311993483657a5c0/click-8.3.1.tar.gz", hash = "sha256:12ff4785d337a1bb490bb7e9c2b1ee5da3112e94a8622f26a6c77f5d2fc6842a", size = 295065, upload-time = "2025-11-15T20:45:42.706Z" }
 wheels = [
@@ -281,8 +284,8 @@ name = "cmap"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/81/dc/7f22f008c90ff1211d34be6390cc4170c96304df8ce4ea04c61ad13238d3/cmap-0.7.0.tar.gz", hash = "sha256:8cab93661f1e6dd6d06435105fed744836ecb5ce266ecc14ab1e0657ca8fcda4", size = 936032, upload-time = "2026-01-05T18:14:54.031Z" }
 wheels = [
@@ -525,7 +528,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -591,7 +594,7 @@ dependencies = [
     { name = "filelock" },
     { name = "requests", extra = ["socks"] },
     { name = "tqdm" },
-    { name = "typing-extensions", marker = "python_full_version < '3.12' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "urllib3" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/56/1f/b66dad734e7a8538120f3a4e82976e1bf54ea39c900c358830fcfd9cf0c2/gdown-6.4.0.tar.gz", hash = "sha256:e0c901a4d847b3dd482f556e716726fbf6baca1c7b046757d948b247eeb7c822", size = 356106, upload-time = "2026-09-17T09:16:28.941Z" }
@@ -647,8 +650,8 @@ version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cmap" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "pillow" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d6/07/28988bae2d5a2baf1403df6d9cf35abc801dfa668f9c1be7727999980a04/imgviz-2.0.0.tar.gz", hash = "sha256:7f5f2a5d6f86e2ad92ce80ff44db7df9ddcd9797ad8f5b74cc2464e26717a790", size = 8781839, upload-time = "2026-01-28T12:42:25.696Z" }
@@ -906,8 +909,8 @@ name = "loguru"
 version = "0.7.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "win32-setctime", marker = "sys_platform == 'win32' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "win32-setctime", marker = "sys_platform == 'win32' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3a/05/a1dae3dffd1116099471c643b8924f5aa6524411dc6c63fdae648c4f1aca/loguru-0.7.3.tar.gz", hash = "sha256:19480589e77d47b8d85b2c827ad95d49bf31b0dcde16593892eb51dd18706eb6", size = 63559, upload-time = "2024-12-06T11:20:56.608Z" }
 wheels = [
@@ -1066,8 +1069,8 @@ name = "ml-dtypes"
 version = "0.5.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version < '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version >= '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version < '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version >= '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0e/4a/c27b42ed9b1c7d13d9ba8b6905dece787d6259152f2309338aed29b2447b/ml_dtypes-0.5.4.tar.gz", hash = "sha256:8ab06a50fb9bf9666dd0fe5dfb4676fa2b0ac0f31ecff72a6c3af8e22c063453", size = 692314, upload-time = "2025-11-17T22:32:31.031Z" }
 wheels = [
@@ -1287,7 +1290,7 @@ resolution-markers = [
     "python_full_version >= '3.13' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
     "python_full_version == '3.12.*' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
     "python_full_version == '3.12.*' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
-    "python_full_version >= '3.11' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'group-4-osam-dev'",
+    "python_full_version >= '3.11' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-dev'",
     "python_full_version == '3.11.*' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
     "python_full_version == '3.11.*' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
 ]
@@ -1534,8 +1537,8 @@ version = "1.20.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ml-dtypes" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version < '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version >= '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version < '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version >= '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "protobuf" },
     { name = "typing-extensions" },
 ]
@@ -1607,7 +1610,7 @@ wheels = [
 
 [[package]]
 name = "onnxruntime"
-version = "1.26.0"
+version = "1.31.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -1621,30 +1624,42 @@ dependencies = [
     { name = "protobuf", marker = "python_full_version >= '3.11'" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d4/81/29a9eb470994a75eb7b3ccf32be314d7c66675a00ac7b50294816cc2db27/onnxruntime-1.26.0-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:ee1109ef4ef27cad90e823399e61e03b3c6c7bfe0fb820b4baf3678c15be8b3c", size = 18005108, upload-time = "2026-05-08T19:08:11.728Z" },
-    { url = "https://files.pythonhosted.org/packages/66/c7/73efa6c8a4000c38fcc14947d84f234a17e5d66f203b37b7f1ad4a7b46eb/onnxruntime-1.26.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:35c7c7b0ac2e02001d28fab6c9fc24e9abc5e6faa35e6e19c63cecf1406ba89f", size = 16043752, upload-time = "2026-05-08T19:07:10.707Z" },
-    { url = "https://files.pythonhosted.org/packages/b6/3f/8de630f595daf6ce884d4dd95afd2a60e70ec6572e52bfee3aa2229befab/onnxruntime-1.26.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:11a8df4dcfe9ad5ff0bd71a7571dbed019fabc7594676c89fe8b86ea029c246f", size = 18176043, upload-time = "2026-05-08T19:07:33.735Z" },
-    { url = "https://files.pythonhosted.org/packages/9c/21/9f041de20787cd85498bd48e0ec4d098bf2a6c486e25b24b8dae1bf492b2/onnxruntime-1.26.0-cp311-cp311-win_amd64.whl", hash = "sha256:e6456718125fd777c673f3b78d4a9ab58d6adea641e9afae85ee6444f0e0e9a9", size = 13023165, upload-time = "2026-05-08T19:08:00.633Z" },
-    { url = "https://files.pythonhosted.org/packages/0e/82/3b9fe0ead2557cc3adf74c74c141bd1c7c4c6a9548c610af37df199f4512/onnxruntime-1.26.0-cp311-cp311-win_arm64.whl", hash = "sha256:cd920e45b730e4a87833e2910d8ca375aaca9da6ccc09e24bce463b3356d637f", size = 12789514, upload-time = "2026-05-08T19:07:49.433Z" },
-    { url = "https://files.pythonhosted.org/packages/81/b1/d111b1df656761f980d9e298a60039a9cb66036b1d039e777537743d0ac3/onnxruntime-1.26.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:05b028781b322ad74b57ce5b50aa5280bb1fe96ceec334628ade681e0b24c1ac", size = 18016624, upload-time = "2026-05-12T00:41:01.735Z" },
-    { url = "https://files.pythonhosted.org/packages/f6/a0/3f9d896a0385a36bd04345d6d0b802821a5782adde562e7e135f6bb71c73/onnxruntime-1.26.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:91f2bb870a4b9224eba0a6728c1fa7a9e552b8e59e1083c51fbbc3d013f2b5c0", size = 16052692, upload-time = "2026-05-08T19:07:13.829Z" },
-    { url = "https://files.pythonhosted.org/packages/7c/43/2a4e04f8dbeffad19bbcced4bcd4289bf478921518437404d6b92bdf213b/onnxruntime-1.26.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9b6dd70599005bd1bf29779f04a91978b92b5e719c11a20068a8f8e535f725b6", size = 18185439, upload-time = "2026-05-08T19:07:36.299Z" },
-    { url = "https://files.pythonhosted.org/packages/44/fc/026d0a7162b9c2153dac292baea9e027c42304dc1d9dc6f8ff5b4cfbaedd/onnxruntime-1.26.0-cp312-cp312-win_amd64.whl", hash = "sha256:a26374dc7fbcaae593601086b242120e13f2310558df0991da6dd8b8fac00414", size = 13026427, upload-time = "2026-05-08T19:08:03.503Z" },
-    { url = "https://files.pythonhosted.org/packages/3e/27/1dcf88e45e4c69db5f7b106f2dacc3801ba98994e082ca03e1dfdf7bfe57/onnxruntime-1.26.0-cp312-cp312-win_arm64.whl", hash = "sha256:54a8053410fd31fd66469bd754fcfe8a4df9f7eb44756b4b5479bf50c842d948", size = 12796647, upload-time = "2026-05-08T19:07:52.108Z" },
-    { url = "https://files.pythonhosted.org/packages/cf/a2/c801242685e0ce48a4ca51dfafbb588765e0446397e123be53ba5598f3f5/onnxruntime-1.26.0-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:ccce19c5f771b8268902f77d9fed9e88f9499465d6780808faa6611a789d33f0", size = 18016563, upload-time = "2026-05-08T19:07:28.081Z" },
-    { url = "https://files.pythonhosted.org/packages/e2/64/0492c0b1db04e29b2630c87cfa36f9d6872b1ca8614b90c5cad58fac7d76/onnxruntime-1.26.0-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:bdbed8cf3b672b66acb032f33a253bc27f42bce6ece48ae3fab4fa483a5e96e0", size = 16052634, upload-time = "2026-05-08T19:07:16.885Z" },
-    { url = "https://files.pythonhosted.org/packages/3d/26/4d09ddc755a84fc8d5e192991626b0e0680e8f6c5d58f4f1d05c42bc48cf/onnxruntime-1.26.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:c07af6fc6d5557835f2b6ee7a96d8b3235d0c57a8e230efdedaee106a8a3cbc6", size = 18185632, upload-time = "2026-05-08T19:07:38.756Z" },
-    { url = "https://files.pythonhosted.org/packages/77/89/3e52249aa08fa301e217ecba07b5246a8338fa2b401e109326e3fc5be0f9/onnxruntime-1.26.0-cp313-cp313-win_amd64.whl", hash = "sha256:61bec80655efa460591c2bc655392d57d2650ce85533a6b9b3b7a790d7ea7916", size = 13026751, upload-time = "2026-05-08T19:08:06.2Z" },
-    { url = "https://files.pythonhosted.org/packages/06/b3/c1c8782b14af6797c303de132d6eef26a9fb80dfacd3750ce57911d11c6b/onnxruntime-1.26.0-cp313-cp313-win_arm64.whl", hash = "sha256:a6677545ff451e3539a02746d2f207d8c5baa4a0a818886bb9d6a6eb9511ee89", size = 12796807, upload-time = "2026-05-08T19:07:54.879Z" },
-    { url = "https://files.pythonhosted.org/packages/c3/f5/47b0676408abec652c14b84d7173e389837832d850c24f87184277313e8d/onnxruntime-1.26.0-cp313-cp313t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5e016edc15d3c19f36807e1c6b10be5b27807688c32720f91b5ae480a95215d0", size = 16057265, upload-time = "2026-05-08T19:07:19.603Z" },
-    { url = "https://files.pythonhosted.org/packages/3b/45/33ab6deeef010ca844c877dd618cebc079590bbe52d2a3678e7223b1b908/onnxruntime-1.26.0-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:f5fc48a91a046a6a5c9b147f83fb41d65d24d24923373b222cdd248f0f4f4aac", size = 18197590, upload-time = "2026-05-08T19:07:41.422Z" },
-    { url = "https://files.pythonhosted.org/packages/40/89/17546c1c20f6bfc3ae41c22152378a26edfea918af3129e2139dcd7c99f3/onnxruntime-1.26.0-cp314-cp314-macosx_14_0_arm64.whl", hash = "sha256:33a791f31432a3af1a96db5e54818b37aba5e5eefc2e6af5794c10a9118a9993", size = 18019724, upload-time = "2026-05-08T19:07:30.723Z" },
-    { url = "https://files.pythonhosted.org/packages/bb/24/89457a35f6af29538a76647f2c18c3a28277e6c19234c847e7b4b7c19860/onnxruntime-1.26.0-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:e90c00732c4553618103149d93f688e8c3063017938f8983e21a71d9f3b6d22e", size = 16054821, upload-time = "2026-05-08T19:07:22.348Z" },
-    { url = "https://files.pythonhosted.org/packages/12/f9/15b2e1815cf570d238e0135529f80d2dce64e8e8818a1489cae83823c5c6/onnxruntime-1.26.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:01498e80ba8988428d08c2d51b1338f89e3de2a93e6ffe555f79c68f26a5c06b", size = 18185815, upload-time = "2026-05-08T19:07:44.179Z" },
-    { url = "https://files.pythonhosted.org/packages/d7/65/2e11055faf015e4b07f45b513fa49b391baf2e19d92d77d73ebee13c1004/onnxruntime-1.26.0-cp314-cp314-win_amd64.whl", hash = "sha256:7ead61450d8405167c87dd3a31d8da1d576b490a57dab1aa8b82a7da6825f5aa", size = 13349887, upload-time = "2026-05-08T19:08:08.671Z" },
-    { url = "https://files.pythonhosted.org/packages/19/e4/0f9d1a5718b1781c610c1e354765a3820597081754277a6a9a2b50705702/onnxruntime-1.26.0-cp314-cp314-win_arm64.whl", hash = "sha256:31d71a53490e46910877d0902b5ad99c69a5955e5c7ea6c82863519410e1ba7c", size = 13140121, upload-time = "2026-05-08T19:07:57.804Z" },
-    { url = "https://files.pythonhosted.org/packages/1c/42/3b8e635f067d06d9f45bede470b8d539d101a4166c272213158dfd08b6ce/onnxruntime-1.26.0-cp314-cp314t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:d7b6d258fb78fdfcf049795bcfaa74dcb90ae7baa277afd21e6fd28b83f2c496", size = 16057240, upload-time = "2026-05-08T19:07:25.163Z" },
-    { url = "https://files.pythonhosted.org/packages/93/99/f2be40a31b908d96b861ae0ce98582fa376c18a7f816b9d5eb4cd6aa0a4c/onnxruntime-1.26.0-cp314-cp314t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:4eefd386a45202aefb7a5132b94f32df9d506c9edcc7faf2fc60d65183f4b183", size = 18197382, upload-time = "2026-05-08T19:07:46.965Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/44/e9e04a60f726d16ba3abe30ab267e1569e061f7f6f0e175ee103661e1780/onnxruntime-1.31.1-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:60b6b69bfe580eab576cacc5d132a0e9cf2a37fcfd18d46dd191042b1d1ed0d7", size = 20871676, upload-time = "2026-10-26T19:26:00.372Z" },
+    { url = "https://files.pythonhosted.org/packages/02/ee/b173a49293b146b54bd057bf8681a015aef764d8f56d999ad8c6e53ab18d/onnxruntime-1.31.1-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:da05378364c44d4407e463982d2bf8d5e4cfea873283757e48beeb41df97b7f3", size = 21413526, upload-time = "2026-10-26T19:26:03.573Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/1d/0f85ee31a3d93f2243a5cc29252becf858f53ac5cfa6c9c15d9ffe107eea/onnxruntime-1.31.1-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:5752bd508126ae7c49894d3b9d2e83f0c3d487319246d04c444b393308d7ad7f", size = 23753652, upload-time = "2026-10-26T19:26:06.944Z" },
+    { url = "https://files.pythonhosted.org/packages/69/82/2e2bf967ade9567d77c307533566ef56a19c32e2114fc062a405703def88/onnxruntime-1.31.1-cp311-cp311-win_amd64.whl", hash = "sha256:c3d91b5de31e2fc82d71bd65b2b22bddee8b49057a3a36338e9a868e0ea90c05", size = 14885761, upload-time = "2026-10-26T19:26:09.8Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/c6/1995e04cc964c6abac426f59525b41c31f766c9392cabfb1e67c51718823/onnxruntime-1.31.1-cp311-cp311-win_arm64.whl", hash = "sha256:93800007a7023b3ab26ad72e6463d0d57d84ead49a2f6341954d91438e046bc0", size = 14735267, upload-time = "2026-10-26T19:26:12.915Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/f7/cecc0efeeea83bff2f7789ae1b80f27fa0f0210d6d9d66d1f0031a6b5e47/onnxruntime-1.31.1-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:96dd2564b10ea7153ad9c207e7cd8e5917cb3ba521e0e0a62ac03486fdc8d56c", size = 20882125, upload-time = "2026-10-26T19:26:16.256Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/e4/1ed1a7a5f4702d899091fa2b976d377995250c307326ec8dc9ae6378aa13/onnxruntime-1.31.1-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:0b9a492176886992e0e875f06bc0367e333f5fff11711a2d642e18b02f3009cc", size = 21420803, upload-time = "2026-10-26T19:26:19.487Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/27/c6a823bac55b2977bea2027c3ec9393a2c1002cb9a09eb40354563e02730/onnxruntime-1.31.1-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:1f3dea47f2f0e5117c2404cea7d21fd253ae7836a3bf167a501cdfbb2600d536", size = 23760988, upload-time = "2026-10-26T19:26:23.153Z" },
+    { url = "https://files.pythonhosted.org/packages/45/b2/793b4051d8dc6acb379ead9b72050f0ffa283ca49a6904add2e218b83e2e/onnxruntime-1.31.1-cp312-cp312-win_amd64.whl", hash = "sha256:ae8a9a351efda685cc59a66226cdefaa37a126c1d66872ca23a2de9425326130", size = 14888466, upload-time = "2026-10-26T19:26:25.816Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/72/09d635ab4b6137d8ac63d4911a37dad8b1ef15a77d20b65d7ed40fdca012/onnxruntime-1.31.1-cp312-cp312-win_arm64.whl", hash = "sha256:fe8b9ac1ae8e894e12c47ee82e4f6dfc1835768133687257866469fda80d0bf1", size = 14740724, upload-time = "2026-10-26T19:26:28.682Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/93/d2b855793302ef57d55cc0583b72a00a8dcb01d9bdb3adac380f09b050e8/onnxruntime-1.31.1-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:e4ad067d36e2220218e085d7223283b2ee1bc73d887e811fd14d21cf901a11ee", size = 20881825, upload-time = "2026-10-26T19:26:31.51Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/e1/633d4994db0620d31f34d9962119bc4ebd0b2ef4c9a030f91c7843fb9672/onnxruntime-1.31.1-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:dcaedc50333876f3829ab966b242147f0e548229e29c36fe44622ecf748c25ee", size = 21420628, upload-time = "2026-10-26T19:26:34.487Z" },
+    { url = "https://files.pythonhosted.org/packages/fc/0a/c887bcb84a9455b2723825381a77af38611a80f996f804e20fde5f671b63/onnxruntime-1.31.1-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:74a6a52994616c4d18b33db1e13c226333a70a6ba07480a5cab9c2a50dff1430", size = 23760717, upload-time = "2026-10-26T19:26:37.721Z" },
+    { url = "https://files.pythonhosted.org/packages/59/bf/a1d282b4c753ba3e9b31f4c11abd2bc2390513dc5e3792ca3b78e42401c3/onnxruntime-1.31.1-cp313-cp313-win_amd64.whl", hash = "sha256:0558f29d5f6ac09957390c9c5495931485ee8ae7f0ce781ccee86a0ae5c2348b", size = 14888304, upload-time = "2026-10-26T19:26:41.032Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/fd/529135287474dbaf19d9362ccda61998128ab18507f78bc82931e1bbaf22/onnxruntime-1.31.1-cp313-cp313-win_arm64.whl", hash = "sha256:075147c2e2430b4b29c436bffa78537b902a6ed58ed66f99ae3c6795e2081cb5", size = 14740772, upload-time = "2026-10-26T19:26:44.042Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/d4/56ea7d601695be4018ccc6bb9a47637a1deaccc5c4db6c6ad272e48d88e2/onnxruntime-1.31.1-cp313-cp313t-manylinux_2_28_aarch64.whl", hash = "sha256:ae0987aedb9ae589f3395615c58b22aad2eae6657b14508cec70c24b367cfad1", size = 21432641, upload-time = "2026-10-26T19:26:47.065Z" },
+    { url = "https://files.pythonhosted.org/packages/05/10/e37d9f06dae61cecaad344aef213a19643b66761a06667bdfe5282c1fb37/onnxruntime-1.31.1-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:6711108bcddf8b401145fb31ac93776b8ca6e7e7e56acdfa9d478575b8df9a2f", size = 23773876, upload-time = "2026-10-26T19:26:50.371Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/55/b511099a435972b86b5d04ef374cdca8de920311cc979180029b80145bf5/onnxruntime-1.31.1-cp314-cp314-macosx_14_0_arm64.whl", hash = "sha256:8536ac43682caa7492c46d6cfd4c3c8db288dcf0619508431a22170b670ee1d0", size = 20883427, upload-time = "2026-10-26T19:26:54.067Z" },
+    { url = "https://files.pythonhosted.org/packages/06/ef/98f0060d6cf58f9f663268fef65fe729120b8fbe26ef35eaa2c8d9030d33/onnxruntime-1.31.1-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:c878686b75cade1ed59131aa018ab004b1e64368b0d54041912450b9642cf04f", size = 21421619, upload-time = "2026-10-26T19:26:57.332Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/74/a891a659ccc427469de0d7bdbd5ff770a35f73084ee590ce02456cf61f7f/onnxruntime-1.31.1-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:c20d7f15d84427db070b163f78c2c7146cc93edd6113fa7327671259a24184fe", size = 23762999, upload-time = "2026-10-26T19:27:00.865Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/e9/9112e9322aef42bff80e805915b61cdcbb82577589bdd42dedf73a5ff9b6/onnxruntime-1.31.1-cp314-cp314-win_amd64.whl", hash = "sha256:0a3998e18cb667ef54287556bd62291a788ed235723dd90c83b2294b24e71d81", size = 15268752, upload-time = "2026-10-26T19:27:03.629Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/ee/b69384d9b94c6bf3beb030bcba25dc573e490d3136117be0f78d79078d35/onnxruntime-1.31.1-cp314-cp314-win_arm64.whl", hash = "sha256:fc01b4e7c0a81778fb741bcf5c16b7871d196275f6240720a8b8bfd9f0c0af14", size = 15153930, upload-time = "2026-10-26T19:27:06.159Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/5b/beeb6acb5a9e17311b4ebc36fe91ac4893200ddb290257fb072509a7c26b/onnxruntime-1.31.1-cp314-cp314t-manylinux_2_28_aarch64.whl", hash = "sha256:564d7b83fb3e94fb3d18629c6b339e9bce10966dd29a8442c433175aac3d60fd", size = 21432341, upload-time = "2026-10-26T19:27:09.131Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/3d/a5b15c4ab9d67a384da5a2c10fb569e643076c28179fe1a265af7d8f1b87/onnxruntime-1.31.1-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:4d5f5fcc01f0c334d282a8991eab44e7752ad01c47b336d848ba43eb38084958", size = 23772582, upload-time = "2026-10-26T19:27:12.025Z" },
+]
+
+[[package]]
+name = "onnxruntime-ep-webgpu"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2c/c3/e047d38981e7d6f198f92b488e2c9cd12e45c73017ec851996ea69778922/onnxruntime_ep_webgpu-0.5.0-py3-none-macosx_14_0_universal2.whl", hash = "sha256:c9a757c7afaf114fde86993420810ff616e2d3046d42ae419bb0c8b9ebcf57fb", size = 4864395, upload-time = "2026-10-29T21:04:37.083Z" },
+    { url = "https://files.pythonhosted.org/packages/93/ca/71f305dc822d62ef33d7f3862ba7058a0099086112d9ab679d8252e7b77d/onnxruntime_ep_webgpu-0.5.0-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:d39e0769f8b2ff7a4b04a492ef882510474d52cf722408d393569b36558b2829", size = 6107612, upload-time = "2026-10-29T21:04:39.355Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/1d/ac0ccbe8bd6435b6e1946fea964790ffa3d73ee2513775e90958fd6b860e/onnxruntime_ep_webgpu-0.5.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:b6baa3e223d9a679023388b1179e5597b6bc0d282ba72f2afe38d46ef37deeb4", size = 6935993, upload-time = "2026-10-29T21:04:41.954Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/36/9935a5b7851099da3da81d9e04f3021bcc61a5a1039e6c098cf08e5c6607/onnxruntime_ep_webgpu-0.5.0-py3-none-win_amd64.whl", hash = "sha256:713b94e7b4ce5979a356e19b926ecba2c0d4ba24f857ef4bbb11c75c37cc5b61", size = 13608886, upload-time = "2026-10-29T21:04:44.466Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/f2/f62eb9fde3b790507da4e1c4a3f366ea8e69b3b424fe70e97c898dd8f9c2/onnxruntime_ep_webgpu-0.5.0-py3-none-win_arm64.whl", hash = "sha256:928b3849a52403b5ccee3264a721a104c0fa3ebebb1e725d486e9dc6611f848e", size = 14582521, upload-time = "2026-10-29T21:04:47.498Z" },
 ]
 
 [[package]]
@@ -1742,27 +1757,31 @@ dependencies = [
 
 [package.optional-dependencies]
 cpu = [
-    { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-cpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "onnxruntime", version = "1.26.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-cpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-cpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "onnxruntime", version = "1.31.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-cpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
 ]
 gpu = [
-    { name = "onnxruntime-gpu", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, extra = ["cuda", "cudnn"], marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "onnxruntime-gpu", version = "1.31.1", source = { registry = "https://pypi.org/simple" }, extra = ["cuda", "cudnn"], marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "onnxruntime-gpu", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, extra = ["cuda", "cudnn"], marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "onnxruntime-gpu", version = "1.31.1", source = { registry = "https://pypi.org/simple" }, extra = ["cuda", "cudnn"], marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
 ]
 serve = [
     { name = "fastapi" },
     { name = "uvicorn" },
 ]
+webgpu = [
+    { name = "onnxruntime", version = "1.31.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "onnxruntime-ep-webgpu", marker = "python_full_version >= '3.11'" },
+]
 
 [package.dev-dependencies]
 dev = [
-    { name = "ipython", version = "8.38.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version < '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "ipython", version = "9.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version >= '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "ipython", version = "8.38.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version < '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "ipython", version = "9.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version >= '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "mdformat" },
     { name = "mypy" },
     { name = "onnx" },
-    { name = "osam", marker = "extra == 'extra-4-osam-cpu' or extra != 'extra-4-osam-gpu' or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "osam", extra = ["cpu"], marker = "extra == 'extra-4-osam-cpu' or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "osam", marker = "extra == 'extra-4-osam-cpu' or extra != 'extra-4-osam-gpu' or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "osam", extra = ["cpu"], marker = "extra == 'extra-4-osam-cpu' or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
@@ -1782,15 +1801,17 @@ requires-dist = [
     { name = "gdown", specifier = ">=6.4.0" },
     { name = "imgviz", specifier = ">=2.0.0" },
     { name = "loguru" },
+    { name = "onnxruntime", marker = "python_full_version >= '3.11' and extra == 'webgpu'", specifier = ">=1.27" },
     { name = "onnxruntime", marker = "python_full_version < '3.11' and extra == 'cpu'", specifier = "<1.24" },
     { name = "onnxruntime", marker = "extra == 'cpu'", specifier = ">=1.23.2" },
+    { name = "onnxruntime-ep-webgpu", marker = "python_full_version >= '3.11' and extra == 'webgpu'", specifier = ">=0.5" },
     { name = "onnxruntime-gpu", extras = ["cuda", "cudnn"], marker = "python_full_version >= '3.11' and extra == 'gpu'", specifier = ">=1.24.1" },
     { name = "onnxruntime-gpu", extras = ["cuda", "cudnn"], marker = "python_full_version < '3.11' and extra == 'gpu'", specifier = ">=1.23.2,<1.24" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "uvicorn", marker = "extra == 'serve'" },
 ]
-provides-extras = ["cpu", "gpu", "serve"]
+provides-extras = ["cpu", "gpu", "serve", "webgpu"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2203,7 +2224,7 @@ name = "pytest-cov"
 version = "7.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "coverage", extra = ["toml"], marker = "extra == 'extra-4-osam-cpu' or extra != 'extra-4-osam-gpu' or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "coverage", extra = ["toml"], marker = "extra == 'extra-4-osam-cpu' or extra != 'extra-4-osam-gpu' or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "pluggy" },
     { name = "pytest" },
 ]
@@ -2399,7 +2420,7 @@ version = "0.50.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ba/b8/73a0e6a6e079a9d9cfa64113d771e421640b6f679a52eeb9b32f72d871a1/starlette-0.50.0.tar.gz", hash = "sha256:a2a17b22203254bcbc2e1f926d2d55f3f9497f769416b3190768befe598fa3ca", size = 2646985, upload-time = "2025-11-01T15:25:27.516Z" }
 wheels = [
@@ -2500,7 +2521,7 @@ name = "tqdm"
 version = "4.67.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload-time = "2024-11-24T20:12:22.481Z" }
 wheels = [
@@ -2630,7 +2651,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "h11" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c3/d1/8f3c683c9561a4e6689dd3b1d345c815f10f86acd044ee1fb9a4dcd0b8c5/uvicorn-0.40.0.tar.gz", hash = "sha256:839676675e87e73694518b5574fd0f24c9d97b46bea16df7b8c05ea1a51071ea", size = 81761, upload-time = "2025-12-21T14:16:22.45Z" }
 wheels = [

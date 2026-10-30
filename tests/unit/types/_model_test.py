@@ -1,4 +1,6 @@
 import os
+import sys
+import types
 from typing import Any
 from typing import Iterator
 
@@ -114,7 +116,10 @@ def fake_sessions(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
     sessions: list[tuple[str, Any]] = []
 
     class FakeSession:
-        def __init__(self, path: str, sess_options: Any, providers: Any) -> None:
+        def __init__(self, path: str, sess_options: Any, providers: Any = None) -> None:
+            if providers is None:
+                providers = [d.ep_name for d in sess_options.devices]
+                providers.append("CPUExecutionProvider")
             sessions.append((path, providers))
             self._providers = [p if isinstance(p, str) else p[0] for p in providers]
 
@@ -190,3 +195,53 @@ def test_device_dropped_provider_raises(
     )
     with pytest.raises(RuntimeError, match="CoreMLExecutionProvider failed to load"):
         Sam3(device="coreml")
+
+
+@pytest.fixture
+def fake_webgpu(
+    monkeypatch: pytest.MonkeyPatch, fake_sessions: list[tuple[str, Any]]
+) -> Iterator[list[Any]]:
+    devices: list[Any] = [types.SimpleNamespace(ep_name="CPUExecutionProvider")]
+    plugin = types.SimpleNamespace(
+        get_library_path=lambda: "libwebgpu.so",
+        get_ep_name=lambda: "WebGpuExecutionProvider",
+    )
+
+    class FakeSessionOptions:
+        def add_provider_for_devices(self, devices: Any, options: Any) -> None:
+            self.devices = devices
+
+    ort: Any = onnxruntime
+    monkeypatch.setitem(sys.modules, "onnxruntime_ep_webgpu", plugin)
+    monkeypatch.setattr(ort, "register_execution_provider_library", lambda *a: None)
+    monkeypatch.setattr(ort, "get_ep_devices", lambda: devices)
+    monkeypatch.setattr(ort, "SessionOptions", FakeSessionOptions)
+    _model._webgpu_device.cache_clear()
+    yield devices
+    _model._webgpu_device.cache_clear()
+
+
+def test_device_webgpu_runs_every_blob_on_webgpu(
+    fake_webgpu: list[Any], fake_sessions: list[tuple[str, Any]]
+) -> None:
+    from osam._models.sam3._models import Sam3
+
+    fake_webgpu.append(types.SimpleNamespace(ep_name="WebGpuExecutionProvider"))
+    Sam3(device="webgpu")
+
+    disabled = [p for p, providers in fake_sessions if providers == "fallback disabled"]
+    assert disabled == ["WebGpuExecutionProvider"] * len(Sam3._blobs)
+
+
+def test_device_webgpu_unavailable_raises(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any]
+) -> None:
+    from osam._models.sam3._models import Sam3
+
+    with pytest.raises(RuntimeError, match="WebGpuExecutionProvider found no GPU"):
+        Sam3(device="webgpu")
+
+    monkeypatch.setitem(sys.modules, "onnxruntime_ep_webgpu", None)
+    _model._webgpu_device.cache_clear()
+    with pytest.raises(RuntimeError, match=r"pip install 'osam\[webgpu\]'"):
+        Sam3(device="webgpu")

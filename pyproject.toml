@@ -52,6 +52,13 @@ gpu = [
   "onnxruntime-gpu[cuda,cudnn]>=1.24.1; python_version >= '3.11'",
   "onnxruntime-gpu[cuda,cudnn]>=1.23.2,<1.24; python_version < '3.11'",
 ]
+# The WebGPU plugin runs on Vulkan, Direct3D 12 or Metal and installs next to
+# the CPU build instead of replacing it.
+webgpu = [
+  # onnxruntime-ep-webgpu 0.5 fails to create kernels on onnxruntime 1.26.
+  "onnxruntime>=1.27; python_version >= '3.11'",
+  "onnxruntime-ep-webgpu>=0.5; python_version >= '3.11'",
+]
 serve = ["fastapi", "uvicorn"]
 
 [tool.uv]
@@ -59,6 +66,10 @@ conflicts = [
   [
     { extra = "cpu" },
     { extra = "gpu" },
+  ],
+  [
+    { extra = "gpu" },
+    { extra = "webgpu" },
   ],
   [
     { extra = "gpu" },
