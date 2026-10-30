@@ -216,8 +216,10 @@ class Sam3(types.Model):
             [mask_w, mask_h, mask_w, mask_h], dtype=np.float32
         )
 
+        # Keep the highest-scoring annotations, in the decoder's order.
+        keep = np.sort(np.argsort(-scores, kind="stable")[: prompt.max_annotations])
         annotations: list[types.Annotation] = []
-        for i in range(len(scores)):
+        for i in keep:
             if scores[i] < score_threshold:
                 continue
             box = boxes[i]

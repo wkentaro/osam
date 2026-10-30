@@ -248,6 +248,19 @@ def test_generate_negative_box_sam3(
     assert annotation.bounding_box.xmin > 1059
 
 
+def test_generate_max_annotations_sam3() -> None:
+    image = imgviz.io.imread(image_path)
+    request: types.GenerateRequest = types.GenerateRequest(
+        model="sam3:latest",
+        image=image,
+        prompt=types.Prompt(texts=["dog"], max_annotations=1),
+    )
+    response: types.GenerateResponse = apis.generate(request=request)
+
+    [annotation] = response.annotations
+    assert annotation.score is not None and annotation.score > 0.95
+
+
 def test_generate_negative_box_rejected_by_sam2() -> None:
     image = imgviz.io.imread(image_path)
     request: types.GenerateRequest = types.GenerateRequest(
