@@ -216,13 +216,13 @@ def run(
         )
 
     try:
-        model = apis.get_model_type_by_name(model_name)(device=device)
         base: types.Prompt | None = None
         if prompt_flags:
             base = types.Prompt(**prompt_flags)
         elif prompt is not None:
             base = types.Prompt.model_validate(prompt)
-        elif thresholds:
+        model = apis.get_model_type_by_name(model_name)(device=device)
+        if base is None and thresholds:
             base = model.default_prompt(height=image.shape[0], width=image.shape[1])
         request: types.GenerateRequest = types.GenerateRequest(
             model=model_name,

@@ -96,3 +96,13 @@ def test_run_prompt_file_missing_rejected(tmp_path: pathlib.Path):
     )
     assert result.returncode == 2
     assert "missing.json" in result.stderr
+
+
+def test_run_invalid_prompt_rejected_before_loading_model():
+    result = subprocess.run(
+        ["osam", "run", "sam3", "--image", str(image_path), "--prompt", "{}"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "Initialized inference sessions" not in result.stderr
