@@ -17,7 +17,7 @@ class Prompt(pydantic.BaseModel):
 
     iou_threshold: Optional[float] = pydantic.Field(default=0.5)
     score_threshold: Optional[float] = pydantic.Field(default=0.1)
-    max_annotations: Optional[int] = pydantic.Field(default=100)
+    max_annotations: Optional[int] = pydantic.Field(default=100, ge=0)
 
     @pydantic.field_serializer("points")
     def _serialize_points(

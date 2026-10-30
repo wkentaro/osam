@@ -106,3 +106,13 @@ def test_run_invalid_prompt_rejected_before_loading_model():
     )
     assert result.returncode == 1
     assert "Initialized inference sessions" not in result.stderr
+
+
+def test_run_negative_max_annotations_rejected():
+    result = subprocess.run(
+        ["osam", "run", "efficientsam:10m", "--image", str(image_path)]
+        + ["--max-annotations", "-1"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2

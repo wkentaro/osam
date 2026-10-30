@@ -164,7 +164,7 @@ def _load_json(ctx, param, value: str | None) -> dict | None:
 @click.option("--iou-threshold", type=float, help="NMS IoU threshold (yoloworld)")
 @click.option(
     "--max-annotations",
-    type=int,
+    type=click.IntRange(min=0),
     help="maximum number of annotations (sam3, yoloworld)",
 )
 @click.option(
