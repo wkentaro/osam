@@ -1,6 +1,6 @@
 ## Changelog
 
-Record user-facing changes to the packaged project as towncrier fragments, following `changelog.d/README.md`; never edit `CHANGELOG.md` directly. Prefix `**Breaking:**` for changes that bump the major version.
+Record user-facing changes to the packaged project as towncrier fragments, following `changelog.d/README.md`; never edit `CHANGELOG.md` directly. Documentation-only changes, such as the README, `docs/`, or the PyPI summary, do not need fragments. Prefix `**Breaking:**` for changes that bump the major version.
 
 ## Agent skills
 
