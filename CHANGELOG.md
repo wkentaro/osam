@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `osam.apis.generate` releases the previous model before loading another, lowering peak memory when switching models. ([#103](https://github.com/wkentaro/osam/pull/103))
 - SAM3 resizes images with bilinear interpolation like its PyTorch processor, raising scores that were lower than PyTorch's. ([#103](https://github.com/wkentaro/osam/pull/103))
 - SAM3 honors `max_annotations`, keeping the highest-scoring annotations, and applies `score_threshold` and `max_annotations` to point prompts too. ([#108](https://github.com/wkentaro/osam/pull/108))
+- SAM3 returns masks for objects cut off by the image edge, which came back empty, and clips their boxes to the image. ([#115](https://github.com/wkentaro/osam/pull/115))
 
 ## 0.8.1 - 2026-09-17
 
