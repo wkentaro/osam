@@ -517,3 +517,22 @@ def test_pull_cancel_interrupts_stalled_read(
     finally:
         release.set()
         worker.join(5)
+
+
+def test_remove_deletes_coreml_cache(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    blob = Blob(
+        url="https://example.com/model.onnx",
+        hash="sha256:4cacbb23c6903b1acf87f1d77ed806b840800c5fcd4ac8f650cbffed474b8896",
+    )
+    os.makedirs(os.path.dirname(blob.path))
+    pathlib.Path(blob.path).touch()
+    os.makedirs(blob.coreml_cache_path)
+
+    blob.remove()
+
+    assert not os.path.exists(blob.path)
+    assert not os.path.exists(blob.coreml_cache_path)

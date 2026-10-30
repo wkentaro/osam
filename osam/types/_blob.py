@@ -44,12 +44,23 @@ class Blob:
         return os.path.basename(urllib.parse.urlparse(self.url).path)
 
     @property
+    def _safe_hash(self) -> str:
+        # Windows can't use ':' in file or directory names
+        return self.hash.replace("sha256:", "sha256-")
+
+    @property
+    def coreml_cache_path(self) -> str:
+        """Directory where CoreML caches this blob's compiled model."""
+        return os.path.expanduser(
+            os.path.join("~", ".cache", "osam", "coreml", self._safe_hash)
+        )
+
+    @property
     def path(self) -> str:
         base = os.path.expanduser(
             os.path.join("~", ".cache", "osam", "models", "blobs")
         )
-        # Windows can't use ':' in file or directory names
-        safe_hash = self.hash.replace("sha256:", "sha256-")
+        safe_hash = self._safe_hash
         if self.attachments:
             return os.path.join(base, safe_hash, self.filename)
         else:
@@ -192,3 +203,6 @@ class Blob:
                 os.remove(self.path)
             else:
                 logger.warning("Blob {!r} not found", self.path)
+        if os.path.exists(self.coreml_cache_path):
+            logger.debug("Removing CoreML cache {!r}", self.coreml_cache_path)
+            shutil.rmtree(self.coreml_cache_path)
