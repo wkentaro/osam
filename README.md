@@ -1,7 +1,7 @@
 <div align="center">
   <h1>Osam</h1>
   <p>
-    Run promptable vision models locally, on CPU, CUDA or CoreML.
+    Run promptable vision models locally, on CPU, CUDA, WebGPU or CoreML.
   </p>
   <p>
     <a href="https://pypi.python.org/pypi/osam"><img src="https://img.shields.io/pypi/v/osam.svg"></a>
@@ -96,41 +96,42 @@ Median of 5 runs after a warm-up, excluding model loading.
 
 #### Image encoding (ms)
 
-| Model | CPU<br>i9-12900K | CUDA<br>RTX 3080 Ti | CPU<br>Apple M5 | CoreML<br>Apple M5 |
-| ---------------- | ---: | ---: | ---: | ---: |
-| SAM 100M | 1255 | 692 | 2267 | 257678 |
-| SAM 300M | 2633 | 2125 | 6778 | > 15 min |
-| SAM 600M | 4165 | 4197 | 11023 | > 15 min |
-| SAM2 Tiny | 569 | 65 | 1627 | 277 |
-| SAM2 Small | 651 | 74 | 2119 | 320 |
-| SAM2 BasePlus | 1237 | 104 | 2923 | 570 |
-| SAM2 Large | 2414 | 151 | 7596 | 1281 |
-| SAM3 | 6512 | 348 | 15233 | 2425 |
-| EfficientSAM 10M | 399 | 55 | 781 | fails to load |
-| EfficientSAM 30M | 948 | 74 | 1767 | fails to load |
-| YOLO-World XL | — | — | — | fails to load |
+| Model | CPU<br>i9-12900K | CUDA<br>RTX 3080 Ti | WebGPU<br>RTX 3080 Ti | CPU<br>Apple M5 | CoreML<br>Apple M5 | WebGPU<br>Apple M5 |
+| ---------------- | ---: | ---: | ---: | ---: | ---: | ---: |
+| SAM 100M | 1255 | 692 | 3009 | 2267 | 257678 | 1730 |
+| SAM 300M | 2633 | 2125 | 7471 | 6778 | > 15 min | 4802 |
+| SAM 600M | 4165 | 4197 | 17640 | 11023 | > 15 min | 8607 |
+| SAM2 Tiny | 569 | 65 | 135 | 1627 | 277 | 250 |
+| SAM2 Small | 651 | 74 | 121 | 2119 | 320 | 279 |
+| SAM2 BasePlus | 1237 | 104 | 179 | 2923 | 570 | 494 |
+| SAM2 Large | 2414 | 151 | 319 | 7596 | 1281 | 1109 |
+| SAM3 | 6512 | 348 | 1553 | 15233 | 2425 | 3942 |
+| EfficientSAM 10M | 399 | 55 | 253 | 781 | fails to load | 322 |
+| EfficientSAM 30M | 948 | 74 | 448 | 1767 | fails to load | 664 |
+| YOLO-World XL | — | — | — | — | fails to load | — |
 
 #### One prompt (ms)
 
 Point prompt; text for SAM3 and YOLO-World, which has no separate
 encoding.
 
-| Model | CPU<br>i9-12900K | CUDA<br>RTX 3080 Ti | CPU<br>Apple M5 | CoreML<br>Apple M5 |
-| ---------------- | ---: | ---: | ---: | ---: |
-| SAM 100M | 32 | 20 | 47 | 84 |
-| SAM 300M | 33 | 23 | 53 | — |
-| SAM 600M | 34 | 27 | 52 | — |
-| SAM2 Tiny | 40 | 16 | 59 | 66 |
-| SAM2 Small | 44 | 17 | 58 | 61 |
-| SAM2 BasePlus | 50 | 17 | 51 | 65 |
-| SAM2 Large | 43 | 17 | 48 | 60 |
-| SAM3 | 1174 | 75 | 1426 | 373 |
-| EfficientSAM 10M | 45 | 16 | 34 | fails to load |
-| EfficientSAM 30M | 46 | 15 | 35 | fails to load |
-| YOLO-World XL | 774 | 42 | 1829 | fails to load |
+| Model | CPU<br>i9-12900K | CUDA<br>RTX 3080 Ti | WebGPU<br>RTX 3080 Ti | CPU<br>Apple M5 | CoreML<br>Apple M5 | WebGPU<br>Apple M5 |
+| ---------------- | ---: | ---: | ---: | ---: | ---: | ---: |
+| SAM 100M | 32 | 20 | 149 | 47 | 84 | 49 |
+| SAM 300M | 33 | 23 | 367 | 53 | — | 57 |
+| SAM 600M | 34 | 27 | 209 | 52 | — | 56 |
+| SAM2 Tiny | 40 | 16 | 75 | 59 | 66 | 28 |
+| SAM2 Small | 44 | 17 | 74 | 58 | 61 | 28 |
+| SAM2 BasePlus | 50 | 17 | 69 | 51 | 65 | 28 |
+| SAM2 Large | 43 | 17 | 87 | 48 | 60 | 29 |
+| SAM3 | 1174 | 75 | 381 | 1426 | 373 | 644 |
+| EfficientSAM 10M | 45 | 16 | 51 | 34 | fails to load | 27 |
+| EfficientSAM 30M | 46 | 15 | 56 | 35 | fails to load | 27 |
+| YOLO-World XL | 774 | 42 | 100 | 1829 | fails to load | 237 |
 
 Measured on `examples/_images/dogs.jpg` (2560x1600) with onnxruntime 1.23.2
-(onnxruntime-gpu 1.31.1 for CUDA).
+(onnxruntime-gpu 1.31.1 for CUDA; onnxruntime 1.30.0 and onnxruntime-ep-webgpu
+0.5.0 for WebGPU, on Vulkan and Metal).
 Run `python examples/benchmark.py --device cpu --device cuda` to measure on
 your machine.
 See [docs/benchmark.md](docs/benchmark.md) for SAM3 per prompt, load times
