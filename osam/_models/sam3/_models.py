@@ -117,6 +117,10 @@ class Sam3(types.Model):
         else:
             prompt = request.prompt
 
+        score_threshold: float = (
+            0 if prompt.score_threshold is None else prompt.score_threshold
+        )
+
         if (
             prompt.points is not None
             and prompt.point_labels is not None
@@ -129,6 +133,8 @@ class Sam3(types.Model):
                 image_embedding=image_embedding,
                 points=prompt.points,
                 point_labels=prompt.point_labels,
+                score_threshold=score_threshold,
+                max_annotations=prompt.max_annotations,
             )
 
         text_prompt: str = "visual"
@@ -138,10 +144,6 @@ class Sam3(types.Model):
                     "Only first text prompt is used, ignoring: {}", prompt.texts[1:]
                 )
             text_prompt = prompt.texts[0]
-
-        score_threshold: float = (
-            0 if prompt.score_threshold is None else prompt.score_threshold
-        )
 
         tokens: NDArray[np.int64] = tokenize(texts=[text_prompt], context_length=32)
         outputs = self._inference_sessions["language_encoder"].run(
@@ -263,6 +265,8 @@ class Sam3(types.Model):
         image_embedding: types.ImageEmbedding,
         points: NDArray[np.floating],
         point_labels: NDArray[np.integer],
+        score_threshold: float,
+        max_annotations: int | None,
     ) -> types.GenerateResponse:
         if len(image_embedding.extra_features) < 6:
             raise ValueError(
@@ -302,8 +306,9 @@ class Sam3(types.Model):
             )
             > 0
         )
+        score = float(iou_predictions[0, best])
         annotations: list[types.Annotation] = []
-        if mask.any():
+        if mask.any() and score >= score_threshold and max_annotations != 0:
             ymin, xmin, ymax, xmax = imgviz.masks_to_bboxes(masks=[mask])[0].astype(int)
             annotations.append(
                 types.Annotation(
@@ -311,7 +316,7 @@ class Sam3(types.Model):
                     bounding_box=types.BoundingBox(
                         xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax
                     ),
-                    score=float(iou_predictions[0, best]),
+                    score=score,
                 )
             )
         return types.GenerateResponse(
