@@ -56,7 +56,7 @@ jobs:
             pytest-args: -n 2  # large models exceed runner memory with 3 workers
           - os: macos-latest
             python-version: '3.10'
-            pytest-args: -n 4 -m 'not extra and not extended'
+            pytest-args: -n 4 -m 'not extra'    # minimum version by 'not extra'
           - os: windows-latest
             python-version: '3.10'
             # minimum version by 'not extra'

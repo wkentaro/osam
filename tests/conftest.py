@@ -8,9 +8,6 @@ import osam
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "extra: marks tests as extra")
-    config.addinivalue_line(
-        "markers", "extended: additional inference cases beyond platform smoke tests"
-    )
 
     if config.option.collectonly:
         return
