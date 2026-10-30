@@ -203,15 +203,22 @@ class Sam3(types.Model):
                 "box_masks": box_masks,
             },
         )
-        boxes_norm: NDArray[np.float32] = cast(NDArray[np.float32], outputs[0])
+        # Boxes of objects cut off by the image edge can extend past it.
+        boxes_norm: NDArray[np.float32] = np.clip(
+            cast(NDArray[np.float32], outputs[0]), 0, 1
+        )
         scores: NDArray[np.float32] = cast(NDArray[np.float32], outputs[1])
         masks_native: NDArray[np.float32] = cast(NDArray[np.float32], outputs[2])
         mask_h, mask_w = masks_native.shape[2], masks_native.shape[3]
 
-        # Scale normalized boxes to original image coordinates
-        boxes = boxes_norm * np.array(
-            [original_width, original_height, original_width, original_height],
-            dtype=np.float32,
+        # Scale normalized boxes to inclusive pixel coordinates in the image
+        boxes = np.minimum(
+            boxes_norm
+            * np.array(
+                [original_width, original_height, original_width, original_height],
+                dtype=np.float32,
+            ),
+            [original_width - 1, original_height - 1] * 2,
         )
         # Scale normalized boxes to native mask coordinates
         boxes_mask = boxes_norm * np.array(
