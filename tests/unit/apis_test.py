@@ -13,6 +13,20 @@ image_path = (
 )
 
 
+@pytest.fixture(scope="module")
+def sam3_text_response() -> types.GenerateResponse:
+    # All SAM3 prompts use the same image, so encode it once.
+    response = apis.generate(
+        request=types.GenerateRequest(
+            model="sam3:latest",
+            image=imgviz.io.imread(image_path),
+            prompt=types.Prompt(texts=["dog"]),
+        )
+    )
+    assert response.image_embedding is not None
+    return response
+
+
 @pytest.mark.parametrize(
     "model",
     [
@@ -52,12 +66,19 @@ def test_generate_point_to_mask(model: str) -> None:
         pytest.param("yoloworld:latest", False, marks=pytest.mark.extra),
     ],
 )
-def test_generate_text_to_bounding_box(model: str, has_mask: bool) -> None:
-    image = imgviz.io.imread(image_path)
-    request: types.GenerateRequest = types.GenerateRequest(
-        model=model, image=image, prompt=types.Prompt(texts=["dog"])
-    )
-    response: types.GenerateResponse = apis.generate(request=request)
+def test_generate_text_to_bounding_box(
+    model: str, has_mask: bool, request: pytest.FixtureRequest
+) -> None:
+    if model == "sam3:latest":
+        response = request.getfixturevalue("sam3_text_response")
+    else:
+        response = apis.generate(
+            request=types.GenerateRequest(
+                model=model,
+                image=imgviz.io.imread(image_path),
+                prompt=types.Prompt(texts=["dog"]),
+            )
+        )
 
     assert response.model == model
 
@@ -113,11 +134,12 @@ def test_generate_box_to_mask_sam2(model: str) -> None:
         [[1706, 613], [2227, 1438], [450, 551], [1059, 1421]],
     ],
 )
-def test_generate_box_to_mask_sam3(model: str, points: list[list[int]]) -> None:
-    image = imgviz.io.imread(image_path)
+def test_generate_box_to_mask_sam3(
+    model: str, points: list[list[int]], sam3_text_response: types.GenerateResponse
+) -> None:
     request: types.GenerateRequest = types.GenerateRequest(
         model=model,
-        image=image,
+        image_embedding=sam3_text_response.image_embedding,
         prompt=types.Prompt(
             points=np.array(points, dtype=np.float32),
             point_labels=np.array([2, 3] * (len(points) // 2), dtype=np.int32),
@@ -202,12 +224,13 @@ def test_non_maximum_suppression_runs_without_downloading(
     assert kept_boxes.tolist() == boxes[[0, 2, 2, 3]].tolist()
 
 
-def test_generate_negative_box_sam3() -> None:
-    image = imgviz.io.imread(image_path)
+def test_generate_negative_box_sam3(
+    sam3_text_response: types.GenerateResponse,
+) -> None:
     # A positive box on one dog and a negative box on another
     request: types.GenerateRequest = types.GenerateRequest(
         model="sam3:latest",
-        image=image,
+        image_embedding=sam3_text_response.image_embedding,
         prompt=types.Prompt(
             points=np.array(
                 [[1706, 613], [2227, 1438], [450, 551], [1059, 1421]],
@@ -237,11 +260,12 @@ def test_generate_negative_box_rejected_by_sam2() -> None:
         apis.generate(request=request)
 
 
-def test_generate_point_to_mask_sam3() -> None:
-    image = imgviz.io.imread(image_path)
+def test_generate_point_to_mask_sam3(
+    sam3_text_response: types.GenerateResponse,
+) -> None:
     request: types.GenerateRequest = types.GenerateRequest(
         model="sam3:latest",
-        image=image,
+        image_embedding=sam3_text_response.image_embedding,
         prompt=types.Prompt(
             points=np.array([[1439, 504], [1439, 1289]], dtype=np.float32),
             point_labels=np.array([1, 1], dtype=np.int32),
@@ -259,11 +283,12 @@ def test_generate_point_to_mask_sam3() -> None:
     assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
 
 
-def test_generate_point_with_text_rejected_by_sam3() -> None:
-    image = imgviz.io.imread(image_path)
+def test_generate_point_with_text_rejected_by_sam3(
+    sam3_text_response: types.GenerateResponse,
+) -> None:
     request: types.GenerateRequest = types.GenerateRequest(
         model="sam3:latest",
-        image=image,
+        image_embedding=sam3_text_response.image_embedding,
         prompt=types.Prompt(
             texts=["dog"],
             points=np.array([[1439, 504]], dtype=np.float32),
