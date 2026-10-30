@@ -1,7 +1,7 @@
 <div align="center">
   <h1>Osam</h1>
   <p>
-    Get up and running with promptable vision models locally.
+    Run promptable vision models locally, on CPU, CUDA or CoreML.
   </p>
   <p>
     <a href="https://pypi.python.org/pypi/osam"><img src="https://img.shields.io/pypi/v/osam.svg"></a>
