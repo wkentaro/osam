@@ -141,8 +141,8 @@ model = osam.apis.get_model_type_by_name("sam3")(device="cuda")
 ```
 
 `cpu`, `cuda` and `coreml` are supported. An unavailable device raises an
-error instead of falling back to CPU. With `coreml`, SAM3 runs only its image
-encoder on CoreML and the rest on CPU.
+error instead of falling back to CPU. With `coreml`, SAM3 runs its point
+decoder on CPU and the rest on CoreML.
 
 Without a device, inference runs on `CUDAExecutionProvider` when the installed onnxruntime has it,
 otherwise on `CPUExecutionProvider`. To use another accelerator (CoreML on

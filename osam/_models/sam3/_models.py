@@ -19,8 +19,8 @@ class Sam3(types.Model):
         source_url="https://github.com/wkentaro/sam3-onnx/tree/e61ac895c1a2db25c60e5a590460cbe4713e446f",
     )
 
-    # The decoders take longer to compile for CoreML than it saves them.
-    _coreml_blobs = frozenset({"image_encoder"})
+    # CoreML can't load the point decoder: its point_coords dimension is unbounded.
+    _coreml_blobs = frozenset({"image_encoder", "language_encoder", "decoder"})
 
     _blobs = {
         "image_encoder": types.Blob(
