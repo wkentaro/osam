@@ -69,12 +69,30 @@ def test_run_point_label_rejected():
     assert "label must be 0 or 1" in result.stderr
 
 
-def test_run_filter_without_prompt_rejected():
+def test_run_threshold_uses_default_prompt():
+    cmd = ["osam", "run", "efficientsam:10m", "--image", str(image_path)]
+    output = subprocess.check_output(cmd + ["--score-threshold", "0.5", "--json"])
+    assert len(json.loads(output)["annotations"]) == 1
+
+
+def test_run_prompt_from_file_and_stdin(tmp_path: pathlib.Path):
+    prompt = '{"points": [[1439, 504]], "point_labels": [1]}'
+    prompt_file = tmp_path / "prompt.json"
+    prompt_file.write_text(prompt)
+    cmd = ["osam", "run", "efficientsam:10m", "--image", str(image_path), "--json"]
+
+    from_file = subprocess.check_output(cmd + ["--prompt", f"@{prompt_file}"])
+    from_stdin = subprocess.check_output(cmd + ["--prompt", "-"], input=prompt.encode())
+
+    assert json.loads(from_file) == json.loads(from_stdin)
+
+
+def test_run_prompt_file_missing_rejected(tmp_path: pathlib.Path):
     result = subprocess.run(
         ["osam", "run", "efficientsam:10m", "--image", str(image_path)]
-        + ["--score-threshold", "0.5"],
+        + ["--prompt", f"@{tmp_path / 'missing.json'}"],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 2
-    assert "need --point, --box, --negative-box or --text" in result.stderr
+    assert "missing.json" in result.stderr

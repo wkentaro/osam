@@ -2,6 +2,7 @@ import datetime
 import io
 import json
 import os
+import pathlib
 import sys
 import typing
 
@@ -110,6 +111,19 @@ def serve(reload):
         sys.exit(1)
 
 
+def _load_json(ctx, param, value: str | None) -> dict | None:
+    if value is None:
+        return None
+    try:
+        if value == "-":
+            value = sys.stdin.read()
+        elif value.startswith("@"):
+            value = pathlib.Path(value[1:]).read_text()
+        return json.loads(value)
+    except (OSError, ValueError) as e:
+        raise click.BadParameter(str(e))
+
+
 @cli.command(help="Run a model")
 @click.argument("model_name", metavar="model", type=str)
 @click.option(
@@ -119,7 +133,11 @@ def serve(reload):
     help="image path",
     required=True,
 )
-@click.option("--prompt", type=json.loads, help="prompt as JSON")
+@click.option(
+    "--prompt",
+    callback=_load_json,
+    help="prompt as JSON, @file to read it from a file, or - for stdin",
+)
 @click.option(
     "--point",
     "points",
@@ -142,9 +160,13 @@ def serve(reload):
     help="x1,y1,x2,y2 to exclude (sam3)",
 )
 @click.option("--text", "texts", multiple=True, help="text prompt")
-@click.option("--score-threshold", type=float, help="minimum score")
-@click.option("--iou-threshold", type=float, help="NMS IoU threshold")
-@click.option("--max-annotations", type=int, help="maximum number of annotations")
+@click.option("--score-threshold", type=float, help="minimum score (sam3, yoloworld)")
+@click.option("--iou-threshold", type=float, help="NMS IoU threshold (yoloworld)")
+@click.option(
+    "--max-annotations",
+    type=int,
+    help="maximum number of annotations (sam3, yoloworld)",
+)
 @click.option(
     "--device",
     type=click.Choice(typing.get_args(types.Device)),
@@ -167,13 +189,13 @@ def run(
 ) -> None:
     image: np.ndarray = np.asarray(PIL.Image.open(image_path))
 
-    prompt_flags: dict = {
-        "texts": list(texts) or None,
+    thresholds: dict = {
         "score_threshold": score_threshold,
         "iou_threshold": iou_threshold,
         "max_annotations": max_annotations,
     }
-    prompt_flags = {k: v for k, v in prompt_flags.items() if v is not None}
+    thresholds = {k: v for k, v in thresholds.items() if v is not None}
+    prompt_flags: dict = {"texts": list(texts)} if texts else {}
     if points or boxes or negative_boxes:
         xy: list[list[float]] = []
         labels: list[int] = []
@@ -188,21 +210,25 @@ def run(
                 xy += [box[:2], box[2:]]
                 labels += box_labels
         prompt_flags.update(points=xy, point_labels=labels)
-    if prompt_flags and not (texts or points or boxes or negative_boxes):
-        raise click.UsageError(
-            "--score-threshold, --iou-threshold and --max-annotations need "
-            "--point, --box, --negative-box or --text"
-        )
     if prompt is not None and prompt_flags:
-        raise click.UsageError("--prompt can't be combined with other prompt options")
+        raise click.UsageError(
+            "--prompt can't be combined with --point, --box, --negative-box or --text"
+        )
 
     try:
+        model = apis.get_model_type_by_name(model_name)(device=device)
+        base: types.Prompt | None = None
+        if prompt_flags:
+            base = types.Prompt(**prompt_flags)
+        elif prompt is not None:
+            base = types.Prompt.model_validate(prompt)
+        elif thresholds:
+            base = model.default_prompt(height=image.shape[0], width=image.shape[1])
         request: types.GenerateRequest = types.GenerateRequest(
             model=model_name,
             image=image,
-            prompt=types.Prompt(**prompt_flags) if prompt_flags else prompt,
+            prompt=base and base.model_copy(update=thresholds),
         )
-        model = apis.get_model_type_by_name(model_name)(device=device)
         response: types.GenerateResponse = model.generate(request=request)
     except Exception:
         logger.exception("Failed to run model")
