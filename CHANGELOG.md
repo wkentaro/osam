@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.9.4 - 2026-10-31
+
+### Changed
+
+- SAM3 encodes an image 2x faster on WebGPU (741 ms instead of 1553 ms on an RTX 3080 Ti) with the sam3-onnx v0.6.0 models, which it downloads again; on CoreML, osam rewrites them once on the first load. ([#123](https://github.com/wkentaro/osam/pull/123))
+
 ## 0.9.3 - 2026-10-31
 
 ### Added
