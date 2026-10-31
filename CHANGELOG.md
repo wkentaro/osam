@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.9.3 - 2026-10-31
+
+### Added
+
+- A `webgpu` device runs models on AMD, Intel, NVIDIA and Apple GPUs through Vulkan, Direct3D 12 or Metal; install it with `osam[webgpu]` (Python 3.11+). ([#121](https://github.com/wkentaro/osam/pull/121))
+- Without a device, osam runs on WebGPU when `osam[webgpu]` finds a GPU and CUDA is unavailable; `model.device` tells which device was picked. ([#122](https://github.com/wkentaro/osam/pull/122))
+
 ## 0.9.2 - 2026-10-30
 
 No significant changes.
