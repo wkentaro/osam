@@ -170,7 +170,7 @@ model = osam.apis.get_model_type_by_name("sam3")(device="cuda")
 `cpu`, `cuda`, `coreml` and `webgpu` are supported. An unavailable device raises an
 error instead of falling back to CPU. With `coreml`, SAM3 runs its point
 decoder on CPU and the rest on CoreML. On Apple silicon, SAM3 encodes an image
-faster on CoreML than on WebGPU, but its first CoreML load takes about 35 s.
+faster on CoreML than on WebGPU, but its first CoreML load takes about 40 s.
 
 Without a device, inference runs on CUDA when the installed onnxruntime has it,
 then on WebGPU when `osam[webgpu]` finds a GPU, otherwise on CPU. A session that

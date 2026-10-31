@@ -32,13 +32,12 @@ a box prompt, all 3 masks match with an IoU of 1.0 and the scores are equal.
 | --- | ---: |
 | CPU | 2.9 s |
 | WebGPU | 3.2 s |
-| CoreML, first load | 34 s |
-| CoreML, later loads | 5 to 16 s |
+| CoreML, first load | 40 s |
+| CoreML, later loads | 15 s |
 
-On the first CoreML load, osam rewrites each model's Gemm weights to the layout
-CoreML loads in seconds and compiles the result. It caches both under
-`~/.cache/osam/coreml` (10.3 GB for SAM3). `osam rm sam3` deletes it. The range
-comes from runs with the Mac idle and in use.
+On every CoreML load, osam rewrites each model's Gemm weights in memory to the
+layout CoreML loads in seconds. The first load compiles the result and caches
+it under `~/.cache/osam/coreml` (6.9 GB for SAM3). `osam rm sam3` deletes it.
 
 ## Setup
 
