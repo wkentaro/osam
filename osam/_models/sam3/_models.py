@@ -15,8 +15,8 @@ class Sam3(types.Model):
     name = "sam3:latest"
     metadata = types.ModelMetadata(
         license_name="SAM License",
-        license_url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.5.0/blob/4160188c62b17bcdc8512e0fa2b6d2b53608af3d/LICENSE",
-        source_url="https://github.com/wkentaro/sam3-onnx/tree/e61ac895c1a2db25c60e5a590460cbe4713e446f",
+        license_url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/blob/40ffee63eb38bc3779318319bf81e9db06687d91/LICENSE",
+        source_url="https://github.com/wkentaro/sam3-onnx/tree/f921702fb17fe6f0c6dd054519df71a1c407b142",
     )
 
     # CoreML can't load the point decoder: its point_coords dimension is unbounded.
@@ -24,20 +24,20 @@ class Sam3(types.Model):
 
     _blobs = {
         "image_encoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.5.0/resolve/6ce19ce4483dd101b68a1f37b466b4e37ff2a1b2/sam3_image_encoder.onnx",
-            hash="sha256:348e15d031626656c992fd2cb26a3b2a3fe03e6f038ac62b997e3e24827748bb",
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_image_encoder.onnx",
+            hash="sha256:c6b984d95ca7ca0564356253b92ee30287188cfffab5d4f87709b79d5d9aa6c8",
         ),
         "language_encoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.5.0/resolve/6ce19ce4483dd101b68a1f37b466b4e37ff2a1b2/sam3_language_encoder.onnx",
-            hash="sha256:41236a2adaa762d7403781fb549b9215086c0ee3b6ee49904ef3c2955043c169",
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_language_encoder.onnx",
+            hash="sha256:7868036ee14bb4f09672849c86d6fd5df43f06f089089a99fc2665cb0e84fc26",
         ),
         "decoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.5.0/resolve/6ce19ce4483dd101b68a1f37b466b4e37ff2a1b2/sam3_decoder.onnx",
-            hash="sha256:83c08119ec82aba0277ac8fbf5d08f7300ad7421934da5f0809e53ab74891eee",
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_decoder.onnx",
+            hash="sha256:b4f3588d299611546d9aeb1abf2cf4651a78c7cc021668f379d211b80db1cba3",
         ),
         "point_decoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.5.0/resolve/6ce19ce4483dd101b68a1f37b466b4e37ff2a1b2/sam3_point_decoder.onnx",
-            hash="sha256:bf85d055c0e3fd29bf536fd750945664004b231f39e30f2d83dea3c2244ffcd5",
+            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_point_decoder.onnx",
+            hash="sha256:410871f485362f7b6762e890a3a3ee1619cbc6ae07f7c0e7c88fd319c37a09bb",
         ),
     }
 

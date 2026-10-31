@@ -45,6 +45,8 @@ cpu = [
   # onnxruntime dropped cp310 wheels at 1.24, which is also the first release
   # with cp314 wheels; pin 3.10 below that boundary.
   "onnxruntime<1.24; python_version < '3.11'",
+  # Rewrites SAM3's Gemm weights for CoreML.
+  "onnx>=1.17.0; sys_platform == 'darwin'",
 ]
 gpu = [
   # 1.23.2 cannot create CUDA sessions for SAM3's opset-21 models (#43), so
@@ -59,6 +61,7 @@ webgpu = [
   # EfficientSAM's decoder fails on WebGPU from onnxruntime 1.31.
   "onnxruntime>=1.27,<1.31; python_version >= '3.11'",
   "onnxruntime-ep-webgpu>=0.5; python_version >= '3.11'",
+  "onnx>=1.17.0; sys_platform == 'darwin' and python_version >= '3.11'",
 ]
 serve = ["fastapi", "uvicorn"]
 

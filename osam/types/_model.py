@@ -253,15 +253,73 @@ def _device_providers(
     return [provider, "CPUExecutionProvider"]
 
 
+def _coreml_model_path(blob: Blob) -> str:
+    """Return the blob's model with every Gemm in transB=1, writing it once.
+
+    The CoreML EP takes minutes to load Gemm(transB=0), as it writes the
+    transposed weight into its model as text. A blob with nothing to rewrite
+    gets a symlink to itself, so it is read only once.
+    """
+    path: str = os.path.join(blob.coreml_cache_path, "model.onnx")
+    if not os.path.lexists(path):
+        os.makedirs(blob.coreml_cache_path, exist_ok=True)
+        _write_coreml_model(blob=blob, path=path)
+    return os.path.realpath(path)
+
+
+def _write_coreml_model(blob: Blob, path: str) -> None:
+    try:
+        import onnx
+        from onnx import numpy_helper
+    except ImportError:
+        raise RuntimeError(
+            "CoreMLExecutionProvider needs onnx: pip install 'osam[cpu]'"
+        ) from None
+    model = onnx.load(blob.path, load_external_data=False)
+    initializers = {i.name: i for i in model.graph.initializer}
+    gemms = [
+        node
+        for node in model.graph.node
+        if node.op_type == "Gemm"
+        and node.input[1] in initializers
+        and not any(a.name == "transB" and a.i for a in node.attribute)
+    ]
+    if not gemms:
+        with contextlib.suppress(FileExistsError):  # another process wrote it
+            os.symlink(blob.path, path)
+        return
+    logger.info("Rewriting {!r} for CoreML, once", blob.path)
+    onnx.load_external_data_for_model(model, os.path.dirname(blob.path))
+    for name in {node.input[1] for node in gemms}:
+        weight = initializers[name]
+        weight.CopyFrom(numpy_helper.from_array(numpy_helper.to_array(weight).T, name))
+    for node in gemms:
+        for attribute in [a for a in node.attribute if a.name == "transB"]:
+            node.attribute.remove(attribute)
+        node.attribute.append(onnx.helper.make_attribute("transB", 1))
+    # Unique per caller, as two processes may load the same blob at once.
+    tmp_path: str = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+    onnx.save(model, tmp_path)
+    os.replace(tmp_path, path)
+
+
+def _first_provider(providers: _Providers) -> str:
+    return providers[0] if isinstance(providers[0], str) else providers[0][0]
+
+
 def _create_session(blob: Blob, providers: _Providers) -> onnxruntime.InferenceSession:
     sess_options = onnxruntime.SessionOptions()  # type: ignore[possibly-missing-attribute]
     if "CUDAExecutionProvider" in providers and _setup_cuda():
         sess_options.add_session_config_entry("session.use_env_allocators", "1")
-    if providers[0] == "WebGpuExecutionProvider":
+    provider: str = _first_provider(providers)
+    if provider == "WebGpuExecutionProvider":
         # A plugin provider is added by device; CPU stays as the fallback.
         sess_options.add_provider_for_devices([_webgpu_device()], {})
         return onnxruntime.InferenceSession(blob.path, sess_options)
-    return onnxruntime.InferenceSession(blob.path, sess_options, providers=providers)
+    path: str = (
+        _coreml_model_path(blob) if provider == "CoreMLExecutionProvider" else blob.path
+    )
+    return onnxruntime.InferenceSession(path, sess_options, providers=providers)
 
 
 def _create_device_session(
@@ -271,7 +329,7 @@ def _create_device_session(
         blob=blob, providers=providers
     )
     # onnxruntime silently drops a provider it can't use.
-    provider: str = providers[0] if isinstance(providers[0], str) else providers[0][0]
+    provider: str = _first_provider(providers)
     if provider not in session.get_providers():
         raise RuntimeError(f"{provider} failed to load {blob.path}")
     # Raise on a provider failure in run() too, instead of retrying on CPU.

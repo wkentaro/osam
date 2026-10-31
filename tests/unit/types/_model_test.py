@@ -1,13 +1,19 @@
 import os
+import pathlib
 import sys
 import types
 from typing import Any
 from typing import Iterator
 
+import numpy as np
+import onnx
 import onnxruntime
 import pytest
+from onnx import helper
+from onnx import numpy_helper
 
 from osam.types import _model
+from osam.types._blob import Blob
 from osam.types._model import resolve_providers
 
 
@@ -141,10 +147,11 @@ def fake_sessions(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
 
 
 def test_device_coreml_runs_only_coreml_blobs_on_coreml(
-    fake_sessions: list[tuple[str, Any]],
+    monkeypatch: pytest.MonkeyPatch, fake_sessions: list[tuple[str, Any]]
 ) -> None:
     from osam._models.sam3._models import Sam3
 
+    monkeypatch.setattr(_model, "_coreml_model_path", lambda blob: f"{blob.path}.t")
     Sam3(device="coreml")
 
     coreml = [
@@ -154,7 +161,7 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
     ]
     assert coreml == [
         (
-            Sam3._blobs[key].path,
+            f"{Sam3._blobs[key].path}.t",
             os.path.join(Sam3._blobs[key].coreml_cache_path, onnxruntime.__version__),
         )
         for key in ("image_encoder", "language_encoder", "decoder")
@@ -193,6 +200,7 @@ def test_device_dropped_provider_raises(
     monkeypatch.setattr(
         ort.InferenceSession, "get_providers", lambda self: ["CPUExecutionProvider"]
     )
+    monkeypatch.setattr(_model, "_coreml_model_path", lambda blob: blob.path)
     with pytest.raises(RuntimeError, match="CoreMLExecutionProvider failed to load"):
         Sam3(device="coreml")
 
@@ -289,3 +297,69 @@ def test_model_device_reports_the_picked_device(
         ort.InferenceSession, "get_providers", lambda self: ["CPUExecutionProvider"]
     )
     assert Sam3().device == "cpu"
+
+
+def test_coreml_model_path_rewrites_gemm_to_trans_b(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    graph = helper.make_graph(
+        [
+            helper.make_node("Gemm", ["x", "w", "b"], ["y"]),
+            helper.make_node("Gemm", ["x", "w", "b"], ["y1"], transB=0),
+            helper.make_node("Gemm", ["x", "w_t", "b"], ["y2"], transB=1),
+        ],
+        "test",
+        [helper.make_tensor_value_info("x", onnx.TensorProto.FLOAT, [3, 4])],
+        [
+            helper.make_tensor_value_info(name, onnx.TensorProto.FLOAT, None)
+            for name in ("y", "y1", "y2")
+        ],
+        [
+            numpy_helper.from_array(np.arange(20, dtype=np.float32).reshape(4, 5), "w"),
+            numpy_helper.from_array(
+                np.arange(20, dtype=np.float32).reshape(5, 4), "w_t"
+            ),
+            numpy_helper.from_array(np.arange(5, dtype=np.float32), "b"),
+        ],
+    )
+    gemm = Blob(url="https://example.com/gemm.onnx", hash="sha256:" + "0" * 64)
+    other = Blob(url="https://example.com/other.onnx", hash="sha256:" + "1" * 64)
+
+    def save(blob: Blob, graph: onnx.GraphProto) -> None:
+        os.makedirs(os.path.dirname(blob.path), exist_ok=True)
+        onnx.save(
+            helper.make_model(
+                graph, opset_imports=[helper.make_opsetid("", 21)], ir_version=10
+            ),
+            blob.path,
+        )
+
+    save(gemm, graph)
+    save(
+        other,
+        helper.make_graph(
+            [helper.make_node("Relu", ["x"], ["y"])],
+            "test",
+            [helper.make_tensor_value_info("x", onnx.TensorProto.FLOAT, [3, 4])],
+            [helper.make_tensor_value_info("y", onnx.TensorProto.FLOAT, None)],
+        ),
+    )
+    feeds = {"x": np.random.default_rng(0).random((3, 4), dtype=np.float32)}
+    expected = onnxruntime.InferenceSession(gemm.path).run(None, feeds)
+
+    path = _model._coreml_model_path(gemm)
+
+    assert path != gemm.path
+    actual = onnxruntime.InferenceSession(path).run(None, feeds)
+    for a, e in zip(actual, expected):
+        np.testing.assert_array_equal(a, e)
+    trans_b = [
+        [a.i for a in node.attribute if a.name == "transB"]
+        for node in onnx.load(path).graph.node
+    ]
+    assert trans_b == [[1], [1], [1]]
+    # Nothing to rewrite: the original, read once.
+    assert _model._coreml_model_path(other) == other.path
+    assert os.path.islink(os.path.join(other.coreml_cache_path, "model.onnx"))
