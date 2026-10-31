@@ -245,3 +245,47 @@ def test_device_webgpu_unavailable_raises(
     _model._webgpu_device.cache_clear()
     with pytest.raises(RuntimeError, match=r"pip install 'osam\[webgpu\]'"):
         Sam3(device="webgpu")
+
+
+def test_resolve_providers_picks_webgpu_after_cuda(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any]
+) -> None:
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    assert resolve_providers() == ["CPUExecutionProvider"]  # no GPU listed
+
+    fake_webgpu.append(types.SimpleNamespace(ep_name="WebGpuExecutionProvider"))
+    _model._webgpu_device.cache_clear()
+    assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
+
+    ort: Any = onnxruntime
+    monkeypatch.setattr(
+        ort,
+        "get_available_providers",
+        lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"],
+    )
+    assert resolve_providers() == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+
+def test_resolve_providers_without_webgpu_plugin_is_cpu(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any]
+) -> None:
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    monkeypatch.setitem(sys.modules, "onnxruntime_ep_webgpu", None)
+    assert resolve_providers() == ["CPUExecutionProvider"]
+
+
+def test_model_device_reports_the_picked_device(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any]
+) -> None:
+    from osam._models.sam3._models import Sam3
+
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    fake_webgpu.append(types.SimpleNamespace(ep_name="WebGpuExecutionProvider"))
+    assert Sam3().device == "webgpu"
+
+    # onnxruntime falls back to CPU when WebGPU fails to start, e.g. no Vulkan.
+    ort: Any = onnxruntime
+    monkeypatch.setattr(
+        ort.InferenceSession, "get_providers", lambda self: ["CPUExecutionProvider"]
+    )
+    assert Sam3().device == "cpu"
