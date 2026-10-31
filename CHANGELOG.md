@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.9.5 - 2026-10-31
+
+### Changed
+
+- SAM3 no longer keeps a rewritten copy of its models for CoreML, which shrinks its CoreML cache from 10.3 GB to 6.9 GB; each CoreML load rewrites them in memory instead. ([#124](https://github.com/wkentaro/osam/pull/124))
+
 ## 0.9.4 - 2026-10-31
 
 ### Changed
