@@ -151,7 +151,7 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
 ) -> None:
     from osam._models.sam3._models import Sam3
 
-    monkeypatch.setattr(_model, "_coreml_model_path", lambda blob: f"{blob.path}.t")
+    monkeypatch.setattr(_model, "_coreml_model", lambda blob: f"{blob.path}.t")
     Sam3(device="coreml")
 
     coreml = [
@@ -200,7 +200,7 @@ def test_device_dropped_provider_raises(
     monkeypatch.setattr(
         ort.InferenceSession, "get_providers", lambda self: ["CPUExecutionProvider"]
     )
-    monkeypatch.setattr(_model, "_coreml_model_path", lambda blob: blob.path)
+    monkeypatch.setattr(_model, "_coreml_model", lambda blob: blob.path)
     with pytest.raises(RuntimeError, match="CoreMLExecutionProvider failed to load"):
         Sam3(device="coreml")
 
@@ -299,7 +299,7 @@ def test_model_device_reports_the_picked_device(
     assert Sam3().device == "cpu"
 
 
-def test_coreml_model_path_rewrites_gemm_to_trans_b(
+def test_coreml_model_rewrites_gemm_to_trans_b(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -349,17 +349,24 @@ def test_coreml_model_path_rewrites_gemm_to_trans_b(
     feeds = {"x": np.random.default_rng(0).random((3, 4), dtype=np.float32)}
     expected = onnxruntime.InferenceSession(gemm.path).run(None, feeds)
 
-    path = _model._coreml_model_path(gemm)
+    model = _model._coreml_model(gemm)
 
-    assert path != gemm.path
-    actual = onnxruntime.InferenceSession(path).run(None, feeds)
+    assert isinstance(model, bytes)
+    actual = onnxruntime.InferenceSession(model).run(None, feeds)
     for a, e in zip(actual, expected):
         np.testing.assert_array_equal(a, e)
     trans_b = [
         [a.i for a in node.attribute if a.name == "transB"]
-        for node in onnx.load(path).graph.node
+        for node in onnx.load_from_string(model).graph.node
     ]
     assert trans_b == [[1], [1], [1]]
-    # Nothing to rewrite: the original, read once.
-    assert _model._coreml_model_path(other) == other.path
-    assert os.path.islink(os.path.join(other.coreml_cache_path, "model.onnx"))
+    assert _model._coreml_model(other) == other.path
+    assert not os.path.exists(gemm.coreml_cache_path)
+
+    # The session drops the bytes and falls back from the original file.
+    monkeypatch.setattr(_model, "_first_provider", lambda p: "CoreMLExecutionProvider")
+    session = _model._create_session(gemm, providers=["CPUExecutionProvider"])
+    assert session._model_bytes is None
+    session.set_providers(["CPUExecutionProvider"])
+    for a, e in zip(session.run(None, feeds), expected):
+        np.testing.assert_array_equal(a, e)

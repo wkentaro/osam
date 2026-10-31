@@ -50,7 +50,7 @@ class Blob:
 
     @property
     def coreml_cache_path(self) -> str:
-        """Directory of this blob's CoreML model and its compiled cache."""
+        """Directory where CoreML caches this blob's compiled model."""
         return os.path.expanduser(
             os.path.join("~", ".cache", "osam", "coreml", self._safe_hash)
         )
