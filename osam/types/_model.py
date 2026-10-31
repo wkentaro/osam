@@ -253,21 +253,13 @@ def _device_providers(
     return [provider, "CPUExecutionProvider"]
 
 
-def _coreml_model_path(blob: Blob) -> str:
-    """Return the blob's model with every Gemm in transB=1, writing it once.
+def _coreml_model(blob: Blob) -> str | bytes:
+    """Return the blob's model with every Gemm in transB=1, rewritten in memory.
 
     The CoreML EP takes minutes to load Gemm(transB=0), as it writes the
     transposed weight into its model as text. A blob with nothing to rewrite
-    gets a symlink to itself, so it is read only once.
+    is returned as its path.
     """
-    path: str = os.path.join(blob.coreml_cache_path, "model.onnx")
-    if not os.path.lexists(path):
-        os.makedirs(blob.coreml_cache_path, exist_ok=True)
-        _write_coreml_model(blob=blob, path=path)
-    return os.path.realpath(path)
-
-
-def _write_coreml_model(blob: Blob, path: str) -> None:
     try:
         import onnx
         from onnx import numpy_helper
@@ -285,10 +277,8 @@ def _write_coreml_model(blob: Blob, path: str) -> None:
         and not any(a.name == "transB" and a.i for a in node.attribute)
     ]
     if not gemms:
-        with contextlib.suppress(FileExistsError):  # another process wrote it
-            os.symlink(blob.path, path)
-        return
-    logger.info("Rewriting {!r} for CoreML, once", blob.path)
+        return blob.path
+    logger.debug("Rewriting {!r} for CoreML", blob.path)
     onnx.load_external_data_for_model(model, os.path.dirname(blob.path))
     for name in {node.input[1] for node in gemms}:
         weight = initializers[name]
@@ -297,10 +287,7 @@ def _write_coreml_model(blob: Blob, path: str) -> None:
         for attribute in [a for a in node.attribute if a.name == "transB"]:
             node.attribute.remove(attribute)
         node.attribute.append(onnx.helper.make_attribute("transB", 1))
-    # Unique per caller, as two processes may load the same blob at once.
-    tmp_path: str = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
-    onnx.save(model, tmp_path)
-    os.replace(tmp_path, path)
+    return model.SerializeToString()
 
 
 def _first_provider(providers: _Providers) -> str:
@@ -316,10 +303,16 @@ def _create_session(blob: Blob, providers: _Providers) -> onnxruntime.InferenceS
         # A plugin provider is added by device; CPU stays as the fallback.
         sess_options.add_provider_for_devices([_webgpu_device()], {})
         return onnxruntime.InferenceSession(blob.path, sess_options)
-    path: str = (
-        _coreml_model_path(blob) if provider == "CoreMLExecutionProvider" else blob.path
+    model: str | bytes = (
+        _coreml_model(blob) if provider == "CoreMLExecutionProvider" else blob.path
     )
-    return onnxruntime.InferenceSession(path, sess_options, providers=providers)
+    session = onnxruntime.InferenceSession(model, sess_options, providers=providers)
+    if isinstance(model, bytes):
+        # onnxruntime keeps a model given as bytes, gigabytes for SAM3, to
+        # recreate the session on CPU fallback; the original file serves that.
+        session._model_path = blob.path  # type: ignore[attr-defined]
+        session._model_bytes = None  # type: ignore[attr-defined]
+    return session
 
 
 def _create_device_session(
