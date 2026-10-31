@@ -36,9 +36,9 @@ libraries, so no system CUDA install is needed. Install only one onnxruntime
 build: `onnxruntime` and `onnxruntime-gpu` overwrite each other's files.
 
 For other GPUs (AMD, Intel, or NVIDIA without the CUDA libraries), install
-`osam[webgpu]` and run with `--device webgpu`. It runs on Vulkan, Direct3D 12
-or Metal, and needs Python 3.11 or later. On Linux it also needs the system
-Vulkan loader (`libvulkan.so.1`).
+`osam[webgpu]`; osam then uses the GPU without `--device`. It runs on Vulkan,
+Direct3D 12 or Metal, and needs Python 3.11 or later. On Linux it also needs
+the system Vulkan loader (`libvulkan.so.1`).
 
 **For `osam serve`**:
 
@@ -171,8 +171,10 @@ model = osam.apis.get_model_type_by_name("sam3")(device="cuda")
 error instead of falling back to CPU. With `coreml`, SAM3 runs its point
 decoder on CPU and the rest on CoreML.
 
-Without a device, inference runs on `CUDAExecutionProvider` when the installed onnxruntime has it,
-otherwise on `CPUExecutionProvider`. To use another accelerator (CoreML on
+Without a device, inference runs on CUDA when the installed onnxruntime has it,
+then on WebGPU when `osam[webgpu]` finds a GPU, otherwise on CPU. A session that
+fails to start on the GPU, for example without a Vulkan driver, runs on CPU.
+`model.device` tells which one was picked. To use another accelerator (CoreML on
 macOS, DirectML on Windows, TensorRT, ROCm), set `OSAM_ONNX_PROVIDERS` to a
 comma-separated list tried in the given order:
 

@@ -53,6 +53,11 @@ def resolve_providers() -> list[str]:
         return providers
     if "CUDAExecutionProvider" in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    try:
+        if _webgpu_device() is not None:
+            return ["WebGpuExecutionProvider", "CPUExecutionProvider"]
+    except Exception as e:  # plugin missing or failing to register
+        logger.debug("Skipping WebGpuExecutionProvider: {e}", e=e)
     return ["CPUExecutionProvider"]
 
 
@@ -116,8 +121,8 @@ class Model(abc.ABC):
     def __init__(self, device: Device | None = None):
         """Load the model.
 
-        device: "cpu", "cuda", "coreml", or "webgpu". None picks OSAM_ONNX_PROVIDERS, or
-        CUDA when available, falling back to CPU.
+        device: "cpu", "cuda", "coreml", or "webgpu". None picks OSAM_ONNX_PROVIDERS,
+        or the first available of CUDA and WebGPU, falling back to CPU.
         """
         logger.debug("Initializing model {name}", name=self.name)
         if device is not None:
@@ -144,6 +149,13 @@ class Model(abc.ABC):
                 k: s.get_providers()[0] for k, s in self._inference_sessions.items()
             },
         )
+
+    @property
+    def device(self) -> str:
+        """Device the model runs on, e.g. "webgpu", or "cpu" after a fallback."""
+        session = next(iter(self._inference_sessions.values()))
+        provider: str = session.get_providers()[0]
+        return {v: k for k, v in _DEVICE_PROVIDERS.items()}.get(provider, provider)
 
     @classmethod
     def pull(
