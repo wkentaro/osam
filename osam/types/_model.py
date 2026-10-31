@@ -29,13 +29,14 @@ from ._prompt import Prompt
 
 _PROVIDERS_ENV: Final = "OSAM_ONNX_PROVIDERS"
 
-Device = Literal["cpu", "cuda", "coreml"]
+Device = Literal["cpu", "cuda", "coreml", "webgpu"]
 _Providers = Sequence[str | tuple[str, dict[str, str]]]
 
 _DEVICE_PROVIDERS: Final[dict[str, str]] = {
     "cpu": "CPUExecutionProvider",
     "cuda": "CUDAExecutionProvider",
     "coreml": "CoreMLExecutionProvider",
+    "webgpu": "WebGpuExecutionProvider",
 }
 # MLProgram supports more operators than the default NeuralNetwork, and leaving
 # out the Neural Engine keeps the GPU's accuracy and speed.
@@ -84,6 +85,24 @@ def _setup_cuda() -> bool:
     return True
 
 
+@functools.cache
+def _webgpu_device() -> Any | None:
+    try:
+        import onnxruntime_ep_webgpu as webgpu_ep  # type: ignore[unresolved-import]
+    except ImportError:
+        raise RuntimeError(
+            "WebGpuExecutionProvider needs onnxruntime-ep-webgpu: "
+            "pip install 'osam[webgpu]'"
+        ) from None
+    ort = cast(Any, onnxruntime)
+    ort.register_execution_provider_library("webgpu", webgpu_ep.get_library_path())
+    # The plugin accepts one device.
+    for device in ort.get_ep_devices():
+        if device.ep_name == webgpu_ep.get_ep_name():
+            return device
+    return None
+
+
 class Model(abc.ABC):
     name: str
     metadata: ModelMetadata
@@ -97,7 +116,7 @@ class Model(abc.ABC):
     def __init__(self, device: Device | None = None):
         """Load the model.
 
-        device: "cpu", "cuda", or "coreml". None picks OSAM_ONNX_PROVIDERS, or
+        device: "cpu", "cuda", "coreml", or "webgpu". None picks OSAM_ONNX_PROVIDERS, or
         CUDA when available, falling back to CPU.
         """
         logger.debug("Initializing model {name}", name=self.name)
@@ -203,7 +222,10 @@ def _device_providers(
             f"device must be one of {', '.join(_DEVICE_PROVIDERS)}: {device!r}"
         )
     provider: str = _DEVICE_PROVIDERS[device]
-    if provider not in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
+    if device == "webgpu":
+        if _webgpu_device() is None:
+            raise RuntimeError(f"{provider} found no GPU")
+    elif provider not in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
         raise RuntimeError(f"{provider} is unavailable in the installed onnxruntime")
     if device == "cpu" or (device == "coreml" and not coreml):
         return ["CPUExecutionProvider"]
@@ -223,6 +245,10 @@ def _create_session(blob: Blob, providers: _Providers) -> onnxruntime.InferenceS
     sess_options = onnxruntime.SessionOptions()  # type: ignore[possibly-missing-attribute]
     if "CUDAExecutionProvider" in providers and _setup_cuda():
         sess_options.add_session_config_entry("session.use_env_allocators", "1")
+    if providers[0] == "WebGpuExecutionProvider":
+        # A plugin provider is added by device; CPU stays as the fallback.
+        sess_options.add_provider_for_devices([_webgpu_device()], {})
+        return onnxruntime.InferenceSession(blob.path, sess_options)
     return onnxruntime.InferenceSession(blob.path, sess_options, providers=providers)
 
 
