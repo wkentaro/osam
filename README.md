@@ -105,7 +105,7 @@ Median of 5 runs after a warm-up, excluding model loading.
 | SAM2 Small | 651 | 74 | 121 | 2119 | 320 | 279 |
 | SAM2 BasePlus | 1237 | 104 | 179 | 2923 | 570 | 494 |
 | SAM2 Large | 2414 | 151 | 319 | 7596 | 1281 | 1109 |
-| SAM3 | 6512 | 348 | 1553 | 15233 | 2425 | 3942 |
+| SAM3 | 6563 | 347 | 741 | 15341 | 2466 | 3691 |
 | EfficientSAM 10M | 399 | 55 | 253 | 781 | fails to load | 322 |
 | EfficientSAM 30M | 948 | 74 | 448 | 1767 | fails to load | 664 |
 | YOLO-World XL | — | — | — | — | fails to load | — |
@@ -124,7 +124,7 @@ encoding.
 | SAM2 Small | 44 | 17 | 74 | 58 | 61 | 28 |
 | SAM2 BasePlus | 50 | 17 | 69 | 51 | 65 | 28 |
 | SAM2 Large | 43 | 17 | 87 | 48 | 60 | 29 |
-| SAM3 | 1174 | 75 | 381 | 1426 | 373 | 644 |
+| SAM3 | 1162 | 74 | 203 | 1519 | 376 | 604 |
 | EfficientSAM 10M | 45 | 16 | 51 | 34 | fails to load | 27 |
 | EfficientSAM 30M | 46 | 15 | 56 | 35 | fails to load | 27 |
 | YOLO-World XL | 774 | 42 | 100 | 1829 | fails to load | 237 |
@@ -169,7 +169,8 @@ model = osam.apis.get_model_type_by_name("sam3")(device="cuda")
 
 `cpu`, `cuda`, `coreml` and `webgpu` are supported. An unavailable device raises an
 error instead of falling back to CPU. With `coreml`, SAM3 runs its point
-decoder on CPU and the rest on CoreML.
+decoder on CPU and the rest on CoreML. On Apple silicon, SAM3 encodes an image
+faster on CoreML than on WebGPU, but its first CoreML load takes about 35 s.
 
 Without a device, inference runs on CUDA when the installed onnxruntime has it,
 then on WebGPU when `osam[webgpu]` finds a GPU, otherwise on CPU. A session that
