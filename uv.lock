@@ -1757,6 +1757,7 @@ dependencies = [
 
 [package.optional-dependencies]
 cpu = [
+    { name = "onnx", marker = "sys_platform == 'darwin'" },
     { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-cpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "onnxruntime", version = "1.30.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-cpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
 ]
@@ -1769,6 +1770,7 @@ serve = [
     { name = "uvicorn" },
 ]
 webgpu = [
+    { name = "onnx", marker = "python_full_version >= '3.11' and sys_platform == 'darwin'" },
     { name = "onnxruntime", version = "1.30.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "onnxruntime-ep-webgpu", marker = "python_full_version >= '3.11'" },
 ]
@@ -1801,6 +1803,8 @@ requires-dist = [
     { name = "gdown", specifier = ">=6.4.0" },
     { name = "imgviz", specifier = ">=2.0.0" },
     { name = "loguru" },
+    { name = "onnx", marker = "python_full_version >= '3.11' and sys_platform == 'darwin' and extra == 'webgpu'", specifier = ">=1.17.0" },
+    { name = "onnx", marker = "sys_platform == 'darwin' and extra == 'cpu'", specifier = ">=1.17.0" },
     { name = "onnxruntime", marker = "python_full_version >= '3.11' and extra == 'webgpu'", specifier = ">=1.27,<1.31" },
     { name = "onnxruntime", marker = "python_full_version < '3.11' and extra == 'cpu'", specifier = "<1.24" },
     { name = "onnxruntime", marker = "extra == 'cpu'", specifier = ">=1.23.2" },
