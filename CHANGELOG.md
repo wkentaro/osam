@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.10.0 - 2026-11-01
+
+### Changed
+
+- **Breaking:** SAM3 segments one object from a single box without text, as SAM and SAM2 do; several boxes or a negative box without text raise, and `texts=["visual"]` keeps finding every object like the boxes. ([#126](https://github.com/wkentaro/osam/pull/126))
+
 ## 0.9.6 - 2026-11-01
 
 ### Fixed
