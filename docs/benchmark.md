@@ -23,6 +23,9 @@ On the M5, CoreML encodes the image 6.2x faster than the CPU and runs a text or
 box prompt 4.0x faster. The point decoder runs on CPU on both, because CoreML
 can't load its unbounded point input.
 
+The Box column timed the concept detector, which a box without text used to
+run. A box without text now runs the point decoder, as a point prompt does.
+
 CoreML and CPU returned the same result on the M5 with the v0.5.0 models: for the text prompt "dog" and
 a box prompt, all 3 masks match with an IoU of 1.0 and the scores are equal.
 

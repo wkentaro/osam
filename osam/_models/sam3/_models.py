@@ -125,17 +125,28 @@ class Sam3(types.Model):
             prompt.points is not None
             and prompt.point_labels is not None
             and len(prompt.point_labels) > 0
-            and np.isin(prompt.point_labels, [0, 1]).all()
         ):
+            is_points: bool = bool(np.isin(prompt.point_labels, [0, 1]).all())
             if prompt.texts:
-                raise ValueError("point prompts can't be combined with text")
-            return self._generate_from_points(
-                image_embedding=image_embedding,
-                points=prompt.points,
-                point_labels=prompt.point_labels,
-                score_threshold=score_threshold,
-                max_annotations=prompt.max_annotations,
-            )
+                # Boxes with text are examples of the objects to find.
+                if is_points:
+                    raise ValueError("point prompts can't be combined with text")
+            else:
+                # Without text, a box is one object, as in SAM and SAM2.
+                if not (is_points or prompt.point_labels.tolist() == [2, 3]):
+                    raise ValueError(
+                        "without texts, give points (labels 0, 1) or one box "
+                        "(labels 2, 3) to segment one object; add "
+                        "texts=['visual'] to find every object like the boxes: "
+                        f"{prompt.point_labels=}"
+                    )
+                return self._generate_from_points(
+                    image_embedding=image_embedding,
+                    points=prompt.points,
+                    point_labels=prompt.point_labels,
+                    score_threshold=score_threshold,
+                    max_annotations=prompt.max_annotations,
+                )
 
         text_prompt: str = "visual"
         if prompt.texts:
@@ -171,9 +182,8 @@ class Sam3(types.Model):
             )
             if not pairs or any(pair not in ([2, 3], [4, 5]) for pair in pairs):
                 raise ValueError(
-                    "points (labels 0, 1) or boxes as point label pairs "
-                    "(2, 3: positive left-top, right-bottom; 4, 5: negative) "
-                    "are supported, not both: "
+                    "with texts, give boxes as point label pairs "
+                    "(2, 3: positive left-top, right-bottom; 4, 5: negative): "
                     f"{prompt.point_labels=}"
                 )
             if num_boxes > max_boxes:
