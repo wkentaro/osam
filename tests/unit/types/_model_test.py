@@ -205,6 +205,22 @@ def test_device_dropped_provider_raises(
         Sam3(device="coreml")
 
 
+def _webgpu_adapter(
+    vendor_id: int = 0x10DE, device_id: int = 0x2208, description: str = ""
+) -> Any:
+    metadata: dict[str, str] = {"Description": description} if description else {}
+    return types.SimpleNamespace(
+        ep_name="WebGpuExecutionProvider",
+        device=types.SimpleNamespace(
+            vendor="", vendor_id=vendor_id, device_id=device_id, metadata=metadata
+        ),
+    )
+
+
+def _warp_adapter() -> Any:
+    return _webgpu_adapter(0x1414, 0x008C, "Microsoft Basic Render Driver")
+
+
 @pytest.fixture
 def fake_webgpu(
     monkeypatch: pytest.MonkeyPatch, fake_sessions: list[tuple[str, Any]]
@@ -234,7 +250,7 @@ def test_device_webgpu_runs_every_blob_on_webgpu(
 ) -> None:
     from osam._models.sam3._models import Sam3
 
-    fake_webgpu.append(types.SimpleNamespace(ep_name="WebGpuExecutionProvider"))
+    fake_webgpu.append(_webgpu_adapter())
     Sam3(device="webgpu")
 
     disabled = [p for p, providers in fake_sessions if providers == "fallback disabled"]
@@ -261,7 +277,7 @@ def test_resolve_providers_picks_webgpu_after_cuda(
     monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
     assert resolve_providers() == ["CPUExecutionProvider"]  # no GPU listed
 
-    fake_webgpu.append(types.SimpleNamespace(ep_name="WebGpuExecutionProvider"))
+    fake_webgpu.append(_webgpu_adapter())
     _model._webgpu_device.cache_clear()
     assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
 
@@ -288,7 +304,7 @@ def test_model_device_reports_the_picked_device(
     from osam._models.sam3._models import Sam3
 
     monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
-    fake_webgpu.append(types.SimpleNamespace(ep_name="WebGpuExecutionProvider"))
+    fake_webgpu.append(_webgpu_adapter())
     assert Sam3().device == "webgpu"
 
     # onnxruntime falls back to CPU when WebGPU fails to start, e.g. no Vulkan.
@@ -370,3 +386,57 @@ def test_coreml_model_rewrites_gemm_to_trans_b(
     session.set_providers(["CPUExecutionProvider"])
     for a, e in zip(session.run(None, feeds), expected):
         np.testing.assert_array_equal(a, e)
+
+
+def test_resolve_providers_skips_software_webgpu(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any]
+) -> None:
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    fake_webgpu.append(_warp_adapter())
+    assert resolve_providers() == ["CPUExecutionProvider"]
+
+    # A GPU without its driver installed renders on WARP too.
+    fake_webgpu[1:] = [
+        _webgpu_adapter(0x1234, 0x1111, "Microsoft Basic Display Adapter")
+    ]
+    _model._webgpu_device.cache_clear()
+    assert resolve_providers() == ["CPUExecutionProvider"]
+
+
+def test_resolve_providers_picks_hardware_webgpu_after_software(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any]
+) -> None:
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    hardware = _webgpu_adapter()
+    fake_webgpu += [_warp_adapter(), hardware]
+    assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
+    assert _model._webgpu_device() is hardware
+
+
+@pytest.mark.parametrize(
+    "adapter",
+    [
+        # An integrated GPU shares system memory: no dedicated VRAM.
+        _webgpu_adapter(0x8086, 0x46A6, "Intel(R) Iris(R) Xe Graphics"),
+        # A VM with a passed-through GPU, or a Microsoft-made GPU driver.
+        _webgpu_adapter(0x1414, 0x0001, "Microsoft Hyper-V Video"),
+    ],
+)
+def test_resolve_providers_keeps_hardware_webgpu(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any], adapter: Any
+) -> None:
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    fake_webgpu.append(adapter)
+    assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
+
+
+def test_device_webgpu_runs_on_software_when_requested(
+    fake_webgpu: list[Any], fake_sessions: list[tuple[str, Any]]
+) -> None:
+    from osam._models.sam3._models import Sam3
+
+    fake_webgpu.append(_warp_adapter())
+    Sam3(device="webgpu")
+
+    disabled = [p for p, providers in fake_sessions if providers == "fallback disabled"]
+    assert disabled == ["WebGpuExecutionProvider"] * len(Sam3._blobs)
