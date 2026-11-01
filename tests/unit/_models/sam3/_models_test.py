@@ -55,3 +55,31 @@ def test_generate_keeps_mask_of_box_past_image_edge(
     assert (bb.xmin, bb.ymin, bb.xmax, bb.ymax) == expected
     assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
     assert annotation.mask.all()
+
+
+@pytest.mark.parametrize(
+    "point_labels",
+    [[2, 3, 2, 3], [2, 3, 4, 5], [4, 5], [1, 2, 3]],
+)
+def test_generate_rejects_boxes_without_text_beyond_one_box(
+    point_labels: list[int],
+) -> None:
+    model = Sam3.__new__(Sam3)
+    embedding = types.ImageEmbedding(
+        original_height=100,
+        original_width=100,
+        embedding=np.zeros((1, 1, 1), np.float32),
+        extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
+    )
+
+    with pytest.raises(ValueError, match=r"texts=\['visual'\]"):
+        model.generate(
+            types.GenerateRequest(
+                model="sam3",
+                image_embedding=embedding,
+                prompt=types.Prompt(
+                    points=np.zeros((len(point_labels), 2)),
+                    point_labels=np.array(point_labels),
+                ),
+            )
+        )

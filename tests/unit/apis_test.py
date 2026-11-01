@@ -135,13 +135,14 @@ def test_generate_box_to_mask_sam2(model: str) -> None:
         [[1706, 613], [2227, 1438], [450, 551], [1059, 1421]],
     ],
 )
-def test_generate_box_to_mask_sam3(
+def test_generate_example_box_to_mask_sam3(
     model: str, points: list[list[int]], sam3_text_response: types.GenerateResponse
 ) -> None:
     request: types.GenerateRequest = types.GenerateRequest(
         model=model,
         image_embedding=sam3_text_response.image_embedding,
         prompt=types.Prompt(
+            texts=["visual"],
             points=np.array(points, dtype=np.float32),
             point_labels=np.array([2, 3] * (len(points) // 2), dtype=np.int32),
         ),
@@ -239,6 +240,7 @@ def test_generate_negative_box_sam3(
                 dtype=np.float32,
             ),
             point_labels=np.array([2, 3, 4, 5], dtype=np.int32),
+            texts=["visual"],
         ),
     )
     response: types.GenerateResponse = apis.generate(request=request)
@@ -246,6 +248,28 @@ def test_generate_negative_box_sam3(
     [annotation] = response.annotations
     assert annotation.bounding_box is not None
     assert annotation.bounding_box.xmin > 1059
+
+
+def test_generate_box_to_mask_sam3(
+    sam3_text_response: types.GenerateResponse,
+) -> None:
+    # Without text, a box is one object, as in SAM2.
+    request: types.GenerateRequest = types.GenerateRequest(
+        model="sam3:latest",
+        image_embedding=sam3_text_response.image_embedding,
+        prompt=types.Prompt(
+            points=np.array([[1233, 376], [1649, 691]], dtype=np.float32),
+            point_labels=np.array([2, 3], dtype=np.int32),
+        ),
+    )
+    response: types.GenerateResponse = apis.generate(request=request)
+
+    [annotation] = response.annotations
+    assert annotation.text is None
+    assert annotation.score is not None and annotation.score > 0.9
+    bb = annotation.bounding_box
+    assert bb is not None
+    assert 1213 < bb.xmin and bb.xmax < 1669 and 356 < bb.ymin and bb.ymax < 711
 
 
 def test_generate_max_annotations_sam3(

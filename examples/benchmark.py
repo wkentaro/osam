@@ -32,6 +32,7 @@ PROMPTS: dict[str, osam.types.Prompt] = {
     "negative box": osam.types.Prompt(
         points=np.array([[1233, 376], [1649, 691], [1400, 500], [1500, 600]]),
         point_labels=np.array([2, 3, 4, 5]),
+        texts=["visual"],
     ),
     "text": osam.types.Prompt(texts=["dog"]),
 }

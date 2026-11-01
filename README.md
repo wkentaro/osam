@@ -209,9 +209,10 @@ osam run sam2 --image examples/_images/dogs.jpg \
   --box 1233,376,1649,691 > sam2_box.png
 # 3. text prompt
 osam run sam3 --image examples/_images/dogs.jpg --text dog > sam3_text.png
-# 4. box prompt with sam3
+# 4. box prompt with sam3: one object without --text, as with sam2, or every
+# object like the example box with --text visual
 osam run sam3 --image examples/_images/dogs.jpg \
-  --box 1233,376,1649,691 > sam3_box.png
+  --text visual --box 1233,376,1649,691 > sam3_box.png
 # 5. text prompt with sam3, excluding a region
 osam run sam3 --image examples/_images/dogs.jpg \
   --text dog --negative-box 1200,400,1700,1400 > sam3_negative_box.png

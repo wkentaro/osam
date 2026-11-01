@@ -157,7 +157,7 @@ def _load_json(ctx, param, value: str | None) -> dict | None:
     "negative_boxes",
     multiple=True,
     callback=lambda ctx, param, value: [_floats(v, (4,)) for v in value],
-    help="x1,y1,x2,y2 to exclude (sam3)",
+    help="x1,y1,x2,y2 to exclude (sam3, with --text)",
 )
 @click.option("--text", "texts", multiple=True, help="text prompt")
 @click.option("--score-threshold", type=float, help="minimum score (sam3, yoloworld)")
