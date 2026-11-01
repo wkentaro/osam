@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.9.6 - 2026-11-01
+
+### Fixed
+
+- Automatic device selection skips software WebGPU adapters, such as Windows' Microsoft Basic Render Driver, and runs on CPU instead of a renderer that encodes images about 25 times slower. ([#125](https://github.com/wkentaro/osam/pull/125))
+
 ## 0.9.5 - 2026-10-31
 
 ### Changed
