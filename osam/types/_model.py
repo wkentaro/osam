@@ -54,7 +54,8 @@ def resolve_providers() -> list[str]:
     if "CUDAExecutionProvider" in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
     try:
-        if _webgpu_device() is not None:
+        device: Any | None = _webgpu_device()
+        if device is not None and not _is_software_adapter(device):
             return ["WebGpuExecutionProvider", "CPUExecutionProvider"]
     except Exception as e:  # plugin missing or failing to register
         logger.debug("Skipping WebGpuExecutionProvider: {e}", e=e)
@@ -90,8 +91,32 @@ def _setup_cuda() -> bool:
     return True
 
 
+# Windows lists its CPU renderer, WARP, as a GPU: ~25x slower than CPU on SAM.
+# A GPU without a driver runs on the Basic Display driver, which renders on WARP.
+_WARP_IDS: Final = (0x1414, 0x008C)  # vendor_id, device_id
+_SOFTWARE_DESCRIPTIONS: Final = (
+    "Microsoft Basic Render Driver",
+    "Microsoft Basic Display Adapter",
+)
+
+
+def _is_software_adapter(ep_device: Any) -> bool:
+    hardware = ep_device.device
+    if (hardware.vendor_id, hardware.device_id) == _WARP_IDS:
+        return True
+    description: str = hardware.metadata.get("Description", "")
+    return description.startswith(_SOFTWARE_DESCRIPTIONS)
+
+
+def _describe_adapter(ep_device: Any) -> str:
+    hardware = ep_device.device
+    name: str = hardware.metadata.get("Description") or hardware.vendor or "unknown"
+    return f"{name} ({hardware.vendor_id:#06x}:{hardware.device_id:#06x})"
+
+
 @functools.cache
 def _webgpu_device() -> Any | None:
+    """Return the first hardware WebGPU adapter, else a software one, else None."""
     try:
         import onnxruntime_ep_webgpu as webgpu_ep  # type: ignore[unresolved-import]
     except ImportError:
@@ -101,10 +126,26 @@ def _webgpu_device() -> Any | None:
         ) from None
     ort = cast(Any, onnxruntime)
     ort.register_execution_provider_library("webgpu", webgpu_ep.get_library_path())
+    devices: list[Any] = [
+        d for d in ort.get_ep_devices() if d.ep_name == webgpu_ep.get_ep_name()
+    ]
+    logger.debug(
+        "WebGPU adapters: {adapters!r}",
+        adapters=[_describe_adapter(d) for d in devices],
+    )
     # The plugin accepts one device.
-    for device in ort.get_ep_devices():
-        if device.ep_name == webgpu_ep.get_ep_name():
+    for device in devices:
+        if not _is_software_adapter(device):
+            logger.debug("Picked WebGPU adapter {}", _describe_adapter(device))
             return device
+    if devices:
+        logger.warning(
+            "Only software WebGPU adapters, which run slower than CPU: {adapters!r}. "
+            "Automatic selection uses CPU; an explicit WebGPU request runs on {first}",
+            adapters=[_describe_adapter(d) for d in devices],
+            first=_describe_adapter(devices[0]),
+        )
+        return devices[0]
     return None
 
 
@@ -122,7 +163,8 @@ class Model(abc.ABC):
         """Load the model.
 
         device: "cpu", "cuda", "coreml", or "webgpu". None picks OSAM_ONNX_PROVIDERS,
-        or the first available of CUDA and WebGPU, falling back to CPU.
+        or the first available of CUDA and a hardware WebGPU adapter, falling
+        back to CPU.
         """
         logger.debug("Initializing model {name}", name=self.name)
         if device is not None:
