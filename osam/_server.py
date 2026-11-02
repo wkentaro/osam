@@ -18,8 +18,9 @@ from . import apis
 from . import types
 
 # apis.generate keeps one model loaded, and pull and remove must not change the
-# files under a model being loaded, so they all run on one thread, in order. Queued requests wait here instead of holding FastAPI's thread pool,
-# so other routes stay free.
+# files under a model being loaded, so they all run on one thread, in order.
+# Queued requests wait here instead of holding FastAPI's thread pool, so other
+# routes stay free.
 # ponytail: one worker, so a long pull also delays generate.
 _worker = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
