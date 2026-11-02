@@ -1,10 +1,11 @@
+import asyncio
 import contextlib
 import logging
 import os
-import threading
 
 import fastapi
 import pydantic
+from fastapi.concurrency import run_in_threadpool
 from loguru import logger
 from pydantic.json_schema import SkipJsonSchema
 
@@ -12,9 +13,10 @@ from . import __version__
 from . import apis
 from . import types
 
-# apis.generate keeps one model loaded, so requests run one at a time.
+# apis.generate keeps one model loaded, so requests run one at a time. Waiters
+# queue on the event loop, not in the thread pool, so other routes stay free.
 # ponytail: global lock, a model per worker if throughput matters.
-_lock = threading.Lock()
+_lock = asyncio.Lock()
 
 
 @contextlib.asynccontextmanager
@@ -48,13 +50,11 @@ def index() -> fastapi.Response:
     return fastapi.Response("osam is running")
 
 
-# A sync endpoint runs in FastAPI's thread pool, so inference doesn't block the
-# event loop.
 @app.post("/api/generate", response_model=GenerateResponse)
-def generate(request: GenerateRequest) -> types.GenerateResponse:
-    with _lock:
+async def generate(request: GenerateRequest) -> types.GenerateResponse:
+    async with _lock:
         try:
-            return apis.generate(request=request)
+            return await run_in_threadpool(apis.generate, request=request)
         except ValueError as e:
             raise fastapi.HTTPException(400, str(e))
         except Exception as e:  # e.g. onnxruntime running out of GPU memory
