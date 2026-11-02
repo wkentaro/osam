@@ -116,7 +116,7 @@ def _describe_adapter(ep_device: Any) -> str:
 
 @functools.cache
 def _webgpu_device() -> Any | None:
-    """Return the first hardware WebGPU adapter, else a software one, else None."""
+    # Prefer a hardware adapter, then a software one.
     try:
         import onnxruntime_ep_webgpu as webgpu_ep  # type: ignore[unresolved-import]
     except ImportError:
@@ -296,12 +296,9 @@ def _device_providers(
 
 
 def _coreml_model(blob: Blob) -> str | bytes:
-    """Return the blob's model with every Gemm in transB=1, rewritten in memory.
-
-    The CoreML EP takes minutes to load Gemm(transB=0), as it writes the
-    transposed weight into its model as text. A blob with nothing to rewrite
-    is returned as its path.
-    """
+    # Rewrites every Gemm to transB=1 in memory: the CoreML EP takes minutes to
+    # load Gemm(transB=0), as it writes the transposed weight into its model as
+    # text. A blob with nothing to rewrite is returned as its path.
     try:
         import onnx
         from onnx import numpy_helper
