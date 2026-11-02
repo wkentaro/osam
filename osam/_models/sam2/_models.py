@@ -17,7 +17,7 @@ class Sam2(SamBase):
         license_spdx="Apache-2.0",
     )
 
-    def _encode_image(self, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
+    def _encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         encoder_session = self._inference_sessions["encoder"]
 
         input_height: int
@@ -50,6 +50,7 @@ class Sam2(SamBase):
 
     def _generate_mask_from_image_embedding(
         self,
+        *,
         image_embedding: types.ImageEmbedding,
         prompt: types.Prompt,
     ) -> npt.NDArray[np.bool_]:

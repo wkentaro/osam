@@ -119,7 +119,7 @@ class YoloWorldXL(_YoloWorld):
 
 
 def _transform_image(
-    image: np.ndarray, input_size: int
+    *, image: np.ndarray, input_size: int
 ) -> tuple[np.ndarray, tuple[int, int], tuple[int, int]]:
     height, width = image.shape[:2]
 
@@ -147,6 +147,7 @@ def _transform_image(
 
 
 def _untransform_bboxes(
+    *,
     bboxes: np.ndarray,
     input_size: int,
     original_image_hw: tuple[int, int],
