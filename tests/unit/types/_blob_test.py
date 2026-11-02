@@ -536,3 +536,19 @@ def test_remove_deletes_coreml_cache(
 
     assert not os.path.exists(blob.path)
     assert not os.path.exists(blob.coreml_cache_path)
+
+
+def test_size_is_none_when_a_file_replaces_the_blob_directory(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    blob = Blob(
+        url="https://example.com/model.onnx",
+        hash="sha256:abc",
+        attachments=[Blob(url="https://example.com/config.json", hash="sha256:def")],
+    )
+    blob_dir = pathlib.Path(blob.path).parent
+    blob_dir.parent.mkdir(parents=True)
+    blob_dir.write_bytes(b"")
+    assert blob.size is None
+    assert blob.modified_at is None

@@ -76,10 +76,11 @@ class Blob:
 
     def _stats(self) -> list[os.stat_result] | None:
         # stat without an exists check, so a concurrent remove reads as not
-        # pulled instead of raising.
+        # pulled instead of raising. NotADirectoryError: a file sits where an
+        # attachment blob's directory goes, which pull() replaces.
         try:
             return [os.stat(path) for _, path in self._files]
-        except FileNotFoundError:
+        except (FileNotFoundError, NotADirectoryError):
             return None
 
     @property
