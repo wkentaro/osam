@@ -2,7 +2,7 @@ import datetime
 import math
 
 
-def naturalsize(size: int) -> str:
+def naturalsize(*, size: int) -> str:
     if size == 0:
         return "0B"
     base = 1024
@@ -13,7 +13,7 @@ def naturalsize(size: int) -> str:
     return f"{size:.2f} {prefix}"
 
 
-def naturaltime(dt: datetime.datetime, now: datetime.datetime | None = None) -> str:
+def naturaltime(*, dt: datetime.datetime, now: datetime.datetime | None = None) -> str:
     if now is None:
         now = datetime.datetime.now()
     delta = now - dt

@@ -14,12 +14,12 @@ def image():
 
 
 def test_image_ndarray_to_b64data(image):
-    b64data = _json.image_ndarray_to_b64data(image)
+    b64data = _json.image_ndarray_to_b64data(ndarray=image)
     assert isinstance(b64data, str)
     assert len(b64data) in [204, 208]  # pillow version differences v10 vs v12
 
 
 def test_image_b64data_to_ndarray(image):
-    b64data = _json.image_ndarray_to_b64data(image)
-    image_recovered = _json.image_b64data_to_ndarray(b64data)
+    b64data = _json.image_ndarray_to_b64data(ndarray=image)
+    image_recovered = _json.image_b64data_to_ndarray(b64data=b64data)
     np.testing.assert_array_equal(image, image_recovered)

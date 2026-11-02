@@ -39,7 +39,7 @@ PROMPTS: Final[dict[str, osam.types.Prompt]] = {
 }
 
 
-def _median_ms(fn: typing.Callable[[], object], repeat: int) -> float:
+def _median_ms(*, fn: typing.Callable[[], object], repeat: int) -> float:
     times = []
     for _ in range(repeat):
         t0 = time.perf_counter()
@@ -49,7 +49,7 @@ def _median_ms(fn: typing.Callable[[], object], repeat: int) -> float:
 
 
 def _benchmark(
-    model_name: str, device: str, image: np.ndarray, repeat: int
+    *, model_name: str, device: str, image: np.ndarray, repeat: int
 ) -> list[str]:
     try:
         model_type = osam.apis.get_model_type_by_name(model_name)
@@ -60,7 +60,7 @@ def _benchmark(
 
     try:
         embedding = model.encode_image(image)  # also the warm-up
-        encode_ms = _median_ms(lambda: model.encode_image(image), repeat)
+        encode_ms = _median_ms(fn=lambda: model.encode_image(image), repeat=repeat)
     except NotImplementedError:
         encode_ms = None
         embedding = None
@@ -78,7 +78,9 @@ def _benchmark(
         except ValueError:
             row.append("✗")
             continue
-        row.append(f"{_median_ms(lambda: model.generate(request), repeat):.0f}")
+        row.append(
+            f"{_median_ms(fn=lambda: model.generate(request), repeat=repeat):.0f}"
+        )
     return row
 
 
@@ -107,7 +109,9 @@ def main() -> None:
     print("|" + " --- |" * (3 + len(PROMPTS)))
     for model_name in model_names:
         for device in args.device or ["cpu"]:
-            row = _benchmark(model_name, device, image, repeat=args.repeat)
+            row = _benchmark(
+                model_name=model_name, device=device, image=image, repeat=args.repeat
+            )
             print("| " + " | ".join(row) + " |", flush=True)
 
 

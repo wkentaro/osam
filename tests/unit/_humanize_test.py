@@ -21,7 +21,7 @@ from osam._humanize import naturaltime
     ],
 )
 def test_naturalsize(size: int, expected: str) -> None:
-    assert naturalsize(size) == expected
+    assert naturalsize(size=size) == expected
 
 
 @pytest.mark.parametrize(
@@ -40,9 +40,9 @@ def test_naturalsize(size: int, expected: str) -> None:
 )
 def test_naturaltime(delta: datetime.timedelta, expected: str) -> None:
     now = datetime.datetime(2024, 1, 10, 12, 0, 0)
-    assert naturaltime(now - delta, now=now) == expected
+    assert naturaltime(dt=now - delta, now=now) == expected
 
 
 def test_naturaltime_default_now() -> None:
     dt = datetime.datetime.now() - datetime.timedelta(seconds=5)
-    assert naturaltime(dt) == "5 seconds ago"
+    assert naturaltime(dt=dt) == "5 seconds ago"

@@ -69,13 +69,15 @@ def list_(show_all):
             else:
                 continue
         else:
-            size = _humanize.naturalsize(size)
+            size = _humanize.naturalsize(size=size)
             modified_at = _humanize.naturaltime(
-                datetime.datetime.fromtimestamp(modified_at)
+                dt=datetime.datetime.fromtimestamp(modified_at)
             )
 
         rows.append([model_type.name, model_type.get_id(), size, modified_at])
-    click.echo(_tabulate.tabulate(rows, headers=["NAME", "ID", "SIZE", "MODIFIED"]))
+    click.echo(
+        _tabulate.tabulate(rows=rows, headers=["NAME", "ID", "SIZE", "MODIFIED"])
+    )
 
 
 @cli.command(help="Pull a model")
@@ -111,7 +113,8 @@ def serve(reload):
         sys.exit(1)
 
 
-def _load_json(ctx, param, value: str | None) -> dict | None:
+# click passes a callback's inputs by position.
+def _load_json(ctx, param, value: str | None) -> dict | None:  # noqa: GR013
     if value is None:
         return None
     try:
@@ -142,21 +145,23 @@ def _load_json(ctx, param, value: str | None) -> dict | None:
     "--point",
     "points",
     multiple=True,
-    callback=lambda ctx, param, value: [_floats(v, (2, 3)) for v in value],
+    callback=lambda ctx, param, value: [
+        _floats(value=v, lengths=(2, 3)) for v in value
+    ],
     help="x,y[,label]: label 1 (default) is foreground, 0 is background",
 )
 @click.option(
     "--box",
     "boxes",
     multiple=True,
-    callback=lambda ctx, param, value: [_floats(v, (4,)) for v in value],
+    callback=lambda ctx, param, value: [_floats(value=v, lengths=(4,)) for v in value],
     help="x1,y1,x2,y2",
 )
 @click.option(
     "--negative-box",
     "negative_boxes",
     multiple=True,
-    callback=lambda ctx, param, value: [_floats(v, (4,)) for v in value],
+    callback=lambda ctx, param, value: [_floats(value=v, lengths=(4,)) for v in value],
     help="x1,y1,x2,y2 to exclude (sam3, with --text)",
 )
 @click.option("--text", "texts", multiple=True, help="text prompt")
@@ -302,10 +307,10 @@ def run(
             alpha=0.5,
         )
 
-        sys.stdout.buffer.write(_image_ndarray_to_data(visualization))
+        sys.stdout.buffer.write(_image_ndarray_to_data(ndarray=visualization))
 
 
-def _floats(value: str, lengths: tuple[int, ...]) -> list[float]:
+def _floats(*, value: str, lengths: tuple[int, ...]) -> list[float]:
     try:
         floats = [float(v) for v in value.split(",")]
     except ValueError:
@@ -315,7 +320,7 @@ def _floats(value: str, lengths: tuple[int, ...]) -> list[float]:
     return floats
 
 
-def _image_ndarray_to_data(ndarray: np.ndarray) -> bytes:
+def _image_ndarray_to_data(*, ndarray: np.ndarray) -> bytes:
     pil = PIL.Image.fromarray(ndarray)
     with io.BytesIO() as f:
         pil.save(f, format="PNG")
