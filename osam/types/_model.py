@@ -347,8 +347,8 @@ def _create_session(
     if isinstance(model, bytes):
         # onnxruntime keeps a model given as bytes, gigabytes for SAM3, to
         # recreate the session on CPU fallback; the original file serves that.
-        session._model_path = blob.path  # type: ignore[attr-defined]
-        session._model_bytes = None  # type: ignore[attr-defined]
+        session._model_path = blob.path
+        session._model_bytes = None
     return session
 
 
