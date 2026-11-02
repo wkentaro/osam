@@ -5,12 +5,14 @@ import numpy as np
 import PIL.Image
 
 
+def image_ndarray_to_png(*, ndarray: np.ndarray) -> bytes:
+    with io.BytesIO() as f:
+        PIL.Image.fromarray(ndarray).save(f, format="PNG")
+        return f.getvalue()
+
+
 def image_ndarray_to_b64data(*, ndarray):
-    pil = PIL.Image.fromarray(ndarray)
-    f = io.BytesIO()
-    pil.save(f, format="PNG")
-    data = f.getvalue()
-    return base64.b64encode(data).decode("utf-8")
+    return base64.b64encode(image_ndarray_to_png(ndarray=ndarray)).decode("utf-8")
 
 
 def image_b64data_to_ndarray(*, b64data):

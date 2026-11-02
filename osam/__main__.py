@@ -1,5 +1,4 @@
 import datetime
-import io
 import json
 import os
 import pathlib
@@ -15,6 +14,7 @@ from numpy.typing import NDArray
 
 from . import __version__
 from . import _humanize
+from . import _json
 from . import _tabulate
 from . import apis
 from . import types
@@ -306,7 +306,7 @@ def run(
             alpha=0.5,
         )
 
-        sys.stdout.buffer.write(_image_ndarray_to_data(ndarray=visualization))
+        sys.stdout.buffer.write(_json.image_ndarray_to_png(ndarray=visualization))
 
 
 def _floats(*, value: str, lengths: tuple[int, ...]) -> list[float]:
@@ -317,13 +317,6 @@ def _floats(*, value: str, lengths: tuple[int, ...]) -> list[float]:
     if len(floats) not in lengths:
         raise click.BadParameter(f"expected {' or '.join(map(str, lengths))} numbers")
     return floats
-
-
-def _image_ndarray_to_data(*, ndarray: np.ndarray) -> bytes:
-    pil = PIL.Image.fromarray(ndarray)
-    with io.BytesIO() as f:
-        pil.save(f, format="PNG")
-        return f.getvalue()
 
 
 if __name__ == "__main__":
