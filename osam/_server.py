@@ -6,6 +6,7 @@ import logging
 import os
 from collections.abc import Callable
 from typing import Any
+from typing import Optional
 
 import fastapi
 import pydantic
@@ -16,10 +17,10 @@ from . import __version__
 from . import apis
 from . import types
 
-# apis.generate keeps one model loaded, so inference runs on one thread, in
-# order. Queued requests wait here instead of holding FastAPI's thread pool,
+# apis.generate keeps one model loaded, and pull and remove must not change the
+# files under a model being loaded, so they all run on one thread, in order. Queued requests wait here instead of holding FastAPI's thread pool,
 # so other routes stay free.
-# ponytail: one worker, a model per process if throughput matters.
+# ponytail: one worker, so a long pull also delays generate.
 _worker = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 
@@ -49,13 +50,54 @@ class GenerateResponse(pydantic.BaseModel):
     annotations: list[types.Annotation]
 
 
+class ModelInfo(pydantic.BaseModel):
+    name: str
+    id: str
+    size: Optional[int] = pydantic.Field(
+        description="Bytes on disk; null if not pulled"
+    )
+    modified_at: Optional[float] = pydantic.Field(
+        description="Unix time of the last download; null if not pulled"
+    )
+    metadata: types.ModelMetadata
+
+
+class PullRequest(pydantic.BaseModel):
+    model: str
+
+
 @app.get("/")
 def index() -> fastapi.Response:
     return fastapi.Response("osam is running")
 
 
+@app.get("/api/models")
+def list_models() -> list[ModelInfo]:
+    return [
+        ModelInfo(
+            name=model_type.name,
+            id=model_type.get_id(),
+            size=model_type.get_size(),
+            modified_at=model_type.get_modified_at(),
+            metadata=model_type.metadata,
+        )
+        for model_type in apis.registered_model_types
+    ]
+
+
+@app.post("/api/pull")
+async def pull(request: PullRequest) -> None:
+    await _run(call=_get_model_type(name=request.model).pull)
+
+
+@app.delete("/api/models/{name}")
+async def remove(name: str) -> None:
+    await _run(call=_get_model_type(name=name).remove)
+
+
 @app.post("/api/generate", response_model=GenerateResponse)
 async def generate(request: GenerateRequest) -> types.GenerateResponse:
+    _get_model_type(name=request.model)
     try:
         return await _run(call=functools.partial(apis.generate, request=request))
     except ValueError as e:
@@ -67,3 +109,10 @@ async def generate(request: GenerateRequest) -> types.GenerateResponse:
 
 async def _run(*, call: Callable[[], Any]) -> Any:
     return await asyncio.get_running_loop().run_in_executor(_worker, call)
+
+
+def _get_model_type(*, name: str) -> type[types.Model]:
+    try:
+        return apis.get_model_type_by_name(name=name)
+    except ValueError as e:
+        raise fastapi.HTTPException(404, str(e))

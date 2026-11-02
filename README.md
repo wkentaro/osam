@@ -268,3 +268,6 @@ base64 < examples/_images/dogs.jpg \
   | curl 127.0.0.1:11368/api/generate -X POST --json @- \
   | jq -r '.annotations[0].mask' | base64 --decode > mask.png
 ```
+
+`/api/models`, `/api/pull` and `DELETE /api/models/{name}` match `osam list`,
+`osam pull` and `osam rm`. The full schema is at <http://127.0.0.1:11368/docs>.

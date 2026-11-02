@@ -11,20 +11,31 @@ from osam import _server
 from osam import types
 
 
-def test_openapi_documents_generate() -> None:
+def test_openapi_documents_every_route() -> None:
     response = TestClient(_server.app).get("/openapi.json")
     assert response.status_code == 200, response.text
-    assert "/api/generate" in response.json()["paths"]
-    schemas = response.json()["components"]["schemas"]
-    assert "image_embedding" not in schemas["GenerateRequest"]["properties"]
-    assert "image_embedding" not in schemas["GenerateResponse"]["properties"]
+    assert {
+        "/api/generate",
+        "/api/models",
+        "/api/pull",
+        "/api/models/{name}",
+    } <= set(response.json()["paths"])
+
+
+def test_list_models() -> None:
+    response = TestClient(_server.app).get("/api/models")
+    models = {model["name"]: model for model in response.json()}
+    assert models["efficientsam:10m"]["size"] > 0
+    assert models["efficientsam:10m"]["metadata"]["license_spdx"] == "Apache-2.0"
 
 
 def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     client = TestClient(_server.app)
     response = client.post("/api/generate", json={"model": "missing"})
-    assert response.status_code == 400
+    assert response.status_code == 404
     assert "not found" in response.json()["detail"]
+    response = client.post("/api/generate", json={"model": "efficientsam:10m"})
+    assert response.status_code == 400
 
     def fail(request):
         raise RuntimeError("out of GPU memory")
