@@ -49,6 +49,17 @@ _Float32Array = Annotated[
     npt.NDArray[np.float32],
     pydantic.BeforeValidator(_validate_array),
     pydantic.PlainSerializer(_serialize_array),
+    pydantic.WithJsonSchema(
+        {
+            "type": "object",
+            "properties": {
+                "shape": {"type": "array", "items": {"type": "integer"}},
+                "dtype": {"type": "string"},
+                "data": {"type": "string", "contentEncoding": "base64"},
+            },
+            "required": ["shape", "dtype", "data"],
+        }
+    ),
 ]
 
 

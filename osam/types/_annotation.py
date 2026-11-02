@@ -1,3 +1,4 @@
+from typing import Annotated
 from typing import Optional
 
 import numpy as np
@@ -6,6 +7,12 @@ import pydantic
 from .. import _json
 from ._bounding_box import BoundingBox
 
+# An image array that JSON carries as a base64-encoded image file.
+Base64Image = Annotated[
+    np.ndarray,
+    pydantic.WithJsonSchema({"type": "string", "contentEncoding": "base64"}),
+]
+
 
 class Annotation(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
@@ -13,7 +20,8 @@ class Annotation(pydantic.BaseModel):
     bounding_box: Optional[BoundingBox] = pydantic.Field(default=None)
     text: Optional[str] = pydantic.Field(default=None)
     score: Optional[float] = pydantic.Field(default=None)
-    mask: Optional[np.ndarray] = pydantic.Field(default=None)
+    # Serialized as a base64 PNG cropped to bounding_box.
+    mask: Optional[Base64Image] = pydantic.Field(default=None)
 
     @pydantic.field_validator("mask")
     def validate_mask(cls, mask: Optional[np.ndarray]) -> Optional[np.ndarray]:
