@@ -22,7 +22,7 @@ def _resolve_endpoints() -> list[str]:
     return endpoints or [_DIRECT]
 
 
-def _build_endpoint_url(endpoint: str, url: str, hash: str) -> str:
+def _build_endpoint_url(*, endpoint: str, url: str, hash: str) -> str:
     if endpoint == _DIRECT:
         return url
     digest = hash.split(":", maxsplit=1)[-1]

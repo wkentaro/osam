@@ -81,7 +81,7 @@ class ImageEmbedding(pydantic.BaseModel):
         return [_ndarray_to_json(arr=arr) for arr in extra_features]
 
 
-def _ndarray_to_json(arr: np.ndarray) -> dict:
+def _ndarray_to_json(*, arr: np.ndarray) -> dict:
     return {
         "shape": arr.shape,
         "dtype": str(arr.dtype),
