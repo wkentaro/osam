@@ -3,7 +3,6 @@ import math
 
 
 def naturalsize(size: int) -> str:
-    """Convert byte size to human readable format."""
     if size == 0:
         return "0B"
     base = 1024
@@ -15,7 +14,6 @@ def naturalsize(size: int) -> str:
 
 
 def naturaltime(dt: datetime.datetime, now: datetime.datetime | None = None) -> str:
-    """Convert datetime to human readable format."""
     if now is None:
         now = datetime.datetime.now()
     delta = now - dt

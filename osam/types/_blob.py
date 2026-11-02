@@ -153,21 +153,22 @@ class Blob:
                             reason,
                         )
                         errors.append(f"{source}: {reason}")
-                if attempt < N_RETRIES - 1:
-                    logger.warning(
-                        "Download of {!r} failed on all endpoints "
-                        "(attempt {}/{}), retrying in {}s",
-                        blob.filename,
-                        attempt + 1,
-                        N_RETRIES,
-                        2**attempt,
-                    )
-                    if cancel is None:
-                        time.sleep(2**attempt)
-                    else:
-                        # Returns as soon as the caller cancels; the next
-                        # attempt raises.
-                        cancel.wait(2**attempt)
+                if attempt == N_RETRIES - 1:
+                    break
+                logger.warning(
+                    "Download of {!r} failed on all endpoints "
+                    "(attempt {}/{}), retrying in {}s",
+                    blob.filename,
+                    attempt + 1,
+                    N_RETRIES,
+                    2**attempt,
+                )
+                if cancel is None:
+                    time.sleep(2**attempt)
+                else:
+                    # Returns as soon as the caller cancels; the next
+                    # attempt raises.
+                    cancel.wait(2**attempt)
             message = (
                 f"Failed to download {blob.filename!r} from all endpoints: "
                 f"{'; '.join(errors)}."
