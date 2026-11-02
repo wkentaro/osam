@@ -27,8 +27,6 @@ from ._image_embedding import ImageEmbedding
 from ._model_metadata import ModelMetadata
 from ._prompt import Prompt
 
-_PROVIDERS_ENV: Final = "OSAM_ONNX_PROVIDERS"
-
 Device = Literal["cpu", "cuda", "coreml", "webgpu"]
 _Providers = Sequence[str | tuple[str, dict[str, str]]]
 
@@ -38,16 +36,10 @@ _DEVICE_PROVIDERS: Final[dict[str, str]] = {
     "coreml": "CoreMLExecutionProvider",
     "webgpu": "WebGpuExecutionProvider",
 }
-# MLProgram supports more operators than the default NeuralNetwork, and leaving
-# out the Neural Engine keeps the GPU's accuracy and speed.
-_COREML_OPTIONS: Final[dict[str, str]] = {
-    "ModelFormat": "MLProgram",
-    "MLComputeUnits": "CPUAndGPU",
-}
 
 
 def resolve_providers() -> list[str]:
-    raw = os.environ.get(_PROVIDERS_ENV, "")
+    raw = os.environ.get("OSAM_ONNX_PROVIDERS", "")
     providers = [entry.strip() for entry in raw.split(",") if entry.strip()]
     if providers:
         return providers
@@ -91,21 +83,17 @@ def _setup_cuda() -> bool:
     return True
 
 
-# Windows lists its CPU renderer, WARP, as a GPU: ~25x slower than CPU on SAM.
-# A GPU without a driver runs on the Basic Display driver, which renders on WARP.
-_WARP_IDS: Final = (0x1414, 0x008C)  # vendor_id, device_id
-_SOFTWARE_DESCRIPTIONS: Final = (
-    "Microsoft Basic Render Driver",
-    "Microsoft Basic Display Adapter",
-)
-
-
 def _is_software_adapter(ep_device: Any) -> bool:
+    # Windows lists its CPU renderer, WARP, as a GPU: ~25x slower than CPU on SAM.
+    # A GPU without a driver runs on the Basic Display driver, which renders on
+    # WARP.
     hardware = ep_device.device
-    if (hardware.vendor_id, hardware.device_id) == _WARP_IDS:
+    if (hardware.vendor_id, hardware.device_id) == (0x1414, 0x008C):  # WARP
         return True
     description: str = hardware.metadata.get("Description", "")
-    return description.startswith(_SOFTWARE_DESCRIPTIONS)
+    return description.startswith(
+        ("Microsoft Basic Render Driver", "Microsoft Basic Display Adapter")
+    )
 
 
 def _describe_adapter(ep_device: Any) -> str:
@@ -284,7 +272,12 @@ def _device_providers(
     if device == "cpu" or (device == "coreml" and not coreml):
         return ["CPUExecutionProvider"]
     if device == "coreml":
-        options: dict[str, str] = dict(_COREML_OPTIONS)
+        # MLProgram supports more operators than the default NeuralNetwork, and
+        # leaving out the Neural Engine keeps the GPU's accuracy and speed.
+        options: dict[str, str] = {
+            "ModelFormat": "MLProgram",
+            "MLComputeUnits": "CPUAndGPU",
+        }
         if coreml_cache_path is not None:
             # Compiling takes seconds per model; reuse it on the next load.
             # Models compiled by another onnxruntime version fail to run.
