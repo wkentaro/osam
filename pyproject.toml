@@ -87,6 +87,7 @@ dev = [
   "mypy>=1.15.0",
   "pytest-xdist>=3.6.1",
   "pytest>=8.3.4",
+  "gruff==0.2.2",
   "ruff==0.1.9",
   "twine>=6.1.0",
   "onnx>=1.17.0",
@@ -99,6 +100,10 @@ dev = [
   "pytest-cov>=7.1.0",
   "towncrier>=24.8",
 ]
+
+[tool.gruff.lint]
+select = ["GR:baseline"]
+per-file-ignores = { "osam/_models/yoloworld/clip/**" = ["GR"] }
 
 [tool.hatch.metadata]
 allow-direct-references = true
