@@ -1,3 +1,4 @@
+from typing import Annotated
 from typing import Optional
 from typing import Type
 from typing import Union
@@ -9,10 +10,35 @@ import pydantic
 class Prompt(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
-    points: Optional[np.ndarray] = pydantic.Field(default=None)
+    points: Optional[
+        Annotated[
+            np.ndarray,
+            pydantic.WithJsonSchema(
+                {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 2,
+                        "maxItems": 2,
+                    },
+                }
+            ),
+        ]
+    ] = pydantic.Field(default=None)
     # point_labels: background=0, foreground=1, box_lt=2, box_rb=3,
     # negative_box_lt=4, negative_box_rb=5
-    point_labels: Optional[np.ndarray] = pydantic.Field(default=None)
+    point_labels: Optional[
+        Annotated[
+            np.ndarray,
+            pydantic.WithJsonSchema(
+                {
+                    "type": "array",
+                    "items": {"type": "integer", "enum": [0, 1, 2, 3, 4, 5]},
+                }
+            ),
+        ]
+    ] = pydantic.Field(default=None)
     texts: Optional[list[str]] = pydantic.Field(default=None)
 
     iou_threshold: Optional[float] = pydantic.Field(default=0.5)

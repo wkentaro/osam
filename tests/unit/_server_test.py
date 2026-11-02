@@ -6,6 +6,15 @@ from osam import _server
 from osam import types
 
 
+def test_openapi_documents_generate() -> None:
+    response = TestClient(_server.app).get("/openapi.json")
+    assert response.status_code == 200, response.text
+    assert "/api/generate" in response.json()["paths"]
+    schemas = response.json()["components"]["schemas"]
+    assert "image_embedding" not in schemas["GenerateRequest"]["properties"]
+    assert "image_embedding" not in schemas["GenerateResponse"]["properties"]
+
+
 def test_generate_keeps_image_embedding_inside(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
