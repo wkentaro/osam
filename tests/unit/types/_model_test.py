@@ -232,6 +232,8 @@ def fake_webgpu(
     )
 
     class FakeSessionOptions:
+        devices: Any
+
         def add_provider_for_devices(self, devices: Any, options: Any) -> None:
             self.devices = devices
 
