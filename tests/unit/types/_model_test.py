@@ -367,7 +367,7 @@ def test_coreml_model_rewrites_gemm_to_trans_b(
     feeds = {"x": np.random.default_rng(0).random((3, 4), dtype=np.float32)}
     expected = onnxruntime.InferenceSession(gemm.path).run(None, feeds)
 
-    model = _model._coreml_model(gemm)
+    model = _model._coreml_model(blob=gemm)
 
     assert isinstance(model, bytes)
     actual = onnxruntime.InferenceSession(model).run(None, feeds)
@@ -378,12 +378,14 @@ def test_coreml_model_rewrites_gemm_to_trans_b(
         for node in onnx.load_from_string(model).graph.node
     ]
     assert trans_b == [[1], [1], [1]]
-    assert _model._coreml_model(other) == other.path
+    assert _model._coreml_model(blob=other) == other.path
     assert not os.path.exists(gemm.coreml_cache_path)
 
     # The session drops the bytes and falls back from the original file.
-    monkeypatch.setattr(_model, "_first_provider", lambda p: "CoreMLExecutionProvider")
-    session = _model._create_session(gemm, providers=["CPUExecutionProvider"])
+    monkeypatch.setattr(
+        _model, "_first_provider", lambda providers: "CoreMLExecutionProvider"
+    )
+    session = _model._create_session(blob=gemm, providers=["CPUExecutionProvider"])
     assert session._model_bytes is None
     session.set_providers(["CPUExecutionProvider"])
     for a, e in zip(session.run(None, feeds), expected):
