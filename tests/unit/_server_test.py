@@ -35,34 +35,39 @@ def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.json()["detail"] == "out of GPU memory"
 
 
-@pytest.mark.anyio
-async def test_queued_generates_leave_the_thread_pool_free(
+def test_queued_generates_leave_the_thread_pool_free(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    release = threading.Event()
-
     def blocked(request):
         release.wait()
         raise ValueError("released")
 
+    async def scenario() -> None:
+        transport = httpx.ASGITransport(app=_server.app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            # More than the thread pool's 40 workers.
+            body = {"model": "efficientsam:10m"}
+            tasks = [
+                asyncio.create_task(client.post("/api/generate", json=body))
+                for _ in range(50)
+            ]
+            await asyncio.sleep(0.2)
+            try:
+                with anyio.fail_after(5):
+                    # index is sync, so it needs a free worker.
+                    assert (await client.get("/")).status_code == 200
+            finally:
+                release.set()
+            responses = await asyncio.gather(*tasks)
+        assert {response.status_code for response in responses} == {400}
+
     monkeypatch.setattr(_server.apis, "generate", blocked)
-    transport = httpx.ASGITransport(app=_server.app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        # More than the thread pool's 40 workers.
-        body = {"model": "efficientsam:10m"}
-        tasks = [
-            asyncio.create_task(client.post("/api/generate", json=body))
-            for _ in range(50)
-        ]
-        await asyncio.sleep(0.2)
-        try:
-            with anyio.fail_after(5):
-                # index is sync, so it needs a free worker.
-                assert (await client.get("/")).status_code == 200
-        finally:
-            release.set()
-        responses = await asyncio.gather(*tasks)
-    assert {response.status_code for response in responses} == {400}
+    # Twice, on two event loops, as separate app lifecycles would.
+    for _ in range(2):
+        release = threading.Event()
+        asyncio.run(scenario())
 
 
 def test_generate_keeps_image_embedding_inside(

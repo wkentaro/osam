@@ -1,11 +1,14 @@
 import asyncio
+import concurrent.futures
 import contextlib
+import functools
 import logging
 import os
+from collections.abc import Callable
+from typing import Any
 
 import fastapi
 import pydantic
-from fastapi.concurrency import run_in_threadpool
 from loguru import logger
 from pydantic.json_schema import SkipJsonSchema
 
@@ -13,10 +16,11 @@ from . import __version__
 from . import apis
 from . import types
 
-# apis.generate keeps one model loaded, so requests run one at a time. Waiters
-# queue on the event loop, not in the thread pool, so other routes stay free.
-# ponytail: global lock, a model per worker if throughput matters.
-_lock = asyncio.Lock()
+# apis.generate keeps one model loaded, so inference runs on one thread, in
+# order. Queued requests wait here instead of holding FastAPI's thread pool,
+# so other routes stay free.
+# ponytail: one worker, a model per process if throughput matters.
+_worker = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 
 @contextlib.asynccontextmanager
@@ -52,11 +56,14 @@ def index() -> fastapi.Response:
 
 @app.post("/api/generate", response_model=GenerateResponse)
 async def generate(request: GenerateRequest) -> types.GenerateResponse:
-    async with _lock:
-        try:
-            return await run_in_threadpool(apis.generate, request=request)
-        except ValueError as e:
-            raise fastapi.HTTPException(400, str(e))
-        except Exception as e:  # e.g. onnxruntime running out of GPU memory
-            logger.exception("Failed to generate")
-            raise fastapi.HTTPException(500, str(e))
+    try:
+        return await _run(call=functools.partial(apis.generate, request=request))
+    except ValueError as e:
+        raise fastapi.HTTPException(400, str(e))
+    except Exception as e:  # e.g. onnxruntime running out of GPU memory
+        logger.exception("Failed to generate")
+        raise fastapi.HTTPException(500, str(e))
+
+
+async def _run(*, call: Callable[[], Any]) -> Any:
+    return await asyncio.get_running_loop().run_in_executor(_worker, call)
