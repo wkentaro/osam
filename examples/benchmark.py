@@ -20,9 +20,9 @@ import PIL.Image
 
 import osam
 
-IMAGE_PATH = pathlib.Path(__file__).parent / "_images" / "dogs.jpg"
+IMAGE_PATH: typing.Final = pathlib.Path(__file__).parent / "_images" / "dogs.jpg"
 
-PROMPTS: dict[str, osam.types.Prompt] = {
+PROMPTS: typing.Final[dict[str, osam.types.Prompt]] = {
     "point": osam.types.Prompt(
         points=np.array([[1439, 504]]), point_labels=np.array([1])
     ),
