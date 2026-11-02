@@ -259,7 +259,7 @@ Image.fromarray(mask).save("mask.png")
 ```bash
 # pip install osam[cpu,serve]  # required for `osam serve`
 
-# Get up the server
+# Get up the server (--host and --port change where it listens)
 osam serve
 
 # POST request

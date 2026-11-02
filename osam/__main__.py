@@ -99,18 +99,20 @@ def rm(model_name):
 
 
 @cli.command(help="Start server")
+@click.option("--host", default="127.0.0.1", show_default=True, help="address to bind")
+@click.option("--port", default=11368, show_default=True, help="port to bind")
 @click.option("--reload", is_flag=True, help="reload server on file changes")
-def serve(reload):
+def serve(host: str, port: int, reload: bool) -> None:
     try:
         import uvicorn
 
         import osam._server  # noqa: F401
-
-        logger.info("Starting server...")
-        uvicorn.run("osam._server:app", host="127.0.0.1", port=11368, reload=reload)
     except ImportError:
         logger.error("Run `pip install osam[serve]` to use `osam serve`")
         sys.exit(1)
+
+    logger.info("Starting server at http://{host}:{port}/docs", host=host, port=port)
+    uvicorn.run("osam._server:app", host=host, port=port, reload=reload)
 
 
 def _floats_callback(*, lengths: tuple[int, ...]) -> typing.Callable:
