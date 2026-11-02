@@ -59,7 +59,7 @@ def test_generate_keeps_mask_of_box_past_image_edge(
 
 @pytest.mark.parametrize(
     "point_labels",
-    [[2, 3, 2, 3], [2, 3, 4, 5], [4, 5], [1, 2, 3]],
+    [[2, 3, 2, 3], [2, 3, 4, 5], [4, 5], [3, 2], [2, 1, 3], [2]],
 )
 def test_generate_rejects_boxes_without_text_beyond_one_box(
     point_labels: list[int],
@@ -83,3 +83,36 @@ def test_generate_rejects_boxes_without_text_beyond_one_box(
                 ),
             )
         )
+
+
+@pytest.mark.parametrize(
+    "point_labels",
+    [[1], [1, 0], [2, 3], [2, 3, 1], [1, 2, 3, 0]],
+)
+def test_generate_segments_one_object_from_points_and_one_box(
+    point_labels: list[int],
+) -> None:
+    model = Sam3.__new__(Sam3)
+    calls: list[list[int]] = []
+    model._generate_from_points = lambda **kwargs: calls.append(  # type: ignore[method-assign]
+        kwargs["point_labels"].tolist()
+    )
+    embedding = types.ImageEmbedding(
+        original_height=100,
+        original_width=100,
+        embedding=np.zeros((1, 1, 1), np.float32),
+        extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
+    )
+
+    model.generate(
+        types.GenerateRequest(
+            model="sam3",
+            image_embedding=embedding,
+            prompt=types.Prompt(
+                points=np.zeros((len(point_labels), 2)),
+                point_labels=np.array(point_labels),
+            ),
+        )
+    )
+
+    assert calls == [point_labels]
