@@ -542,6 +542,7 @@ def test_size_is_none_when_a_file_replaces_the_blob_directory(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     blob = Blob(
         url="https://example.com/model.onnx",
         hash="sha256:abc",
@@ -550,5 +551,18 @@ def test_size_is_none_when_a_file_replaces_the_blob_directory(
     blob_dir = pathlib.Path(blob.path).parent
     blob_dir.parent.mkdir(parents=True)
     blob_dir.write_bytes(b"")
+    assert blob.size is None
+    assert blob.modified_at is None
+
+
+def test_size_is_none_when_the_file_disappears_after_the_check(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    # Reports the missing file as present, as if osam rm deleted it between
+    # an exists check and the stat.
+    monkeypatch.setattr(_blob.os.path, "exists", lambda path: True)
+    blob = Blob(url="https://example.com/model.onnx", hash="sha256:abc")
     assert blob.size is None
     assert blob.modified_at is None
