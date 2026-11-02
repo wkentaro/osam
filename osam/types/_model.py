@@ -214,18 +214,21 @@ class Model(abc.ABC):
     def get_size(cls) -> Optional[int]:
         size = 0
         for blob in cls._blobs.values():
-            if blob.size is None:
+            # Read once: a concurrent remove can turn a second read into None.
+            blob_size: Optional[int] = blob.size
+            if blob_size is None:
                 return None
-            size += blob.size
+            size += blob_size
         return size
 
     @classmethod
     def get_modified_at(cls) -> Optional[float]:
         modified_at: float = 0
         for blob in cls._blobs.values():
-            if blob.modified_at is None:
+            blob_modified_at: Optional[float] = blob.modified_at
+            if blob_modified_at is None:
                 return None
-            modified_at = max(modified_at, blob.modified_at)
+            modified_at = max(modified_at, blob_modified_at)
         return modified_at
 
     def encode_image(self, image: np.ndarray) -> ImageEmbedding:
