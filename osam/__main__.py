@@ -113,8 +113,7 @@ def serve(reload):
         sys.exit(1)
 
 
-# click passes a callback's inputs by position.
-def _load_json(ctx, param, value: str | None) -> dict | None:  # noqa: GR013
+def _load_json(ctx, param, value: str | None) -> dict | None:
     if value is None:
         return None
     try:

@@ -88,7 +88,7 @@ dev = [
   "mypy>=1.15.0",
   "pytest-xdist>=3.6.1",
   "pytest>=8.3.4",
-  "gruff==0.2.2",
+  "gruff==0.2.3",
   "ruff==0.1.9",
   "twine>=6.1.0",
   "onnx>=1.17.0",
