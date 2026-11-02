@@ -15,6 +15,21 @@ def test_openapi_documents_generate() -> None:
     assert "image_embedding" not in schemas["GenerateResponse"]["properties"]
 
 
+def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = TestClient(_server.app)
+    response = client.post("/api/generate", json={"model": "missing"})
+    assert response.status_code == 400
+    assert "not found" in response.json()["detail"]
+
+    def fail(request):
+        raise RuntimeError("out of GPU memory")
+
+    monkeypatch.setattr(_server.apis, "generate", fail)
+    response = client.post("/api/generate", json={"model": "efficientsam:10m"})
+    assert response.status_code == 500
+    assert response.json()["detail"] == "out of GPU memory"
+
+
 def test_generate_keeps_image_embedding_inside(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -26,7 +41,7 @@ def test_generate_keeps_image_embedding_inside(
     monkeypatch.setattr(
         _server.apis,
         "generate",
-        lambda request: types.GenerateResponse(
+        lambda request, **kwargs: types.GenerateResponse(
             model=request.model, image_embedding=embedding, annotations=[]
         ),
     )
