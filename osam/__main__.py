@@ -113,8 +113,7 @@ def serve(reload):
         sys.exit(1)
 
 
-# click passes a callback's inputs by position.
-def _load_json(ctx, param, value: str | None) -> dict | None:  # noqa: GR013
+def _load_json(*, value: str | None) -> dict | None:
     if value is None:
         return None
     try:
@@ -138,7 +137,7 @@ def _load_json(ctx, param, value: str | None) -> dict | None:  # noqa: GR013
 )
 @click.option(
     "--prompt",
-    callback=_load_json,
+    callback=lambda ctx, param, value: _load_json(value=value),
     help="prompt as JSON, @file to read it from a file, or - for stdin",
 )
 @click.option(
