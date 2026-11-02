@@ -94,7 +94,7 @@ def test_generate_segments_one_object_from_points_and_one_box(
 ) -> None:
     model = Sam3.__new__(Sam3)
     calls: list[list[int]] = []
-    model._generate_from_points = lambda **kwargs: calls.append(  # type: ignore[method-assign]
+    model._generate_from_points = lambda **kwargs: calls.append(
         kwargs["point_labels"].tolist()
     )
     embedding = types.ImageEmbedding(
