@@ -9,6 +9,10 @@ from ... import apis
 from ... import types
 from . import clip
 
+__all__ = [
+    "YoloWorldXL",
+]
+
 
 class _YoloWorld(types.Model):
     metadata = types.ModelMetadata(
