@@ -15,6 +15,14 @@ class Annotation(pydantic.BaseModel):
     score: Optional[float] = pydantic.Field(default=None)
     mask: Optional[np.ndarray] = pydantic.Field(default=None)
 
+    @pydantic.field_validator("mask", mode="before")
+    @classmethod
+    def decode_mask(cls, mask: object) -> object:
+        # Reads the base64 PNG serialize_mask writes.
+        if isinstance(mask, str):
+            return _json.image_b64data_to_ndarray(b64data=mask) > 0
+        return mask
+
     @pydantic.field_validator("mask")
     def validate_mask(cls, mask: Optional[np.ndarray]) -> Optional[np.ndarray]:
         if mask is None:
