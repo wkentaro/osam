@@ -12,6 +12,8 @@ from . import _models
 from . import types
 
 running_model: Optional[types.Model] = None
+# The device running_model was asked for; None for automatic selection.
+_running_device: Optional[types.Device] = None
 
 # A single NonMaxSuppression node with no weights, so it ships with the package
 # instead of being downloaded.
@@ -53,15 +55,22 @@ def get_model_metadata(name: str) -> types.ModelMetadata:
     return get_model_type_by_name(name=name).metadata
 
 
-def generate(request: types.GenerateRequest) -> types.GenerateResponse:
-    global running_model
+def generate(
+    request: types.GenerateRequest, device: Optional[types.Device] = None
+) -> types.GenerateResponse:
+    """Run request.model, reusing the loaded model when model and device match.
+
+    device: as in Model; None picks one automatically.
+    """
+    global running_model, _running_device
 
     model_type = get_model_type_by_name(name=request.model)
     model: types.Model | None = running_model
-    if model is None or model.name != model_type.name:
+    if model is None or model.name != model_type.name or _running_device != device:
         # Release the previous model first, so two models are never loaded at once.
         model = running_model = None
-        model = running_model = model_type()
+        model = running_model = model_type(device=device)
+        _running_device = device
 
     response: types.GenerateResponse = model.generate(request=request)
     return response
