@@ -20,6 +20,7 @@ format:
 lint:
     uv run ruff format --check
     uv run ruff check
+    uv run gruff check
     uv run ty check --no-progress
     git ls-files "*.toml" | xargs uv run taplo fmt --check
     git ls-files "*.md" | xargs uv run mdformat --check

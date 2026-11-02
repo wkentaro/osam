@@ -373,7 +373,7 @@ def _create_device_session(
 
 
 def _load_inference_session(
-    blob: Blob, providers: list[str] | None = None
+    blob: Blob, providers: list[str] | None
 ) -> onnxruntime.InferenceSession:
     try:
         if providers is None:

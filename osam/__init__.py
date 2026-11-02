@@ -9,5 +9,10 @@ except ImportError as e:
         "osam requires onnxruntime: pip install 'osam[cpu]' or 'osam[gpu]'"
     ) from e
 
-from . import apis  # noqa: F401
-from . import types  # noqa: F401
+from . import apis
+from . import types
+
+__all__ = [
+    "apis",
+    "types",
+]

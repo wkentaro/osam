@@ -1,1 +1,5 @@
-from ._models import Sam3  # noqa: F401
+from ._models import Sam3
+
+__all__ = [
+    "Sam3",
+]
