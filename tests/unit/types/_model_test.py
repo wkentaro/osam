@@ -206,7 +206,7 @@ def test_device_dropped_provider_raises(
 
 
 def _webgpu_adapter(
-    vendor_id: int = 0x10DE, device_id: int = 0x2208, description: str = ""
+    *, vendor_id: int = 0x10DE, device_id: int = 0x2208, description: str = ""
 ) -> Any:
     metadata: dict[str, str] = {"Description": description} if description else {}
     return types.SimpleNamespace(
@@ -218,7 +218,9 @@ def _webgpu_adapter(
 
 
 def _warp_adapter() -> Any:
-    return _webgpu_adapter(0x1414, 0x008C, "Microsoft Basic Render Driver")
+    return _webgpu_adapter(
+        vendor_id=0x1414, device_id=0x008C, description="Microsoft Basic Render Driver"
+    )
 
 
 @pytest.fixture
@@ -401,7 +403,11 @@ def test_resolve_providers_skips_software_webgpu(
 
     # A GPU without its driver installed renders on WARP too.
     fake_webgpu[1:] = [
-        _webgpu_adapter(0x1234, 0x1111, "Microsoft Basic Display Adapter")
+        _webgpu_adapter(
+            vendor_id=0x1234,
+            device_id=0x1111,
+            description="Microsoft Basic Display Adapter",
+        )
     ]
     _model._webgpu_device.cache_clear()
     assert resolve_providers() == ["CPUExecutionProvider"]
@@ -421,9 +427,15 @@ def test_resolve_providers_picks_hardware_webgpu_after_software(
     "adapter",
     [
         # An integrated GPU shares system memory: no dedicated VRAM.
-        _webgpu_adapter(0x8086, 0x46A6, "Intel(R) Iris(R) Xe Graphics"),
+        _webgpu_adapter(
+            vendor_id=0x8086,
+            device_id=0x46A6,
+            description="Intel(R) Iris(R) Xe Graphics",
+        ),
         # A VM with a passed-through GPU, or a Microsoft-made GPU driver.
-        _webgpu_adapter(0x1414, 0x0001, "Microsoft Hyper-V Video"),
+        _webgpu_adapter(
+            vendor_id=0x1414, device_id=0x0001, description="Microsoft Hyper-V Video"
+        ),
     ],
 )
 def test_resolve_providers_keeps_hardware_webgpu(

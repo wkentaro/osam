@@ -103,7 +103,9 @@ dev = [
 ]
 
 [tool.gruff.lint]
-select = ["GR:baseline"]
+select = ["GR:baseline", "GR:opinionated"]
+# GR013 enforces the stricter form of GR001.
+ignore = ["GR001"]
 per-file-ignores = { "osam/_models/yoloworld/clip/**" = ["GR"] }
 
 [tool.hatch.metadata]
