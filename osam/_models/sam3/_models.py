@@ -126,17 +126,23 @@ class Sam3(types.Model):
             and prompt.point_labels is not None
             and len(prompt.point_labels) > 0
         ):
-            is_points: bool = bool(np.isin(prompt.point_labels, [0, 1]).all())
+            labels: list[int] = prompt.point_labels.tolist()
             if prompt.texts:
                 # Boxes with text are examples of the objects to find.
-                if is_points:
+                if set(labels) <= {0, 1}:
                     raise ValueError("point prompts can't be combined with text")
             else:
-                # Without text, a box is one object, as in SAM and SAM2.
-                if not (is_points or prompt.point_labels.tolist() == [2, 3]):
+                # Without text, the prompt is one object, as in SAM and SAM2:
+                # points (0, 1) with at most one box (2 then 3).
+                box_starts: list[int] = [i for i, v in enumerate(labels) if v == 2]
+                if not (
+                    set(labels) <= {0, 1, 2, 3}
+                    and labels.count(3) == len(box_starts) <= 1
+                    and all(labels[i + 1 : i + 2] == [3] for i in box_starts)
+                ):
                     raise ValueError(
-                        "without texts, give points (labels 0, 1) or one box "
-                        "(labels 2, 3) to segment one object; add "
+                        "without texts, give points (labels 0, 1) and at most "
+                        "one box (labels 2, 3) to segment one object; add "
                         "texts=['visual'] to find every object like the boxes: "
                         f"{prompt.point_labels=}"
                     )
