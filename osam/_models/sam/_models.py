@@ -29,12 +29,12 @@ class SamBase(types.Model):
         return self._encode_image(image=image)
 
     @abc.abstractmethod
-    def _encode_image(self, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
+    def _encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         pass
 
     @abc.abstractmethod
     def _generate_mask_from_image_embedding(
-        self, image_embedding: types.ImageEmbedding, prompt: types.Prompt
+        self, *, image_embedding: types.ImageEmbedding, prompt: types.Prompt
     ) -> npt.NDArray[np.bool_]:
         pass
 
@@ -93,7 +93,7 @@ class SamBase(types.Model):
         )
 
 
-def get_input_size(encoder_session: onnxruntime.InferenceSession) -> int:
+def get_input_size(*, encoder_session: onnxruntime.InferenceSession) -> int:
     input_height: int
     input_width: int
     input_height, input_width = encoder_session.get_inputs()[0].shape[2:]
@@ -102,14 +102,16 @@ def get_input_size(encoder_session: onnxruntime.InferenceSession) -> int:
     return input_height
 
 
-def _compute_resized_hw(height: int, width: int, target_size: int) -> tuple[int, int]:
+def _compute_resized_hw(
+    *, height: int, width: int, target_size: int
+) -> tuple[int, int]:
     if width > height:
         return int(round(height * target_size / width)), target_size
     return target_size, int(round(width * target_size / height))
 
 
 class Sam(SamBase):
-    def _encode_image(self, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
+    def _encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         encoder_session = self._inference_sessions["encoder"]
         input_size: int = get_input_size(encoder_session=encoder_session)
 
@@ -148,7 +150,7 @@ class Sam(SamBase):
         )
 
     def _generate_mask_from_image_embedding(
-        self, image_embedding: types.ImageEmbedding, prompt: types.Prompt
+        self, *, image_embedding: types.ImageEmbedding, prompt: types.Prompt
     ) -> npt.NDArray[np.bool_]:
         if prompt.points is None or prompt.point_labels is None:
             raise ValueError(f"Prompt must contain points and point_labels: {prompt!r}")

@@ -15,7 +15,7 @@ class EfficientSam(SamBase):
         license_spdx="Apache-2.0",
     )
 
-    def _encode_image(self, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
+    def _encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         batched_images: npt.NDArray[np.float32] = (
             image.transpose(2, 0, 1)[None].astype(np.float32) / 255
         )
@@ -35,6 +35,7 @@ class EfficientSam(SamBase):
 
     def _generate_mask_from_image_embedding(
         self,
+        *,
         image_embedding: types.ImageEmbedding,
         prompt: types.Prompt,
     ) -> npt.NDArray[np.bool_]:

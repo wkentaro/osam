@@ -289,6 +289,7 @@ class Sam3(types.Model):
 
     def _generate_from_points(
         self,
+        *,
         image_embedding: types.ImageEmbedding,
         points: NDArray[np.floating],
         point_labels: NDArray[np.integer],
