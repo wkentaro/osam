@@ -4,6 +4,7 @@ import imgviz
 import numpy as np
 from loguru import logger
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from ... import apis
 from ... import types
@@ -24,9 +25,11 @@ class _YoloWorld(types.Model):
 
     _input_size: int
 
+    @override
     def default_prompt(self, height: int, width: int) -> types.Prompt:
         return types.Prompt(texts=["anything"])
 
+    @override
     def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
         if request.image is None:
             raise ValueError(f"request.image is required: request={request!r}")

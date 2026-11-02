@@ -5,6 +5,7 @@ import numpy as np
 import PIL.Image
 from loguru import logger
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from osam import types
 
@@ -41,6 +42,7 @@ class Sam3(types.Model):
         ),
     }
 
+    @override
     def encode_image(self, image: NDArray[np.uint8]) -> types.ImageEmbedding:
         logger.debug("Encoding image with shape: {}", image.shape)
         original_height: int = image.shape[0]
@@ -88,9 +90,11 @@ class Sam3(types.Model):
             ],
         )
 
+    @override
     def default_prompt(self, height: int, width: int) -> types.Prompt:
         return types.Prompt(texts=["visual"])
 
+    @override
     def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
         image_embedding: types.ImageEmbedding
         if request.image_embedding is not None:

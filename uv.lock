@@ -1765,6 +1765,7 @@ dependencies = [
     { name = "loguru" },
     { name = "pillow" },
     { name = "pydantic" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -1826,6 +1827,7 @@ requires-dist = [
     { name = "onnxruntime-gpu", extras = ["cuda", "cudnn"], marker = "python_full_version < '3.11' and extra == 'gpu'", specifier = ">=1.23.2,<1.24" },
     { name = "pillow" },
     { name = "pydantic" },
+    { name = "typing-extensions", specifier = ">=4.4" },
     { name = "uvicorn", marker = "extra == 'serve'" },
 ]
 provides-extras = ["cpu", "gpu", "serve", "webgpu"]

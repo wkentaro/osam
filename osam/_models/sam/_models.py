@@ -7,6 +7,7 @@ import numpy.typing as npt
 import onnxruntime
 import PIL.Image
 from loguru import logger
+from typing_extensions import override
 
 from osam import types
 
@@ -19,6 +20,7 @@ class SamBase(types.Model):
         license_spdx="Apache-2.0",
     )
 
+    @override
     def encode_image(self, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         if image.ndim == 2:
             raise ValueError("Grayscale images are not supported")
@@ -36,12 +38,14 @@ class SamBase(types.Model):
     ) -> npt.NDArray[np.bool_]:
         pass
 
+    @override
     def default_prompt(self, height: int, width: int) -> types.Prompt:
         return types.Prompt(
             points=np.array([[width / 2, height / 2]], dtype=np.float32),
             point_labels=np.array([1], dtype=np.int32),
         )
 
+    @override
     def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
         image_embedding: types.ImageEmbedding
         if request.image_embedding is None:
