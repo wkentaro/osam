@@ -44,9 +44,11 @@ osam.
 
 ## Decision
 
-- `osam.Client()` starts a private server by default. It uses
-  `multiprocessing` with the spawn start method, so a frozen application
-  such as a PyInstaller bundle can start it after calling
+- `osam.Client()` starts a private server by default. It runs a fresh
+  Python interpreter (`python -c`), since `multiprocessing` would re-run a
+  caller's script that lacks an `if __name__ == "__main__"` guard. A frozen
+  application, such as a PyInstaller bundle, has no interpreter to run, so
+  it starts the server with `multiprocessing` spawn after calling
   `multiprocessing.freeze_support()`.
 - The private server binds `127.0.0.1` on port 0, reports the port to its
   parent, and accepts only requests that carry a random token from the
