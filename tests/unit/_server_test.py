@@ -336,3 +336,25 @@ def test_failed_load_unloads_the_others_and_retries(
     assert response.status_code == 200, response.text
     assert loaded_at_each_load == [["efficientsam:10m"], []]
     assert list(_server._loaded) == ["sam2:tiny"]
+
+
+def test_cpu_fallback_next_to_a_gpu_model_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_server, "_loaded", collections.OrderedDict())
+    monkeypatch.setattr(_server, "_embeddings", collections.OrderedDict())
+    efficientsam = _server._apis.get_model_type_by_name(name="efficientsam:10m")
+    monkeypatch.setattr(efficientsam, "device", property(lambda self: "cuda"))
+    sam2 = _server._apis.get_model_type_by_name(name="sam2:tiny")
+    loads: list[list[str]] = []
+    init = sam2.__init__
+
+    def counted(self, *args, **kwargs) -> None:
+        loads.append(list(_server._loaded))
+        init(self, *args, **kwargs)
+
+    monkeypatch.setattr(sam2, "__init__", counted)
+    _server._load(model_name="efficientsam:10m")
+    _server._load(model_name="sam2:tiny")  # lands on CPU next to "cuda"
+    assert loads == [["efficientsam:10m"], []]
+    assert list(_server._loaded) == ["sam2:tiny"]

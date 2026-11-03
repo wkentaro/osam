@@ -354,6 +354,16 @@ def _load(*, model_name: str) -> types.Model:
         if not _loaded:
             raise
         logger.exception("Failed to load {}; unloading the other models", model_name)
+    if (
+        model is not None
+        and _DEVICE is None
+        and model.device == "cpu"
+        and any(loaded.model.device != "cpu" for loaded in _loaded.values())
+    ):
+        # An automatic device falls back to CPU when the GPU, which the others
+        # use, is out of memory.
+        logger.warning("{} fell back to CPU; unloading the other models", model_name)
+        model = None
     if model is None:
         # Likely out of memory, so unload the others and try once more, as Ollama
         # does. Outside the except block, whose traceback would keep the failed
