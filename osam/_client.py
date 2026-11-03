@@ -82,9 +82,10 @@ class Client:
         self._pipe: Optional[
             Union[IO[bytes], multiprocessing.connection.Connection]
         ] = None
-        # The last image sent and its encoding, as a client often sends one
-        # image with several prompts.
-        self._image: tuple[str, str] = ("", "")
+        # The last image sent: its local hash, its encoding, and the hash the
+        # server returned for it, as a client often sends one image with
+        # several prompts.
+        self._image: tuple[str, str, str] = ("", "", "")
         # Whether this client owns its server, set once: _process is briefly
         # None while another request restarts it.
         self._private: bool = host is None
@@ -183,31 +184,32 @@ class Client:
         if keep_alive is not None:
             body["keep_alive"] = keep_alive
 
-        def post(**image_fields: str) -> types.GenerateResponse:
-            return types.GenerateResponse.model_validate(
-                self._request(
-                    method="POST", path="/api/generate", body=body | image_fields
-                )
+        def post(**image_fields: str) -> dict[str, Any]:
+            return self._request(
+                method="POST", path="/api/generate", body=body | image_fields
             )
 
         if image is None:
-            return post()
+            return types.GenerateResponse.model_validate(post())
         # Hashing takes a fraction of the time PNG encoding does. Read and
         # written whole, so a concurrent call can't mix up two images.
         key: str = _json.hash_image(image=image)
-        cached_key, encoded = self._image
-        if cached_key == key:
+        cached_key, encoded, server_hash = self._image
+        if cached_key != key:
+            encoded = _json.image_ndarray_to_b64data(ndarray=image)
+        elif server_hash:
             # Sent before, so the server likely has its embedding; 412 if not,
             # such as for another model or after a restart.
             try:
-                return post(image_hash=key)
+                return types.GenerateResponse.model_validate(
+                    post(image_hash=server_hash)
+                )
             except ResponseError as e:
                 if e.status_code != 412:
                     raise
-        else:
-            encoded = _json.image_ndarray_to_b64data(ndarray=image)
-            self._image = (key, encoded)
-        return post(image=encoded)
+        response: dict[str, Any] = post(image=encoded)
+        self._image = (key, encoded, response.get("image_hash") or "")
+        return types.GenerateResponse.model_validate(response)
 
     def _request(
         self, *, method: str, path: str, body: Optional[dict[str, Any]] = None

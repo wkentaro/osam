@@ -178,6 +178,11 @@ class GenerateRequest(types.GenerateRequest):
 class GenerateResponse(pydantic.BaseModel):
     model: str
     annotations: list[types.Annotation]
+    image_hash: Optional[str] = pydantic.Field(
+        default=None,
+        description="Of the request's image, to send as image_hash with further "
+        "prompts on it",
+    )
 
 
 class ModelList(pydantic.BaseModel):
@@ -280,7 +285,7 @@ async def remove(name: str) -> None:
 
 
 @app.post("/api/generate", response_model=GenerateResponse)
-async def generate(request: GenerateRequest) -> types.GenerateResponse:
+async def generate(request: GenerateRequest) -> GenerateResponse:
     model_name: str = _get_model_type(name=request.model).name
     if (
         request.image is None
@@ -303,19 +308,17 @@ async def generate(request: GenerateRequest) -> types.GenerateResponse:
         raise fastapi.HTTPException(400, str(e))
 
 
-def _keep_alive_only(
-    *, request: GenerateRequest, model_name: str
-) -> types.GenerateResponse:
+def _keep_alive_only(*, request: GenerateRequest, model_name: str) -> GenerateResponse:
     # A request with only a model sets how long that model stays loaded, so
     # keep_alive 0 unloads it, as in Ollama.
     # ponytail: doesn't load an unloaded model; add preloading if a client needs it.
     _keep_alive(model_name=model_name, seconds=request.keep_alive)
-    return types.GenerateResponse(model=request.model, annotations=[])
+    return GenerateResponse(model=request.model, annotations=[])
 
 
 def _generate_and_keep_alive(
     *, request: GenerateRequest, model_name: str
-) -> types.GenerateResponse:
+) -> GenerateResponse:
     try:
         return _generate_with_cache(request=request, model_name=model_name)
     finally:
@@ -324,7 +327,7 @@ def _generate_and_keep_alive(
 
 def _generate_with_cache(
     *, request: GenerateRequest, model_name: str
-) -> types.GenerateResponse:
+) -> GenerateResponse:
     # Recent image embeddings, so several prompts on one image encode it once.
     # A SAM3 embedding takes about 100 MB.
     # ponytail: fixed size, make it configurable if memory or hit rate matters.
@@ -337,11 +340,14 @@ def _generate_with_cache(
         else _json.hash_image(image=request.image)
     )
     if image_hash is None:  # a prompt without an image, which the model rejects
-        return model.generate(request=request)
+        return GenerateResponse(
+            model=request.model, annotations=model.generate(request=request).annotations
+        )
     key: tuple[str, str] = (model_name, image_hash)
+    response: types.GenerateResponse
     if key in _embeddings:
         _embeddings.move_to_end(key)
-        return model.generate(
+        response = model.generate(
             request=types.GenerateRequest(
                 model=request.model,
                 image_embedding=_embeddings[key],
@@ -349,16 +355,19 @@ def _generate_with_cache(
                 annotations=request.annotations,
             )
         )
-    if request.image is None:
+    elif request.image is None:
         raise fastapi.HTTPException(
             412, f"no embedding for image {image_hash}; send the image"
         )
-    response: types.GenerateResponse = model.generate(request=request)
-    if response.image_embedding is not None:
-        _embeddings[key] = response.image_embedding
-        while len(_embeddings) > EMBEDDING_CACHE_SIZE:
-            _embeddings.popitem(last=False)
-    return response
+    else:
+        response = model.generate(request=request)
+        if response.image_embedding is not None:
+            _embeddings[key] = response.image_embedding
+            while len(_embeddings) > EMBEDDING_CACHE_SIZE:
+                _embeddings.popitem(last=False)
+    return GenerateResponse(
+        model=response.model, annotations=response.annotations, image_hash=image_hash
+    )
 
 
 def _load(*, model_name: str) -> types.Model:

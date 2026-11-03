@@ -176,7 +176,7 @@ def test_generate_keeps_image_embedding_inside(
         "/api/generate", json={"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
     )
     assert response.status_code == 200, response.text
-    assert response.json() == {"model": "efficientsam:10m", "annotations": []}
+    assert response.json().keys() == {"model", "annotations", "image_hash"}
 
     response = client.post(
         "/api/generate",
@@ -207,14 +207,14 @@ def test_generate_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> No
     assert second.status_code == 200, second.text
     assert second.json()["annotations"] == first.json()["annotations"]
 
-    # By hash, in place of the image.
-    image_hash = _server._json.hash_image(
-        image=_server._json.image_b64data_to_ndarray(b64data=_IMAGE_B64)
-    )
+    # By the hash the server returned, in place of the image.
+    image_hash = first.json()["image_hash"]
+    assert second.json()["image_hash"] == image_hash
     by_hash = {**body, "image": None, "image_hash": image_hash}
     third = client.post("/api/generate", json=by_hash)
     assert third.status_code == 200, third.text
     assert third.json()["annotations"] == first.json()["annotations"]
+    assert third.json()["image_hash"] == image_hash
     missing = client.post("/api/generate", json={**by_hash, "image_hash": "0" * 64})
     assert missing.status_code == 412
     del by_hash["prompt"]  # not a request that only sets keep_alive
@@ -273,7 +273,11 @@ def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     # loads no model, and leaves another loaded model alone.
     unload = {"model": "efficientsam:10m", "keep_alive": 0}
     response = client.post("/api/generate", json={"model": "efficientsam:10m"})
-    assert response.json() == {"model": "efficientsam:10m", "annotations": []}
+    assert response.json() == {
+        "model": "efficientsam:10m",
+        "annotations": [],
+        "image_hash": None,
+    }
     assert client.get("/api/ps").json() == {"models": []}
     client.post("/api/generate", json={**body, "keep_alive": -1})
     assert client.post("/api/generate", json={**unload, "model": "sam2:tiny"}).json()
