@@ -1,7 +1,7 @@
 import logging
 import os
 
-import fastapi  # type: ignore[unresolved-import]
+import fastapi
 import pydantic
 from pydantic.json_schema import SkipJsonSchema
 
