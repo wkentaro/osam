@@ -9,10 +9,12 @@ except ImportError as e:
         "osam requires onnxruntime: pip install 'osam[cpu]' or 'osam[gpu]'"
     ) from e
 
-from . import apis
 from . import types
+from ._client import Client
+from ._client import ResponseError
 
 __all__ = [
-    "apis",
+    "Client",
+    "ResponseError",
     "types",
 ]

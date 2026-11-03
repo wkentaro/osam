@@ -1,9 +1,12 @@
+import contextlib
 import datetime
+import http.client
 import json
 import os
 import pathlib
 import sys
 import typing
+from collections.abc import Iterator
 
 import click
 import imgviz
@@ -13,11 +16,13 @@ from loguru import logger
 from numpy.typing import NDArray
 
 from . import __version__
+from . import _apis
 from . import _humanize
 from . import _json
 from . import _tabulate
-from . import apis
 from . import types
+from ._client import Client
+from ._client import ResponseError
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -57,24 +62,20 @@ def help(ctx, subcommand):
 @cli.command(name="list", help="List models")
 @click.option("--all", "-a", "show_all", is_flag=True, help="show all models")
 def list_(show_all):
+    with _client() as client:
+        models = client.list()
     rows = []
-    for model_type in apis.registered_model_types:
-        size = model_type.get_size()
-        modified_at = model_type.get_modified_at()
-
-        if size is None or modified_at is None:
-            if show_all:
-                size = "<not pulled>"
-                modified_at = "<not pulled>"
-            else:
+    for model in models:
+        if model.size is None or model.modified_at is None:
+            if not show_all:
                 continue
+            size = modified_at = "<not pulled>"
         else:
-            size = _humanize.naturalsize(size=size)
+            size = _humanize.naturalsize(size=model.size)
             modified_at = _humanize.naturaltime(
-                dt=datetime.datetime.fromtimestamp(modified_at)
+                dt=datetime.datetime.fromtimestamp(model.modified_at)
             )
-
-        rows.append([model_type.name, model_type.get_id(), size, modified_at])
+        rows.append([model.name, model.id, size, modified_at])
     click.echo(
         _tabulate.tabulate(rows=rows, headers=["NAME", "ID", "SIZE", "MODIFIED"])
     )
@@ -83,18 +84,29 @@ def list_(show_all):
 @cli.command(help="Pull a model")
 @click.argument("model_name", metavar="model", type=str)
 def pull(model_name):
-    cls = apis.get_model_type_by_name(model_name)
-    logger.info("Pulling {model_name!r}...", model_name=model_name)
-    cls.pull()
+    status: str | None = None
+
+    def progress(line: dict[str, typing.Any]) -> None:
+        nonlocal status
+        if status is not None and line["status"] != status:
+            click.echo(err=True)
+        status = line["status"]
+        total: int | None = line.get("total")
+        percent: str = f" {100 * line['completed'] // total}%" if total else ""
+        click.echo(f"\r{status}{percent}", nl=False, err=True)
+
+    with _client() as client:
+        client.pull(model_name, progress=progress)
+    if status is not None:
+        click.echo(err=True)
     logger.info("Pulled {model_name!r}", model_name=model_name)
 
 
 @cli.command(help="Remove a model")
 @click.argument("model_name", metavar="model", type=str)
 def rm(model_name):
-    cls = apis.get_model_type_by_name(model_name)
-    logger.info("Removing {model_name!r}...", model_name=model_name)
-    cls.remove()
+    with _client() as client:
+        client.remove(model_name)
     logger.info("Removed {model_name!r}", model_name=model_name)
 
 
@@ -112,16 +124,24 @@ def serve(host: str, port: int, device: types.Device | None, reload: bool) -> No
         # An environment variable reaches the app even when --reload starts
         # it in a new process.
         os.environ["OSAM_SERVE_DEVICE"] = device
-    try:
-        import uvicorn
-
-        import osam._server  # noqa: F401
-    except ImportError:
-        logger.error("Run `pip install osam[serve]` to use `osam serve`")
-        sys.exit(1)
+    import uvicorn
 
     logger.info("Starting server at http://{host}:{port}/docs", host=host, port=port)
     uvicorn.run("osam._server:app", host=host, port=port, reload=reload)
+
+
+@contextlib.contextmanager
+def _client(*, device: types.Device | None = None) -> Iterator[Client]:
+    # OSAM_HOST points every command at a running `osam serve`. Expected
+    # failures, such as an unknown model or an unreachable host, print one line.
+    try:
+        with Client(device=device) as client:
+            yield client
+    except (OSError, http.client.HTTPException) as e:
+        server: str = os.environ.get("OSAM_HOST") or "the osam server"
+        raise click.ClickException(f"can't reach {server}: {e}")
+    except (ResponseError, ValueError, RuntimeError) as e:
+        raise click.ClickException(str(e))
 
 
 def _floats_callback(*, lengths: tuple[int, ...]) -> typing.Callable:
@@ -252,15 +272,21 @@ def run(
             base = types.Prompt(**prompt_flags)
         elif prompt is not None:
             base = types.Prompt.model_validate(prompt)
-        model = apis.get_model_type_by_name(model_name)(device=device)
         if base is None and thresholds:
-            base = model.default_prompt(height=image.shape[0], width=image.shape[1])
-        request: types.GenerateRequest = types.GenerateRequest(
-            model=model_name,
-            image=image,
-            prompt=base and base.model_copy(update=thresholds),
-        )
-        response: types.GenerateResponse = model.generate(request=request)
+            try:
+                model_type = _apis.get_model_type_by_name(name=model_name)
+            except ValueError as e:
+                raise click.ClickException(str(e))
+            base = model_type.default_prompt(
+                height=image.shape[0], width=image.shape[1]
+            )
+        run_prompt: types.Prompt | None = base and base.model_copy(update=thresholds)
+        with _client(device=device) as client:
+            response: types.GenerateResponse = client.generate(
+                model_name, image=image, prompt=run_prompt
+            )
+    except click.ClickException:
+        raise
     except Exception:
         logger.exception("Failed to run model")
         sys.exit(1)
@@ -270,11 +296,11 @@ def run(
     else:
         visualization: np.ndarray
 
-        if request.prompt and request.prompt.texts is not None:
+        if run_prompt and run_prompt.texts is not None:
             labels = [
                 0
                 if annotation.text is None
-                else 1 + request.prompt.texts.index(annotation.text)
+                else 1 + run_prompt.texts.index(annotation.text)
                 for annotation in response.annotations
             ]
         else:

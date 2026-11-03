@@ -6,7 +6,7 @@ from loguru import logger
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from ... import apis
+from ... import _nms
 from ... import types
 from . import clip
 
@@ -25,8 +25,9 @@ class _YoloWorld(types.Model):
 
     _input_size: int
 
+    @classmethod
     @override
-    def default_prompt(self, height: int, width: int) -> types.Prompt:
+    def default_prompt(cls, height: int, width: int) -> types.Prompt:
         return types.Prompt(texts=["anything"])
 
     @override
@@ -72,7 +73,7 @@ class _YoloWorld(types.Model):
         max_annotations = (
             len(bboxes) if prompt.max_annotations is None else prompt.max_annotations
         )
-        bboxes, scores, labels, _indices = apis.non_maximum_suppression(
+        bboxes, scores, labels, _indices = _nms.non_maximum_suppression(
             boxes=bboxes,
             scores=scores,
             iou_threshold=iou_threshold,

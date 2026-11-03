@@ -1660,12 +1660,14 @@ name = "osam"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
+    { name = "fastapi" },
     { name = "gdown" },
     { name = "imgviz" },
     { name = "loguru" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "typing-extensions" },
+    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -1677,10 +1679,6 @@ cpu = [
 gpu = [
     { name = "onnxruntime-gpu", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, extra = ["cuda", "cudnn"], marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "onnxruntime-gpu", version = "1.31.1", source = { registry = "https://pypi.org/simple" }, extra = ["cuda", "cudnn"], marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-]
-serve = [
-    { name = "fastapi" },
-    { name = "uvicorn" },
 ]
 webgpu = [
     { name = "onnx", marker = "python_full_version >= '3.11' and sys_platform == 'darwin'" },
@@ -1696,8 +1694,8 @@ dev = [
     { name = "ipython", version = "9.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-cpu') or (python_full_version >= '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "mdformat" },
     { name = "onnx" },
+    { name = "osam", marker = "extra == 'extra-4-osam-cpu' or extra != 'extra-4-osam-gpu' or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "osam", extra = ["cpu"], marker = "extra == 'extra-4-osam-cpu' or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "osam", extra = ["serve"], marker = "extra == 'extra-4-osam-cpu' or extra != 'extra-4-osam-gpu' or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
@@ -1713,7 +1711,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "click" },
-    { name = "fastapi", marker = "extra == 'serve'" },
+    { name = "fastapi" },
     { name = "gdown", specifier = ">=6.4.0" },
     { name = "imgviz", specifier = ">=2.0.0" },
     { name = "loguru" },
@@ -1728,7 +1726,7 @@ requires-dist = [
     { name = "pillow" },
     { name = "pydantic" },
     { name = "typing-extensions", specifier = ">=4.4" },
-    { name = "uvicorn", marker = "extra == 'serve'" },
+    { name = "uvicorn" },
 ]
 provides-extras = ["cpu", "gpu", "serve", "webgpu"]
 
@@ -1739,7 +1737,7 @@ dev = [
     { name = "ipython", specifier = ">=8.38.0" },
     { name = "mdformat", specifier = ">=1.0.0" },
     { name = "onnx", specifier = ">=1.17.0" },
-    { name = "osam", extras = ["cpu", "serve"] },
+    { name = "osam", extras = ["cpu"] },
     { name = "pytest", specifier = ">=8.3.4" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-xdist", specifier = ">=3.6.1" },

@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import io
 
 import numpy as np
@@ -16,6 +17,16 @@ def image_ndarray_to_b64data(*, ndarray):
 
 
 def image_b64data_to_ndarray(*, b64data):
+    # ValueError, so pydantic reports bad input as a validation error.
     data = base64.b64decode(b64data)
-    pil = PIL.Image.open(io.BytesIO(data))
-    return np.asarray(pil)
+    try:
+        return np.asarray(PIL.Image.open(io.BytesIO(data)))
+    # OSError covers a file PIL can't identify and a truncated one.
+    except (OSError, PIL.Image.DecompressionBombError) as e:
+        raise ValueError(f"not an image file: {e}") from e
+
+
+def hash_image(*, image: np.ndarray) -> str:
+    digest = hashlib.sha256(np.ascontiguousarray(image).data)
+    digest.update(repr((image.shape, image.dtype.str)).encode())
+    return digest.hexdigest()

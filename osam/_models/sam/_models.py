@@ -38,8 +38,9 @@ class SamBase(types.Model):
     ) -> npt.NDArray[np.bool_]:
         pass
 
+    @classmethod
     @override
-    def default_prompt(self, height: int, width: int) -> types.Prompt:
+    def default_prompt(cls, height: int, width: int) -> types.Prompt:
         return types.Prompt(
             points=np.array([[width / 2, height / 2]], dtype=np.float32),
             point_labels=np.array([1], dtype=np.int32),
