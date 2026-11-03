@@ -13,9 +13,9 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
+from osam import _apis
 from osam import _json
 from osam import _server
-from osam import apis
 from osam import types
 
 _IMAGE_B64: Final = base64.b64encode(
@@ -50,7 +50,7 @@ def test_list_models() -> None:
 
 
 def test_pull_streams_progress(monkeypatch: pytest.MonkeyPatch) -> None:
-    model_type = _server.apis.get_model_type_by_name(name="efficientsam:10m")
+    model_type = _server._apis.get_model_type_by_name(name="efficientsam:10m")
 
     def pull(progress, cancel):
         progress("encoder.onnx", 1, 2)
@@ -99,7 +99,7 @@ def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(_server, "_DEVICE", "cpu")
 
-    monkeypatch.setattr(_server.apis, "generate", fail)
+    monkeypatch.setattr(_server._apis, "generate", fail)
     response = TestClient(_server.app, raise_server_exceptions=False).post(
         "/api/generate", json={"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
     )
@@ -135,7 +135,7 @@ def test_queued_generates_leave_the_thread_pool_free(
             responses = await asyncio.gather(*tasks)
         assert {response.status_code for response in responses} == {400}
 
-    monkeypatch.setattr(_server.apis, "generate", blocked)
+    monkeypatch.setattr(_server._apis, "generate", blocked)
     # Twice, on two event loops, as separate app lifecycles would.
     for _ in range(2):
         release = threading.Event()
@@ -151,7 +151,7 @@ def test_generate_keeps_image_embedding_inside(
         embedding=np.zeros((1, 1, 1), dtype=np.float32),
     )
     monkeypatch.setattr(
-        _server.apis,
+        _server._apis,
         "generate",
         lambda request, **kwargs: types.GenerateResponse(
             model=request.model, image_embedding=embedding, annotations=[]
@@ -188,7 +188,7 @@ def test_generate_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> No
     def fail(*args, **kwargs):
         raise AssertionError("encoded the image again")
 
-    monkeypatch.setattr(type(apis.running_model), "encode_image", fail)
+    monkeypatch.setattr(type(_apis.running_model), "encode_image", fail)
     second = client.post("/api/generate", json=body)
     assert second.status_code == 200, second.text
     assert second.json()["annotations"] == first.json()["annotations"]

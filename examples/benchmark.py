@@ -20,6 +20,7 @@ import numpy as np
 import PIL.Image
 
 import osam
+import osam._apis
 
 IMAGE_PATH: Final = pathlib.Path(__file__).parent / "_images" / "dogs.jpg"
 
@@ -52,7 +53,7 @@ def _benchmark(
     *, model_name: str, device: str, image: np.ndarray, repeat: int
 ) -> list[str]:
     try:
-        model_type = osam.apis.get_model_type_by_name(model_name)
+        model_type = osam._apis.get_model_type_by_name(name=model_name)
         model = model_type(device=typing.cast(osam.types.Device, device))
     except Exception as e:
         print(f"{model_name} on {device}: {e}", file=sys.stderr)
@@ -102,7 +103,7 @@ def main() -> None:
     parser.add_argument("--repeat", type=int, default=5)
     args = parser.parse_args()
 
-    model_names = args.model or [m.name for m in osam.apis.registered_model_types]
+    model_names = args.model or [m.name for m in osam._apis.registered_model_types]
     image = np.asarray(PIL.Image.open(IMAGE_PATH).convert("RGB"))
 
     print(f"| Model | Device | Encode (ms) | {' | '.join(PROMPTS)} |")

@@ -25,11 +25,11 @@ import uvicorn
 from pydantic.json_schema import SkipJsonSchema
 
 from . import __version__
+from . import _apis
 from . import _json
-from . import apis
 from . import types
 
-# apis.generate keeps one model loaded, and pull and remove must not change the
+# _apis.generate keeps one model loaded, and pull and remove must not change the
 # files under a model being loaded, so they all run on one thread, in order.
 # Queued requests wait here instead of holding FastAPI's thread pool, so other
 # routes stay free.
@@ -188,14 +188,14 @@ def list_models() -> ModelList:
                 modified_at=model_type.get_modified_at(),
                 metadata=model_type.metadata,
             )
-            for model_type in apis.registered_model_types
+            for model_type in _apis.registered_model_types
         ]
     )
 
 
 @app.get("/api/ps")
 def list_running_models() -> RunningModelList:
-    model: Optional[types.Model] = apis.running_model
+    model: Optional[types.Model] = _apis.running_model
     if model is None:
         return RunningModelList(models=[])
     return RunningModelList(
@@ -274,7 +274,7 @@ def _keep_alive_only(
     # A request with only a model sets how long that model stays loaded, so
     # keep_alive 0 unloads it, as in Ollama.
     # ponytail: doesn't load an unloaded model; add preloading if a client needs it.
-    if apis.running_model is not None and apis.running_model.name == model_name:
+    if _apis.running_model is not None and _apis.running_model.name == model_name:
         _keep_alive(seconds=request.keep_alive)
     return types.GenerateResponse(model=request.model, annotations=[])
 
@@ -297,11 +297,11 @@ def _generate_with_cache(
     EMBEDDING_CACHE_SIZE: Final = 4
 
     if request.image is None:  # a prompt without an image, which the model rejects
-        return apis.generate(request=request, device=_DEVICE)
+        return _apis.generate(request=request, device=_DEVICE)
     key: tuple[str, str] = (model_name, _json.hash_image(image=request.image))
     if key in _embeddings:
         _embeddings.move_to_end(key)
-        return apis.generate(
+        return _apis.generate(
             request=types.GenerateRequest(
                 model=request.model,
                 image_embedding=_embeddings[key],
@@ -310,7 +310,7 @@ def _generate_with_cache(
             ),
             device=_DEVICE,
         )
-    response: types.GenerateResponse = apis.generate(request=request, device=_DEVICE)
+    response: types.GenerateResponse = _apis.generate(request=request, device=_DEVICE)
     if response.image_embedding is not None:
         _embeddings[key] = response.image_embedding
         while len(_embeddings) > EMBEDDING_CACHE_SIZE:
@@ -348,7 +348,7 @@ def _unload_if_current(*, timer: threading.Timer) -> None:
 
 def _unload() -> None:
     global _expires_at, _unload_timer
-    apis.unload()
+    _apis.unload()
     _embeddings.clear()
     _expires_at = None
     _unload_timer = None
@@ -360,7 +360,7 @@ async def _run(*, call: Callable[[], Any]) -> Any:
 
 def _get_model_type(*, name: str) -> type[types.Model]:
     try:
-        return apis.get_model_type_by_name(name=name)
+        return _apis.get_model_type_by_name(name=name)
     except ValueError as e:
         raise fastapi.HTTPException(404, str(e))
 

@@ -36,7 +36,7 @@ registered_model_types: list[Type[types.Model]] = [
 ]
 
 
-def get_model_type_by_name(name: str) -> Type[types.Model]:
+def get_model_type_by_name(*, name: str) -> Type[types.Model]:
     model_name: str
     if ":" in name:
         model_name = name
@@ -51,7 +51,7 @@ def get_model_type_by_name(name: str) -> Type[types.Model]:
     return cls
 
 
-def get_model_metadata(name: str) -> types.ModelMetadata:
+def get_model_metadata(*, name: str) -> types.ModelMetadata:
     return get_model_type_by_name(name=name).metadata
 
 
@@ -62,12 +62,10 @@ def unload() -> None:
 
 
 def generate(
-    request: types.GenerateRequest, device: Optional[types.Device] = None
+    *, request: types.GenerateRequest, device: Optional[types.Device] = None
 ) -> types.GenerateResponse:
-    """Run request.model, reusing the loaded model when model and device match.
-
-    device: as in Model; None picks one automatically.
-    """
+    # Runs request.model, reusing the loaded model when model and device match.
+    # device: as in Model; None picks one automatically.
     global running_model, _running_device
 
     model_type = get_model_type_by_name(name=request.model)
@@ -89,6 +87,7 @@ _non_maximum_suppression_inference_session: Optional[
 
 
 def non_maximum_suppression(
+    *,
     boxes: NDArray[np.floating],
     scores: NDArray[np.floating],
     iou_threshold: float,

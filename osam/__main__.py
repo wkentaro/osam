@@ -16,10 +16,10 @@ from loguru import logger
 from numpy.typing import NDArray
 
 from . import __version__
+from . import _apis
 from . import _humanize
 from . import _json
 from . import _tabulate
-from . import apis
 from . import types
 from ._client import Client
 from ._client import ResponseError
@@ -274,7 +274,7 @@ def run(
             base = types.Prompt.model_validate(prompt)
         if base is None and thresholds:
             try:
-                model_type = apis.get_model_type_by_name(model_name)
+                model_type = _apis.get_model_type_by_name(name=model_name)
             except ValueError as e:
                 raise click.ClickException(str(e))
             base = model_type.default_prompt(

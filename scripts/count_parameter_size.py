@@ -7,6 +7,7 @@ import onnx
 from loguru import logger
 
 import osam
+import osam._apis
 
 
 def count_parameters(onnx_file) -> int:
@@ -29,11 +30,11 @@ def main():
     parser.add_argument(
         "model",
         type=str,
-        choices=[model_type.name for model_type in osam.apis.registered_model_types],
+        choices=[model_type.name for model_type in osam._apis.registered_model_types],
     )
     args = parser.parse_args()
 
-    model_type: Type[osam.types.Model] = osam.apis.get_model_type_by_name(
+    model_type: Type[osam.types.Model] = osam._apis.get_model_type_by_name(
         name=args.model
     )
     model_type.pull()
