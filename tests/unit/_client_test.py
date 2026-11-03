@@ -7,6 +7,7 @@ import threading
 import time
 from typing import Any
 from typing import Final
+from typing import Iterator
 
 import numpy as np
 import PIL.Image
@@ -240,6 +241,41 @@ def test_timeout_restarts_a_private_server(
         client.version()
     assert client._process is not process
     assert client.version() == osam.__version__
+
+
+def test_timeout_restarts_a_private_server_on_a_retry_or_a_stream(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    send = client._send
+    processes: list[Any] = []
+
+    def crash_then_hang(**kwargs: Any) -> Any:
+        processes.append(client._process)
+        if len(processes) == 1:
+            raise ConnectionResetError("crashed")
+        monkeypatch.setattr(client, "_send", send)
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(client, "_send", crash_then_hang)
+    with pytest.raises(TimeoutError):
+        client.version()
+    assert client._process not in processes  # the retry's server restarted too
+
+    class Connection:
+        def close(self) -> None:
+            pass
+
+    def stall() -> Iterator[bytes]:
+        yield b'{"status": "pulling"}'
+        raise TimeoutError("timed out")
+
+    process = client._process
+    monkeypatch.setattr(
+        client, "_open_stream", lambda **kwargs: (Connection(), stall())
+    )
+    with pytest.raises(TimeoutError):
+        client.pull("efficientsam:10m")
+    assert client._process is not process
 
 
 def test_timeout_on_a_silent_host() -> None:

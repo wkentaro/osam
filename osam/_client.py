@@ -1,4 +1,5 @@
 import builtins
+import contextlib
 import http.client
 import json
 import multiprocessing
@@ -226,12 +227,10 @@ class Client:
     def _restarting(self, *, call: Callable[[], Any]) -> Any:
         process = self._process
         try:
-            return call()
-        except TimeoutError as e:
-            # Likely to time out again, so not retried.
-            if self._private:
-                self._restart(process=process, error=e)
-            raise
+            with self._restart_on_timeout():
+                return call()
+        except TimeoutError:
+            raise  # an OSError, but not one to retry
         except (OSError, http.client.HTTPException) as e:
             if not self._private:
                 raise
@@ -243,7 +242,20 @@ class Client:
         # The private server crashed, or failed in a way that can leave it
         # broken, such as a CUDA load that keeps its memory: start a new one.
         self._restart(process=process, error=error)
-        return call()
+        with self._restart_on_timeout():
+            return call()
+
+    @contextlib.contextmanager
+    def _restart_on_timeout(self) -> Iterator[None]:
+        # Stops a hung private server and re-raises; the request would likely
+        # time out again, so it isn't retried.
+        process = self._process
+        try:
+            yield
+        except TimeoutError as e:
+            if self._private:
+                self._restart(process=process, error=e)
+            raise
 
     def _restart(self, *, process: Optional["_Process"], error: Exception) -> None:
         logger.warning("Restarting the osam server after: {error}", error=error)
@@ -267,13 +279,15 @@ class Client:
         return json.loads(data) if data else None
 
     def _stream(self, *, path: str, body: dict[str, Any]) -> Iterator[dict[str, Any]]:
-        # Restarts like _request only until the stream starts.
+        # Retries like _request only until the stream starts; a timeout after
+        # that restarts a private server and raises.
         connection, response = self._restarting(
             call=lambda: self._open_stream(path=path, body=body)
         )
         try:
-            for line in response:
-                yield json.loads(line)
+            with self._restart_on_timeout():
+                for line in response:
+                    yield json.loads(line)
         finally:
             # Closing it early tells the server to stop, as for an unfinished pull.
             connection.close()
