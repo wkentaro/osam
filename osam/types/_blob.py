@@ -74,23 +74,24 @@ class Blob:
             for attachment in self.attachments
         ]
 
+    def _stats(self) -> list[os.stat_result] | None:
+        # stat without an exists check, so a concurrent remove reads as not
+        # pulled instead of raising. NotADirectoryError: a file sits where an
+        # attachment blob's directory goes, which pull() replaces.
+        try:
+            return [os.stat(path) for _, path in self._files]
+        except (FileNotFoundError, NotADirectoryError):
+            return None
+
     @property
     def size(self) -> int | None:
-        total = 0
-        for _, path in self._files:
-            if not os.path.exists(path):
-                return None
-            total += os.stat(path).st_size
-        return total
+        stats = self._stats()
+        return None if stats is None else sum(stat.st_size for stat in stats)
 
     @property
     def modified_at(self) -> float | None:
-        latest: float = 0
-        for _, path in self._files:
-            if not os.path.exists(path):
-                return None
-            latest = max(latest, os.stat(path).st_mtime)
-        return latest
+        stats = self._stats()
+        return None if stats is None else max(stat.st_mtime for stat in stats)
 
     def pull(
         self,

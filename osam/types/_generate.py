@@ -6,6 +6,7 @@ import pydantic
 
 from .. import _json
 from ._annotation import Annotation
+from ._annotation import Base64Image
 from ._image_embedding import ImageEmbedding
 from ._prompt import Prompt
 
@@ -15,7 +16,8 @@ class GenerateRequest(pydantic.BaseModel):
 
     model: str
     image_embedding: Optional[ImageEmbedding] = pydantic.Field(default=None)
-    image: Optional[np.ndarray] = pydantic.Field(default=None)
+    # Given in JSON as a base64-encoded image file, such as PNG or JPEG.
+    image: Optional[Base64Image] = pydantic.Field(default=None)
     prompt: Optional[Prompt] = pydantic.Field(default=None)
     annotations: Optional[list[Annotation]] = pydantic.Field(default=None)
 

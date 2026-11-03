@@ -259,7 +259,7 @@ Image.fromarray(mask).save("mask.png")
 ```bash
 # pip install osam[cpu,serve]  # required for `osam serve`
 
-# Get up the server
+# Get up the server (--host and --port change where it listens)
 osam serve
 
 # POST request
@@ -268,3 +268,13 @@ base64 < examples/_images/dogs.jpg \
   | curl 127.0.0.1:11368/api/generate -X POST --json @- \
   | jq -r '.annotations[0].mask' | base64 --decode > mask.png
 ```
+
+`/api/generate` takes the fields of `osam.types.GenerateRequest`, with the image
+base64-encoded. `osam serve --device` picks the execution device for every
+request. The server keeps the last model loaded and the embeddings of recent
+images, so further prompts on the same image skip the image encoder.
+`/api/models`, `/api/pull` and `DELETE /api/models/{name}` match `osam list`,
+`osam pull` and `osam rm`. `/api/pull` streams NDJSON lines such as
+`{"status": "pulling encoder.onnx", "completed": 524288, "total": 24799761}` and
+ends with `{"status": "success"}` or `{"error": "..."}`. The full schema is at
+<http://127.0.0.1:11368/docs>.
