@@ -32,15 +32,15 @@ osam.
 - **Find a running server and share it automatically.** Rejected: two
   applications that bundle different osam versions would reach the same
   server, and the API would not match. Someone has to stop the server after
-  the application that started it exits, two applications starting at once
-  race to create it, and sandboxed macOS apps cannot share it. The gain is
+  the application that started it exits, and two applications starting at
+  once race to create it. The gain is
   GPU memory when two applications run at the same time; the model files are
   already shared on disk.
 - **One private server per application (chosen).** Language servers work
   this way: the LSP specification leaves starting and stopping the server to
   the client, and each editor runs its own. Playwright for Python starts its
-  own driver process per instance and connects to a remote one only through
-  an explicit `connect(endpoint)`.
+  own driver process per instance. To use a browser that runs elsewhere, the
+  caller passes its endpoint to `connect(endpoint)` explicitly.
 
 ## Decision
 
