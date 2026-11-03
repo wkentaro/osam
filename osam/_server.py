@@ -347,14 +347,17 @@ def _load(*, model_name: str) -> types.Model:
     model_type.pull()
     while len(_loaded) >= _MAX_LOADED_MODELS:
         _unload(model_name=next(iter(_loaded)))
+    model: Optional[types.Model] = None
     try:
-        model: types.Model = model_type(device=_DEVICE)
+        model = model_type(device=_DEVICE)
     except Exception:
         if not _loaded:
             raise
-        # Likely out of memory, so unload the others and try once more, as Ollama
-        # does.
         logger.exception("Failed to load {}; unloading the other models", model_name)
+    if model is None:
+        # Likely out of memory, so unload the others and try once more, as Ollama
+        # does. Outside the except block, whose traceback would keep the failed
+        # load's sessions, and their memory, alive.
         while _loaded:
             _unload(model_name=next(iter(_loaded)))
         model = model_type(device=_DEVICE)

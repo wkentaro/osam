@@ -6,6 +6,7 @@ import pathlib
 import threading
 import time
 import typing
+import weakref
 from typing import Final
 
 import anyio
@@ -318,13 +319,16 @@ def test_failed_load_unloads_the_others_and_retries(
     assert list(_server._loaded) == ["efficientsam:10m"]
 
     loaded_at_each_load: list[list[str]] = []
-
+    failed: list[weakref.ref] = []
     init = sam2.__init__
 
     def out_of_memory_once(self, *args, **kwargs) -> None:
         loaded_at_each_load.append(list(_server._loaded))
-        if len(loaded_at_each_load) == 1:
+        if not failed:
+            failed.append(weakref.ref(self))
             raise RuntimeError("out of memory")
+        # The failed load, and the memory it holds, is gone before the retry.
+        assert failed[0]() is None
         init(self, *args, **kwargs)
 
     monkeypatch.setattr(sam2, "__init__", out_of_memory_once)
