@@ -160,10 +160,14 @@ class Client:
 
     def _encode_image(self, *, image: np.ndarray) -> str:
         # Hashing takes a fraction of the time PNG encoding does.
+        # Read and written whole, so a concurrent call can't mix up two images.
         key: str = _json.hash_image(image=image)
-        if self._image[0] != key:
-            self._image = (key, _json.image_ndarray_to_b64data(ndarray=image))
-        return self._image[1]
+        cached_key, cached = self._image
+        if cached_key == key:
+            return cached
+        encoded: str = _json.image_ndarray_to_b64data(ndarray=image)
+        self._image = (key, encoded)
+        return encoded
 
     def _request(
         self, *, method: str, path: str, body: Optional[dict[str, Any]] = None
