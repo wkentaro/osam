@@ -295,9 +295,10 @@ base64 < examples/_images/dogs.jpg \
 
 `/api/generate` takes the fields of `osam.types.GenerateRequest`, with the image
 base64-encoded. `osam serve --device` picks the execution device for every
-request. The server keeps one model loaded; an application using two sets
-`OSAM_MAX_LOADED_MODELS=2` so they don't reload in turn, and a full server
-unloads the least recently used model first. It also keeps the
+request. The server keeps one model loaded. An application using two passes
+`--max-loaded-models 2`, or `osam.Client(max_loaded_models=2)` for its private
+server, so they don't reload in turn; a full server unloads the least recently
+used model first. It also keeps the
 embeddings of recent images, so further prompts on the same image skip the
 image encoder. A model unloads 5 minutes after its last request; `keep_alive` changes that,
 in seconds or as a duration such as `"10m"`, with `-1` to keep it loaded and `0`
