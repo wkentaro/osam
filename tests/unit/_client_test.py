@@ -1,3 +1,4 @@
+import contextlib
 import multiprocessing
 import pathlib
 import socket
@@ -155,7 +156,9 @@ def test_frozen_application_starts_through_multiprocessing(
     assert not process.is_alive()
 
 
-def test_host_checks_the_version(monkeypatch: pytest.MonkeyPatch) -> None:
+@contextlib.contextmanager
+def _serving() -> Iterator[str]:
+    # osam serve in this process, so a test can patch it.
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     server = uvicorn.Server(uvicorn.Config(_server.app, log_level="warning"))
@@ -164,8 +167,14 @@ def test_host_checks_the_version(monkeypatch: pytest.MonkeyPatch) -> None:
     try:
         while not server.started:
             time.sleep(0.01)
-        host = f"127.0.0.1:{sock.getsockname()[1]}"
+        yield f"127.0.0.1:{sock.getsockname()[1]}"
+    finally:
+        server.should_exit = True
+        thread.join()
 
+
+def test_host_checks_the_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    with _serving() as host:
         monkeypatch.setenv("OSAM_HOST", host)
         assert osam.Client().version() == osam.__version__
 
@@ -178,9 +187,33 @@ def test_host_checks_the_version(monkeypatch: pytest.MonkeyPatch) -> None:
             osam.Client(host=host, device="cpu")
         with pytest.raises(ValueError, match="max_loaded_models"):
             osam.Client(host=host, max_loaded_models=2)
-    finally:
-        server.should_exit = True
-        thread.join()
+
+
+def test_raising_from_progress_stops_the_pull(monkeypatch: pytest.MonkeyPatch) -> None:
+    cancelled = threading.Event()
+
+    def pull(progress, cancel) -> None:
+        for completed in range(1000):
+            if cancel.is_set():
+                cancelled.set()
+                return
+            progress("encoder.onnx", completed, 1000)
+            time.sleep(0.01)
+
+    model_type = _server._get_model_type(name="efficientsam:10m")
+    monkeypatch.setattr(model_type, "pull", pull)
+
+    class Stop(Exception):
+        pass
+
+    def progress(line: dict[str, Any]) -> None:
+        if line["completed"] == 3:
+            raise Stop
+
+    with _serving() as host:
+        with pytest.raises(Stop):
+            osam.Client(host=host).pull("efficientsam:10m", progress=progress)
+        assert cancelled.wait(timeout=5)
 
 
 def _listening(*, port: int) -> bool:
