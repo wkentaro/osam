@@ -270,4 +270,6 @@ base64 < examples/_images/dogs.jpg \
 ```
 
 `/api/models`, `/api/pull` and `DELETE /api/models/{name}` match `osam list`,
-`osam pull` and `osam rm`. The full schema is at <http://127.0.0.1:11368/docs>.
+`osam pull` and `osam rm`. `/api/pull` streams NDJSON lines such as
+`{"status": "pulling encoder.onnx", "completed": 524288, "total": 24799761}` and
+ends with `{"status": "success"}` or `{"error": "..."}`. The full schema is at <http://127.0.0.1:11368/docs>.

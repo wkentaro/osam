@@ -2,8 +2,10 @@ import asyncio
 import concurrent.futures
 import contextlib
 import functools
+import json
 import logging
 import os
+import threading
 from collections.abc import Callable
 from typing import Any
 from typing import Optional
@@ -86,9 +88,41 @@ def list_models() -> list[ModelInfo]:
     ]
 
 
-@app.post("/api/pull")
-async def pull(request: PullRequest) -> None:
-    await _run(call=_get_model_type(name=request.model).pull)
+# Streams NDJSON progress lines, as Ollama does, ending in success or error.
+@app.post("/api/pull", response_class=fastapi.responses.StreamingResponse)
+async def pull(request: PullRequest) -> fastapi.responses.StreamingResponse:
+    model_type: type[types.Model] = _get_model_type(name=request.model)
+    loop = asyncio.get_running_loop()
+    lines: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+    cancel = threading.Event()
+
+    def progress(filename: str, completed: int, total: Optional[int]) -> None:
+        line = {"status": f"pulling {filename}", "completed": completed, "total": total}
+        loop.call_soon_threadsafe(lines.put_nowait, line)
+
+    def work() -> None:
+        try:
+            model_type.pull(progress=progress, cancel=cancel)
+            last: dict[str, Any] = {"status": "success"}
+        except Exception as e:
+            last = {"error": str(e)}
+        # Through the same queue, so it follows every progress line.
+        loop.call_soon_threadsafe(lines.put_nowait, last)
+
+    async def stream():
+        loop.run_in_executor(_worker, work)
+        try:
+            while True:
+                line = await lines.get()
+                yield json.dumps(line) + "\n"
+                if "error" in line or line["status"] == "success":
+                    return
+        finally:
+            cancel.set()  # the client left, so stop downloading
+
+    return fastapi.responses.StreamingResponse(
+        stream(), media_type="application/x-ndjson"
+    )
 
 
 @app.delete("/api/models/{name}")

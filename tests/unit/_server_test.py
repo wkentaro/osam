@@ -1,4 +1,5 @@
 import asyncio
+import json
 import threading
 
 import anyio
@@ -27,6 +28,33 @@ def test_list_models() -> None:
     models = {model["name"]: model for model in response.json()}
     assert models["efficientsam:10m"]["size"] > 0
     assert models["efficientsam:10m"]["metadata"]["license_spdx"] == "Apache-2.0"
+
+
+def test_pull_streams_progress(monkeypatch: pytest.MonkeyPatch) -> None:
+    model_type = _server.apis.get_model_type_by_name(name="efficientsam:10m")
+
+    def pull(progress, cancel):
+        progress("encoder.onnx", 1, 2)
+        progress("encoder.onnx", 2, 2)
+
+    monkeypatch.setattr(model_type, "pull", pull)
+    client = TestClient(_server.app)
+    response = client.post("/api/pull", json={"model": "efficientsam:10m"})
+    assert response.headers["content-type"] == "application/x-ndjson"
+    assert [json.loads(line) for line in response.text.splitlines()] == [
+        {"status": "pulling encoder.onnx", "completed": 1, "total": 2},
+        {"status": "pulling encoder.onnx", "completed": 2, "total": 2},
+        {"status": "success"},
+    ]
+
+    def fail(progress, cancel):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(model_type, "pull", fail)
+    response = client.post("/api/pull", json={"model": "efficientsam:10m"})
+    assert response.text.splitlines()[-1] == json.dumps({"error": "disk full"})
+    response = client.post("/api/pull", json={"model": "missing"})
+    assert response.status_code == 404
 
 
 def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
