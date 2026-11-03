@@ -172,9 +172,14 @@ class Client:
     def _request(
         self, *, method: str, path: str, body: Optional[dict[str, Any]] = None
     ) -> Any:
+        return self._restarting(
+            call=lambda: self._send(method=method, path=path, body=body)
+        )
+
+    def _restarting(self, *, call: Callable[[], Any]) -> Any:
         process = self._process
         try:
-            return self._send(method=method, path=path, body=body)
+            return call()
         except (OSError, http.client.HTTPException) as e:
             if process is None:
                 raise
@@ -190,7 +195,7 @@ class Client:
             if self._process is process:
                 self._stop()
                 self._start()
-        return self._send(method=method, path=path, body=body)
+        return call()
 
     def _send(self, *, method: str, path: str, body: Optional[dict[str, Any]]) -> Any:
         connection = self._connect(method=method, path=path, body=body)
@@ -204,16 +209,29 @@ class Client:
         return json.loads(data) if data else None
 
     def _stream(self, *, path: str, body: dict[str, Any]) -> Iterator[dict[str, Any]]:
-        connection = self._connect(method="POST", path=path, body=body)
+        # Restarts like _request only until the stream starts.
+        connection, response = self._restarting(
+            call=lambda: self._open_stream(path=path, body=body)
+        )
         try:
-            response = connection.getresponse()
-            if response.status >= 400:
-                raise _response_error(status_code=response.status, data=response.read())
             for line in response:
                 yield json.loads(line)
         finally:
             # Closing it early tells the server to stop, as for an unfinished pull.
             connection.close()
+
+    def _open_stream(
+        self, *, path: str, body: dict[str, Any]
+    ) -> tuple[http.client.HTTPConnection, http.client.HTTPResponse]:
+        connection = self._connect(method="POST", path=path, body=body)
+        try:
+            response = connection.getresponse()
+            if response.status >= 400:
+                raise _response_error(status_code=response.status, data=response.read())
+        except BaseException:
+            connection.close()
+            raise
+        return connection, response
 
     def _connect(
         self, *, method: str, path: str, body: Optional[dict[str, Any]]
@@ -384,6 +402,12 @@ def _serve(
 ) -> None:
     if device is not None:
         os.environ["OSAM_SERVE_DEVICE"] = device  # read when _server is imported
+    # A windowed frozen application, such as a PyInstaller --noconsole build,
+    # has no standard streams, and logging to them fails.
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
     logger.remove()
     logger.add(sys.stderr, level="INFO")
 

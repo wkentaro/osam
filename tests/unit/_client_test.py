@@ -58,9 +58,11 @@ def test_private_server_needs_its_token(client: osam.Client) -> None:
 
 def test_private_server_restarts_after_a_crash(client: osam.Client) -> None:
     assert client._process is not None
-    client._process.kill()
-    _client._wait(process=client._process, timeout=None)
-    assert client.version() == osam.__version__
+    for call in [client.version, lambda: client.pull("efficientsam:10m")]:
+        assert client._process is not None
+        client._process.kill()
+        _client._wait(process=client._process, timeout=None)
+        call()
 
 
 def test_private_server_exits_with_its_parent(tmp_path: pathlib.Path) -> None:
