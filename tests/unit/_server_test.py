@@ -215,6 +215,7 @@ def test_generate_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> No
     assert third.status_code == 200, third.text
     assert third.json()["annotations"] == first.json()["annotations"]
     assert third.json()["image_hash"] == image_hash
+    monkeypatch.setattr(_server, "_load", fail)  # 412 without loading the model
     missing = client.post("/api/generate", json={**by_hash, "image_hash": "0" * 64})
     assert missing.status_code == 412
     del by_hash["prompt"]  # not a request that only sets keep_alive

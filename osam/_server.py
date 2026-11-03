@@ -333,17 +333,23 @@ def _generate_with_cache(
     # ponytail: fixed size, make it configurable if memory or hit rate matters.
     EMBEDDING_CACHE_SIZE: Final = 4
 
-    model: types.Model = _load(model_name=model_name)
     image_hash: Optional[str] = (
         request.image_hash
         if request.image is None
         else _json.hash_image(image=request.image)
     )
+    key: tuple[str, str] = (model_name, image_hash or "")
+    if request.image_hash is not None and key not in _embeddings:
+        # Before loading the model, which the client's retry with the image
+        # would otherwise load a second time after keep_alive 0 unloads it.
+        raise fastapi.HTTPException(
+            412, f"no embedding for image {image_hash}; send the image"
+        )
+    model: types.Model = _load(model_name=model_name)
     if image_hash is None:  # a prompt without an image, which the model rejects
         return GenerateResponse(
             model=request.model, annotations=model.generate(request=request).annotations
         )
-    key: tuple[str, str] = (model_name, image_hash)
     response: types.GenerateResponse
     if key in _embeddings:
         _embeddings.move_to_end(key)
@@ -354,10 +360,6 @@ def _generate_with_cache(
                 prompt=request.prompt,
                 annotations=request.annotations,
             )
-        )
-    elif request.image is None:
-        raise fastapi.HTTPException(
-            412, f"no embedding for image {image_hash}; send the image"
         )
     else:
         response = model.generate(request=request)
