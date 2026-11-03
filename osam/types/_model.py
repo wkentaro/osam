@@ -184,13 +184,10 @@ class Model(abc.ABC):
 
     @property
     def device(self) -> str:
-        """Device the model runs on, e.g. "webgpu", or "cpu" if a session fell back."""
-        providers = [s.get_providers()[0] for s in self._inference_sessions.values()]
-        if _DEVICE_PROVIDERS["cpu"] in providers:
-            return "cpu"
-        return {v: k for k, v in _DEVICE_PROVIDERS.items()}.get(
-            providers[0], providers[0]
-        )
+        """Device the model runs on, e.g. "webgpu", or "cpu" after a fallback."""
+        session = next(iter(self._inference_sessions.values()))
+        provider: str = session.get_providers()[0]
+        return {v: k for k, v in _DEVICE_PROVIDERS.items()}.get(provider, provider)
 
     @classmethod
     def pull(
@@ -257,7 +254,16 @@ def _load_inference_sessions(
         inference_session: onnxruntime.InferenceSession = _load_inference_session(
             blob=blob, providers=providers
         )
-        providers = inference_session.get_providers()
+        actual = list(inference_session.get_providers())
+        if providers not in (None, actual):
+            # This one fell back to CPU, e.g. out of GPU memory. Move the others
+            # too, so the model runs on one device and Model.device reports it.
+            for k in list(inference_sessions):
+                del inference_sessions[k]  # free it before loading its copy
+                inference_sessions[k] = _load_inference_session(
+                    blob=blobs[k], providers=actual
+                )
+        providers = actual
         inference_sessions[key] = inference_session
     logger.info(
         "Initialized inference sessions with providers {providers!r}",
