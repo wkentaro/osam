@@ -210,5 +210,6 @@ def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     assert client.get("/api/ps").json() == {"models": []}
     assert not _server._embeddings
 
-    response = client.post("/api/generate", json={**body, "keep_alive": "1x"})
-    assert response.status_code == 422
+    for keep_alive in ["1x", "inf", None, []]:
+        response = client.post("/api/generate", json={**body, "keep_alive": keep_alive})
+        assert response.status_code == 422, keep_alive

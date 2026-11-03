@@ -16,7 +16,6 @@ from collections.abc import Sequence
 from typing import Any
 from typing import Final
 from typing import Optional
-from typing import Union
 
 import fastapi
 import numpy as np
@@ -96,13 +95,15 @@ app.add_exception_handler(
 )
 
 
-def _parse_duration(value: Union[float, str]) -> float:
+def _parse_duration(value: object) -> object:
     # Seconds, or a duration such as "5m", "1h30m" or "10s", as in Ollama.
+    # pydantic validates anything other than a string as a float.
+    if not isinstance(value, str):
+        return value
     try:
         return float(value)
     except ValueError:
         pass
-    assert isinstance(value, str)
     UNITS: Final = {"h": 3600, "m": 60, "s": 1}
     PART: Final = r"(\d+(?:\.\d+)?)([hms])"
     magnitude: str = value.removeprefix("-")
@@ -114,7 +115,13 @@ def _parse_duration(value: Union[float, str]) -> float:
     return -seconds if value.startswith("-") else seconds
 
 
-Duration = typing.Annotated[float, pydantic.BeforeValidator(_parse_duration)]
+# Infinite durations would overflow the unload timer; negative ones keep the
+# model loaded.
+Duration = typing.Annotated[
+    float,
+    pydantic.BeforeValidator(_parse_duration),
+    pydantic.Field(allow_inf_nan=False),
+]
 
 
 # Image embeddings stay inside the server: clients send the image each time.
