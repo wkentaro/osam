@@ -51,7 +51,7 @@ def test_private_server_generates(client: osam.Client) -> None:
 
 
 def test_private_server_needs_its_token(client: osam.Client) -> None:
-    connection = _client.http.client.HTTPConnection(client._host, client._port)
+    connection = _client.http.client.HTTPConnection(*client._endpoint[:2])
     connection.request("GET", "/api/version")
     assert connection.getresponse().status == 401
 
@@ -65,12 +65,28 @@ def test_private_server_restarts_after_a_crash(client: osam.Client) -> None:
         call()
 
 
+def test_concurrent_requests_survive_one_restart(client: osam.Client) -> None:
+    assert client._process is not None
+    client._process.kill()
+    _client._wait(process=client._process, timeout=None)
+    versions: list[str] = []
+    threads = [
+        threading.Thread(target=lambda: versions.append(client.version()))
+        for _ in range(8)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert versions == [osam.__version__] * 8
+
+
 def test_private_server_exits_with_its_parent(tmp_path: pathlib.Path) -> None:
     # No `if __name__ == "__main__"`, as in a quick script.
     script = (
         "import os, osam\n"
         "client = osam.Client()\n"
-        "print(client._port, flush=True)\n"
+        "print(client._endpoint[1], flush=True)\n"
         "os._exit(0)\n"  # skips close(), as a crash would
     )
     (tmp_path / "parent.py").write_text(script)

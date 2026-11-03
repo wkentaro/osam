@@ -55,18 +55,22 @@ class Client:
             raise ValueError("device sets up a private server; host has its own")
         self._device: Optional[types.Device] = device
         self._lock = threading.Lock()
-        self._host: str = "127.0.0.1"
-        self._port: int = 0
+        # host, port and token of the server, swapped whole on a restart, so a
+        # request never sends one server's token to another's port.
+        self._endpoint: tuple[str, int, Optional[str]] = ("127.0.0.1", 0, None)
         self._https: bool = False
         self._process: Optional[_Process] = None
         # Closing it tells the private server to exit.
         self._pipe: Optional[
             Union[IO[bytes], multiprocessing.connection.Connection]
         ] = None
-        self._token: Optional[str] = None
         # The last image sent and its encoding, as a client often sends one
         # image with several prompts.
         self._image: tuple[str, str] = ("", "")
+        # Whether this client owns its server, set once: _process is briefly
+        # None while another request restarts it.
+        self._private: bool = host is None
+        self._closed: bool = False
         if host is None:
             self._start()
             return
@@ -74,8 +78,11 @@ class Client:
         if url.scheme not in ("http", "https"):
             raise ValueError(f"host must be an http or https URL: {host!r}")
         self._https = url.scheme == "https"
-        self._host = url.hostname or "127.0.0.1"
-        self._port = url.port or (443 if self._https else 11368)
+        self._endpoint = (
+            url.hostname or "127.0.0.1",
+            url.port or (443 if self._https else 11368),
+            None,
+        )
         server_version: str = self.version()
         if server_version.split(".")[:2] != __version__.split(".")[:2]:
             raise RuntimeError(
@@ -86,6 +93,7 @@ class Client:
     def close(self) -> None:
         """Stop the private server, if this client started one."""
         with self._lock:
+            self._closed = True
             self._stop()
 
     def __enter__(self) -> "Client":
@@ -185,17 +193,20 @@ class Client:
         try:
             return call()
         except (OSError, http.client.HTTPException) as e:
-            if process is None:
+            if not self._private:
                 raise
             error: Exception = e
         except ResponseError as e:
-            if process is None or e.status_code != 500:
+            if not self._private or e.status_code != 500:
                 raise
             error = e
         # The private server crashed, or failed in a way that can leave it
         # broken, such as a CUDA load that keeps its memory: start a new one.
         logger.warning("Restarting the osam server after: {error}", error=error)
         with self._lock:
+            if self._closed:
+                raise RuntimeError("the osam client is closed") from error
+            # Unless another request restarted it already.
             if self._process is process:
                 self._stop()
                 self._start()
@@ -240,12 +251,13 @@ class Client:
     def _connect(
         self, *, method: str, path: str, body: Optional[dict[str, Any]]
     ) -> http.client.HTTPConnection:
+        host, port, token = self._endpoint
         headers: dict[str, str] = {"Content-Type": "application/json"}
-        if self._token is not None:
-            headers["Authorization"] = f"Bearer {self._token}"
+        if token is not None:
+            headers["Authorization"] = f"Bearer {token}"
         connection = (
             http.client.HTTPSConnection if self._https else http.client.HTTPConnection
-        )(self._host, self._port)
+        )(host, port)
         connection.request(
             method,
             path,
@@ -257,15 +269,13 @@ class Client:
     def _start(self) -> None:
         token: str = secrets.token_urlsafe(32)
         if getattr(sys, "frozen", False):
-            self._process, self._pipe, port = _start_frozen(
-                token=token, device=self._device
-            )
+            process, pipe, port = _start_frozen(token=token, device=self._device)
         else:
-            self._process, self._pipe, port = _start_subprocess(
-                token=token, device=self._device
-            )
-        self._token = token
-        self._host, self._port = "127.0.0.1", port
+            process, pipe, port = _start_subprocess(token=token, device=self._device)
+        # The endpoint first: a request that sees the new process must also see
+        # its endpoint, or it would restart a healthy server.
+        self._endpoint = ("127.0.0.1", port, token)
+        self._process, self._pipe = process, pipe
 
     def _stop(self) -> None:
         if self._process is None:
