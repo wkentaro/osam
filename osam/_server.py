@@ -21,7 +21,6 @@ import fastapi
 import numpy as np
 import pydantic
 import starlette.exceptions
-from loguru import logger
 from pydantic.json_schema import SkipJsonSchema
 
 from . import __version__
@@ -87,6 +86,13 @@ app.add_exception_handler(
     starlette.exceptions.HTTPException,
     lambda request, exc: _error(
         message=exc.detail, status_code=exc.status_code, headers=exc.headers
+    ),
+)
+# Anything else is a 500, still in that shape; uvicorn logs the traceback.
+app.add_exception_handler(
+    Exception,
+    lambda request, exc: _error(
+        message=str(exc) or type(exc).__name__, status_code=500
     ),
 )
 app.add_exception_handler(
@@ -263,6 +269,12 @@ async def remove(name: str) -> None:
 @app.post("/api/generate", response_model=GenerateResponse)
 async def generate(request: GenerateRequest) -> types.GenerateResponse:
     model_name: str = _get_model_type(name=request.model).name
+    if request.image is None and request.prompt is None and not request.annotations:
+        return await _run(
+            call=functools.partial(
+                _keep_alive_only, request=request, model_name=model_name
+            )
+        )
     try:
         return await _run(
             call=functools.partial(
@@ -271,9 +283,17 @@ async def generate(request: GenerateRequest) -> types.GenerateResponse:
         )
     except ValueError as e:
         raise fastapi.HTTPException(400, str(e))
-    except Exception as e:  # e.g. onnxruntime running out of GPU memory
-        logger.exception("Failed to generate")
-        raise fastapi.HTTPException(500, str(e))
+
+
+def _keep_alive_only(
+    *, request: GenerateRequest, model_name: str
+) -> types.GenerateResponse:
+    # A request with only a model sets how long that model stays loaded, so
+    # keep_alive 0 unloads it, as in Ollama.
+    # ponytail: doesn't load an unloaded model; add preloading if a client needs it.
+    if apis.running_model is not None and apis.running_model.name == model_name:
+        _keep_alive(seconds=request.keep_alive)
+    return types.GenerateResponse(model=request.model, annotations=[])
 
 
 def _generate_and_keep_alive(
@@ -293,7 +313,7 @@ def _generate_with_cache(
     # ponytail: fixed size, make it configurable if memory or hit rate matters.
     EMBEDDING_CACHE_SIZE: Final = 4
 
-    if request.image is None:
+    if request.image is None:  # a prompt without an image, which the model rejects
         return apis.generate(request=request, device=_DEVICE)
     key: tuple[str, str] = (model_name, _hash_image(image=request.image))
     if key in _embeddings:

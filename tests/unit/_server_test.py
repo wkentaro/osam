@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
+from osam import _json
 from osam import _server
 from osam import apis
 from osam import types
@@ -22,6 +23,10 @@ _IMAGE_B64: Final = base64.b64encode(
         pathlib.Path(__file__).resolve().parents[2] / "examples/_images/dogs.jpg"
     ).read_bytes()
 ).decode()
+# For requests whose model is replaced, so the image needn't be a real one.
+_TINY_IMAGE_B64: Final = _json.image_ndarray_to_b64data(
+    ndarray=np.zeros((1, 1, 3), dtype=np.uint8)
+)
 
 
 def test_openapi_documents_every_route() -> None:
@@ -76,9 +81,12 @@ def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     response = client.post("/api/generate", json={"model": "missing"})
     assert response.status_code == 404
     assert "not found" in response.json()["error"]
-    response = client.post("/api/generate", json={"model": "efficientsam:10m"})
-    assert response.status_code == 400
-    for body in [{"image": "eA=="}, {"annotations": [{"mask": "eA=="}]}]:
+    truncated: str = base64.b64encode(base64.b64decode(_IMAGE_B64)[:1000]).decode()
+    for body in [
+        {"image": "eA=="},
+        {"image": truncated},
+        {"annotations": [{"mask": "eA=="}]},
+    ]:
         response = client.post(
             "/api/generate", json={"model": "efficientsam:10m", **body}
         )
@@ -92,7 +100,9 @@ def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_server, "_DEVICE", "cpu")
 
     monkeypatch.setattr(_server.apis, "generate", fail)
-    response = client.post("/api/generate", json={"model": "efficientsam:10m"})
+    response = TestClient(_server.app, raise_server_exceptions=False).post(
+        "/api/generate", json={"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
+    )
     assert response.status_code == 500
     assert response.json() == {"error": "out of GPU memory"}
 
@@ -110,7 +120,7 @@ def test_queued_generates_leave_the_thread_pool_free(
             transport=transport, base_url="http://test"
         ) as client:
             # More than the thread pool's 40 workers.
-            body = {"model": "efficientsam:10m"}
+            body = {"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
             tasks = [
                 asyncio.create_task(client.post("/api/generate", json=body))
                 for _ in range(50)
@@ -149,7 +159,9 @@ def test_generate_keeps_image_embedding_inside(
     )
     client = TestClient(_server.app)
 
-    response = client.post("/api/generate", json={"model": "efficientsam:10m"})
+    response = client.post(
+        "/api/generate", json={"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
+    )
     assert response.status_code == 200, response.text
     assert response.json() == {"model": "efficientsam:10m", "annotations": []}
 
@@ -224,6 +236,21 @@ def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
         time.sleep(0.05)
     assert client.get("/api/ps").json() == {"models": []}
     assert not _server._embeddings
+
+    # A request with only a model sets its keep_alive, so 0 unloads it. It
+    # loads no model, and leaves another loaded model alone.
+    unload = {"model": "efficientsam:10m", "keep_alive": 0}
+    response = client.post("/api/generate", json={"model": "efficientsam:10m"})
+    assert response.json() == {"model": "efficientsam:10m", "annotations": []}
+    assert client.get("/api/ps").json() == {"models": []}
+    client.post("/api/generate", json={**body, "keep_alive": -1})
+    assert client.post("/api/generate", json={**unload, "model": "sam2:tiny"}).json()
+    assert client.get("/api/ps").json()["models"]
+    assert client.post("/api/generate", json=unload).status_code == 200
+    assert client.get("/api/ps").json() == {"models": []}
+    prompt = {"points": [[1, 1]], "point_labels": [1]}
+    response = client.post("/api/generate", json={**unload, "prompt": prompt})
+    assert response.status_code == 400
 
     for keep_alive in ["1x", "inf", 1e20, None, []]:
         response = client.post("/api/generate", json={**body, "keep_alive": keep_alive})

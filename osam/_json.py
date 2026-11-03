@@ -19,7 +19,7 @@ def image_b64data_to_ndarray(*, b64data):
     # ValueError, so pydantic reports bad input as a validation error.
     data = base64.b64decode(b64data)
     try:
-        pil = PIL.Image.open(io.BytesIO(data))
-    except PIL.UnidentifiedImageError as e:
+        return np.asarray(PIL.Image.open(io.BytesIO(data)))
+    # OSError covers a file PIL can't identify and a truncated one.
+    except (OSError, PIL.Image.DecompressionBombError) as e:
         raise ValueError(f"not an image file: {e}") from e
-    return np.asarray(pil)
