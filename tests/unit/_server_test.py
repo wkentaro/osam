@@ -30,10 +30,16 @@ _TINY_IMAGE_B64: Final = _json.image_ndarray_to_b64data(
 )
 
 
-def _patch_generate(*, monkeypatch: pytest.MonkeyPatch, generate) -> None:
-    # Replaces efficientsam:10m's generate, on a server with no model loaded.
+@pytest.fixture(autouse=True)
+def _no_model_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The server's state is per process, so a model a test leaves loaded would
+    # be in the next test's /api/ps.
     monkeypatch.setattr(_server, "_loaded", collections.OrderedDict())
     monkeypatch.setattr(_server, "_embeddings", collections.OrderedDict())
+
+
+def _patch_generate(*, monkeypatch: pytest.MonkeyPatch, generate) -> None:
+    # Replaces efficientsam:10m's generate.
     model_type = _server._apis.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(model_type, "generate", generate)
 
@@ -276,8 +282,6 @@ def test_two_models_stay_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
     def running() -> list[str]:
         return [model["name"] for model in client.get("/api/ps").json()["models"]]
 
-    monkeypatch.setattr(_server, "_loaded", collections.OrderedDict())
-    monkeypatch.setattr(_server, "_embeddings", collections.OrderedDict())
     generate("efficientsam:10m")
     generate("sam2:tiny")
     assert running() == ["sam2:tiny", "efficientsam:10m"]
@@ -298,8 +302,6 @@ def test_two_models_stay_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_failed_load_unloads_the_others_and_retries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_server, "_loaded", collections.OrderedDict())
-    monkeypatch.setattr(_server, "_embeddings", collections.OrderedDict())
     client = TestClient(_server.app)
     body = {"image": _TINY_IMAGE_B64, "keep_alive": -1}
     response = client.post("/api/generate", json={**body, "model": "efficientsam:10m"})
@@ -341,8 +343,6 @@ def test_failed_load_unloads_the_others_and_retries(
 def test_cpu_fallback_next_to_a_gpu_model_retries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_server, "_loaded", collections.OrderedDict())
-    monkeypatch.setattr(_server, "_embeddings", collections.OrderedDict())
     efficientsam = _server._apis.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(efficientsam, "device", property(lambda self: "cuda"))
     sam2 = _server._apis.get_model_type_by_name(name="sam2:tiny")
