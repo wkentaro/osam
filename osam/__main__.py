@@ -1,5 +1,6 @@
 import contextlib
 import datetime
+import http.client
 import json
 import os
 import pathlib
@@ -131,16 +132,16 @@ def serve(host: str, port: int, device: types.Device | None, reload: bool) -> No
 
 @contextlib.contextmanager
 def _client(*, device: types.Device | None = None) -> Iterator[Client]:
-    # OSAM_HOST points every command at a running `osam serve`.
+    # OSAM_HOST points every command at a running `osam serve`. Expected
+    # failures, such as an unknown model or an unreachable host, print one line.
     try:
-        client = Client(device=device)
-    except (ValueError, RuntimeError) as e:
-        raise click.ClickException(str(e))
-    with client:
-        try:
+        with Client(device=device) as client:
             yield client
-        except ResponseError as e:  # such as an unknown model
-            raise click.ClickException(str(e))
+    except (OSError, http.client.HTTPException) as e:
+        server: str = os.environ.get("OSAM_HOST") or "the osam server"
+        raise click.ClickException(f"can't reach {server}: {e}")
+    except (ResponseError, ValueError, RuntimeError) as e:
+        raise click.ClickException(str(e))
 
 
 def _floats_callback(*, lengths: tuple[int, ...]) -> typing.Callable:

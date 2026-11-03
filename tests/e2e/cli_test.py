@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import pathlib
 import subprocess
 
@@ -116,3 +117,15 @@ def test_run_negative_max_annotations_rejected():
         text=True,
     )
     assert result.returncode == 2
+
+
+def test_unreachable_host_reported_in_one_line():
+    result = subprocess.run(
+        ["osam", "list"],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "OSAM_HOST": "127.0.0.1:1"},
+    )
+    assert result.returncode == 1
+    assert result.stderr.startswith("Error: can't reach 127.0.0.1:1")
+    assert "Traceback" not in result.stderr
