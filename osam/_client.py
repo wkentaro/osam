@@ -308,13 +308,16 @@ def _start_subprocess(
         process.stdin.flush()
         # ponytail: no timeout, the child exits rather than hangs on a failed start.
         line: bytes = process.stdout.readline()
+        if not line:
+            raise RuntimeError(
+                f"osam server exited with code {process.wait()} on start"
+            )
+        port: int = _started_port(message=json.loads(line))
     except BaseException:
         process.kill()
-        raise
-    if not line:
         process.stdin.close()
-        raise RuntimeError(f"osam server exited with code {process.wait()} on start")
-    return process, process.stdin, int(line)
+        raise
+    return process, process.stdin, port
 
 
 def _start_frozen(
@@ -338,7 +341,7 @@ def _start_frozen(
     try:
         if not conn.poll(START_TIMEOUT):
             raise RuntimeError("osam server did not start in time")
-        port: int = conn.recv()
+        port: int = _started_port(message=conn.recv())
     except BaseException as e:
         process.kill()
         conn.close()
@@ -371,20 +374,21 @@ def _response_error(*, status_code: int, data: bytes) -> ResponseError:
 
 
 def _serve_stdio() -> None:
-    # The child of _start_subprocess: settings on stdin, port on stdout, and
-    # stdin closing when the parent exits.
+    # The child of _start_subprocess: settings on stdin, how it started on
+    # stdout, and stdin closing when the parent exits.
     settings: dict[str, Any] = json.loads(sys.stdin.readline())
-    stdout = sys.stdout
-    sys.stdout = sys.stderr  # keep stray prints off the port line
+    # Keep stray output, native libraries' too, off the start line.
+    stdout = os.fdopen(os.dup(sys.stdout.fileno()), "w")
+    os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
 
-    def report_port(port: int) -> None:
-        stdout.write(f"{port}\n")
+    def report(message: dict[str, Any]) -> None:
+        stdout.write(json.dumps(message) + "\n")
         stdout.flush()
 
     _serve(
         token=settings["token"],
         device=settings["device"],
-        report_port=report_port,
+        report=report,
         wait_for_parent=sys.stdin.read,
     )
 
@@ -404,7 +408,7 @@ def _serve_connection(
     _serve(
         token=token,
         device=device,
-        report_port=conn.send,
+        report=conn.send,
         wait_for_parent=wait_for_parent,
     )
 
@@ -413,11 +417,12 @@ def _serve(
     *,
     token: str,
     device: Optional[types.Device],
-    report_port: Callable[[int], object],
+    report: Callable[[dict[str, Any]], object],
     wait_for_parent: Callable[[], object],
 ) -> None:
-    if device is not None:
-        os.environ["OSAM_SERVE_DEVICE"] = device  # read when _server is imported
+    # Read when _server is imported. Set even when unset, so a value meant for
+    # `osam serve` in the caller's environment doesn't reach this server.
+    os.environ["OSAM_SERVE_DEVICE"] = device or ""
     # A windowed frozen application, such as a PyInstaller --noconsole build,
     # has no standard streams, and logging to them fails.
     if sys.stdout is None:
@@ -427,8 +432,28 @@ def _serve(
     logger.remove()
     logger.add(sys.stderr, level="INFO")
 
-    from . import _server
+    started: bool = False
 
-    _server.run_private(
-        token=token, report_port=report_port, wait_for_parent=wait_for_parent
-    )
+    def report_port(port: int) -> None:
+        nonlocal started
+        started = True
+        report({"port": port})
+
+    try:
+        from . import _server
+
+        _server.run_private(
+            token=token, report_port=report_port, wait_for_parent=wait_for_parent
+        )
+    except Exception as e:  # e.g. a broken onnxruntime install
+        if started:
+            raise
+        # To the parent, which reports it, rather than a traceback on stderr.
+        report({"error": f"{type(e).__name__}: {e}"})
+        sys.exit(1)
+
+
+def _started_port(*, message: dict[str, Any]) -> int:
+    if "error" in message:
+        raise RuntimeError(f"osam server failed to start: {message['error']}")
+    return message["port"]

@@ -104,6 +104,26 @@ def test_private_server_exits_with_its_parent(tmp_path: pathlib.Path) -> None:
     assert not _listening(port=port)
 
 
+def test_private_server_ignores_osam_serve_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OSAM_SERVE_DEVICE", "invalid")
+    with osam.Client() as client:
+        assert client.version() == osam.__version__
+
+
+def test_failed_start_reported_without_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "uvicorn.py").write_text("raise ImportError('broken uvicorn')\n")
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    with pytest.raises(RuntimeError, match="failed to start: ImportError: broken"):
+        osam.Client().version()
+    assert "Traceback" not in capfd.readouterr().err
+
+
 def test_frozen_application_starts_through_multiprocessing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
