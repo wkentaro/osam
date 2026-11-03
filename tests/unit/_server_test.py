@@ -207,6 +207,24 @@ def test_generate_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> No
     assert second.status_code == 200, second.text
     assert second.json()["annotations"] == first.json()["annotations"]
 
+    # By hash, in place of the image.
+    image_hash = _server._json.hash_image(
+        image=_server._json.image_b64data_to_ndarray(b64data=_IMAGE_B64)
+    )
+    by_hash = {**body, "image": None, "image_hash": image_hash}
+    third = client.post("/api/generate", json=by_hash)
+    assert third.status_code == 200, third.text
+    assert third.json()["annotations"] == first.json()["annotations"]
+    missing = client.post("/api/generate", json={**by_hash, "image_hash": "0" * 64})
+    assert missing.status_code == 412
+    del by_hash["prompt"]  # not a request that only sets keep_alive
+    missing = client.post("/api/generate", json={**by_hash, "image_hash": "0" * 64})
+    assert missing.status_code == 412
+    assert "send the image" in missing.json()["error"]
+    both = client.post("/api/generate", json={**body, "image_hash": image_hash})
+    assert both.status_code == 422
+    assert "not both" in both.json()["error"]
+
 
 def test_routing_errors_use_the_error_shape() -> None:
     client = TestClient(_server.app)

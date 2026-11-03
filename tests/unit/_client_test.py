@@ -5,6 +5,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import Any
 from typing import Final
 
 import numpy as np
@@ -189,21 +190,36 @@ def _listening(*, port: int) -> bool:
     return True
 
 
-def test_generate_encodes_a_repeated_image_once(
+def test_generate_sends_a_repeated_image_by_hash(
     client: osam.Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     encoded: list[np.ndarray] = []
     encode = _client._json.image_ndarray_to_b64data
+    sent: list[set[str]] = []
+    request = client._request
 
     def counting(*, ndarray: np.ndarray) -> str:
         encoded.append(ndarray)
         return encode(ndarray=ndarray)
 
+    def recording(*, method: str, path: str, body: Any = None) -> Any:
+        sent.append({"image", "image_hash"} & set(body or {}))
+        return request(method=method, path=path, body=body)
+
     monkeypatch.setattr(_client._json, "image_ndarray_to_b64data", counting)
+    monkeypatch.setattr(client, "_request", recording)
     image = _IMAGE[::2, ::2].copy()  # not sent by an earlier test
     for _ in range(2):
         client.generate("efficientsam:10m", image=image)
+    assert sent == [{"image"}, {"image_hash"}]
     assert len(encoded) == 1
+
+    # Another model has no embedding of it yet, so the server asks for it.
+    sent.clear()
+    client.generate("sam2:tiny", image=image)
+    assert sent == [{"image_hash"}, {"image"}]
+    assert len(encoded) == 1
+
     image[0, 0] += 1  # edited in place, so it is a new image
     client.generate("efficientsam:10m", image=image)
     assert len(encoded) == 2

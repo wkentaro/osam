@@ -155,6 +155,18 @@ Duration = typing.Annotated[
 # Image embeddings stay inside the server: clients send the image each time.
 class GenerateRequest(types.GenerateRequest):
     image_embedding: SkipJsonSchema[None] = None
+    image_hash: Optional[str] = pydantic.Field(
+        default=None,
+        description="In place of image, the hash of an image sent before, whose "
+        "embedding the server may still have; 412 asks for the image itself",
+    )
+
+    @pydantic.model_validator(mode="after")
+    def _image_or_hash(self) -> "GenerateRequest":
+        if self.image is not None and self.image_hash is not None:
+            raise ValueError("send image or image_hash, not both")
+        return self
+
     keep_alive: Duration = pydantic.Field(
         default=300,
         description="How long the model stays loaded after this request, in "
@@ -270,7 +282,12 @@ async def remove(name: str) -> None:
 @app.post("/api/generate", response_model=GenerateResponse)
 async def generate(request: GenerateRequest) -> types.GenerateResponse:
     model_name: str = _get_model_type(name=request.model).name
-    if request.image is None and request.prompt is None and not request.annotations:
+    if (
+        request.image is None
+        and request.image_hash is None
+        and request.prompt is None
+        and not request.annotations
+    ):
         return await _run(
             call=functools.partial(
                 _keep_alive_only, request=request, model_name=model_name
@@ -314,9 +331,14 @@ def _generate_with_cache(
     EMBEDDING_CACHE_SIZE: Final = 4
 
     model: types.Model = _load(model_name=model_name)
-    if request.image is None:  # a prompt without an image, which the model rejects
+    image_hash: Optional[str] = (
+        request.image_hash
+        if request.image is None
+        else _json.hash_image(image=request.image)
+    )
+    if image_hash is None:  # a prompt without an image, which the model rejects
         return model.generate(request=request)
-    key: tuple[str, str] = (model_name, _json.hash_image(image=request.image))
+    key: tuple[str, str] = (model_name, image_hash)
     if key in _embeddings:
         _embeddings.move_to_end(key)
         return model.generate(
@@ -326,6 +348,10 @@ def _generate_with_cache(
                 prompt=request.prompt,
                 annotations=request.annotations,
             )
+        )
+    if request.image is None:
+        raise fastapi.HTTPException(
+            412, f"no embedding for image {image_hash}; send the image"
         )
     response: types.GenerateResponse = model.generate(request=request)
     if response.image_embedding is not None:

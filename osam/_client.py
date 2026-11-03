@@ -174,8 +174,6 @@ class Client:
         default of five minutes.
         """
         body: dict[str, Any] = {"model": model}
-        if image is not None:
-            body["image"] = self._encode_image(image=image)
         if prompt is not None:
             body["prompt"] = prompt.model_dump(mode="json")
         if annotations is not None:
@@ -184,20 +182,32 @@ class Client:
             ]
         if keep_alive is not None:
             body["keep_alive"] = keep_alive
-        return types.GenerateResponse.model_validate(
-            self._request(method="POST", path="/api/generate", body=body)
-        )
 
-    def _encode_image(self, *, image: np.ndarray) -> str:
-        # Hashing takes a fraction of the time PNG encoding does.
-        # Read and written whole, so a concurrent call can't mix up two images.
+        def post(**image_fields: str) -> types.GenerateResponse:
+            return types.GenerateResponse.model_validate(
+                self._request(
+                    method="POST", path="/api/generate", body=body | image_fields
+                )
+            )
+
+        if image is None:
+            return post()
+        # Hashing takes a fraction of the time PNG encoding does. Read and
+        # written whole, so a concurrent call can't mix up two images.
         key: str = _json.hash_image(image=image)
-        cached_key, cached = self._image
+        cached_key, encoded = self._image
         if cached_key == key:
-            return cached
-        encoded: str = _json.image_ndarray_to_b64data(ndarray=image)
-        self._image = (key, encoded)
-        return encoded
+            # Sent before, so the server likely has its embedding; 412 if not,
+            # such as for another model or after a restart.
+            try:
+                return post(image_hash=key)
+            except ResponseError as e:
+                if e.status_code != 412:
+                    raise
+        else:
+            encoded = _json.image_ndarray_to_b64data(ndarray=image)
+            self._image = (key, encoded)
+        return post(image=encoded)
 
     def _request(
         self, *, method: str, path: str, body: Optional[dict[str, Any]] = None
