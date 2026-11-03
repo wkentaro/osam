@@ -20,6 +20,7 @@ from typing import Optional
 import fastapi
 import numpy as np
 import pydantic
+import starlette.exceptions
 from loguru import logger
 from pydantic.json_schema import SkipJsonSchema
 
@@ -81,8 +82,9 @@ def _describe_validation_errors(*, errors: Sequence[Any]) -> str:
     )
 
 
+# Starlette's base class also covers routing errors, such as an unknown path.
 app.add_exception_handler(
-    fastapi.HTTPException,
+    starlette.exceptions.HTTPException,
     lambda request, exc: _error(
         message=exc.detail, status_code=exc.status_code, headers=exc.headers
     ),
@@ -115,12 +117,12 @@ def _parse_duration(value: object) -> object:
     return -seconds if value.startswith("-") else seconds
 
 
-# Infinite durations would overflow the unload timer; negative ones keep the
-# model loaded.
+# Infinite or huge durations would overflow the unload timer; negative ones
+# keep the model loaded.
 Duration = typing.Annotated[
     float,
     pydantic.BeforeValidator(_parse_duration),
-    pydantic.Field(allow_inf_nan=False),
+    pydantic.Field(allow_inf_nan=False, le=threading.TIMEOUT_MAX),
 ]
 
 

@@ -182,6 +182,15 @@ def test_generate_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> No
     assert second.json()["annotations"] == first.json()["annotations"]
 
 
+def test_routing_errors_use_the_error_shape() -> None:
+    client = TestClient(_server.app)
+    assert client.get("/api/missing").json() == {"error": "Not Found"}
+    response = client.post("/api/version")
+    assert response.status_code == 405
+    assert response.json() == {"error": "Method Not Allowed"}
+    assert response.headers["allow"] == "GET"
+
+
 def test_version() -> None:
     response = TestClient(_server.app).get("/api/version")
     assert response.json() == {"version": _server.__version__}
@@ -216,6 +225,6 @@ def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     assert client.get("/api/ps").json() == {"models": []}
     assert not _server._embeddings
 
-    for keep_alive in ["1x", "inf", None, []]:
+    for keep_alive in ["1x", "inf", 1e20, None, []]:
         response = client.post("/api/generate", json={**body, "keep_alive": keep_alive})
         assert response.status_code == 422, keep_alive
