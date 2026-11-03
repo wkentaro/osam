@@ -42,12 +42,6 @@ def get_model_metadata(*, name: str) -> types.ModelMetadata:
     return get_model_type_by_name(name=name).metadata
 
 
-def unload() -> None:
-    global running_model, _running_device
-    running_model = None
-    _running_device = None
-
-
 def generate(
     *, request: types.GenerateRequest, device: Optional[types.Device] = None
 ) -> types.GenerateResponse:
@@ -59,8 +53,7 @@ def generate(
     model: types.Model | None = running_model
     if model is None or model.name != model_type.name or _running_device != device:
         # Release the previous model first, so two models are never loaded at once.
-        model = None
-        unload()
+        model = running_model = None
         model = running_model = model_type(device=device)
         _running_device = device
 

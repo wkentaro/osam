@@ -2,6 +2,7 @@ import asyncio
 import collections
 import concurrent.futures
 import contextlib
+import dataclasses
 import functools
 import json
 import logging
@@ -22,6 +23,7 @@ import fastapi
 import pydantic
 import starlette.exceptions
 import uvicorn
+from loguru import logger
 from pydantic.json_schema import SkipJsonSchema
 
 from . import __version__
@@ -29,8 +31,8 @@ from . import _apis
 from . import _json
 from . import types
 
-# _apis.generate keeps one model loaded, and pull and remove must not change the
-# files under a model being loaded, so they all run on one thread, in order.
+# Loading and running models, and pull and remove, which must not change the
+# files under a model being loaded, all run on one thread, in order.
 # Queued requests wait here instead of holding FastAPI's thread pool, so other
 # routes stay free.
 # ponytail: one worker, so a long pull also delays generate.
@@ -39,17 +41,32 @@ _worker = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 _embeddings: collections.OrderedDict[
     tuple[str, str], types.ImageEmbedding
 ] = collections.OrderedDict()
-# One loaded model serves every request, so the device is a server setting.
+# Every loaded model runs on one device, a server setting.
 # `osam serve --device` sets it; unset picks one automatically.
 _DEVICE: Final = typing.cast(
     Optional[types.Device], os.environ.get("OSAM_SERVE_DEVICE") or None
 )
 if _DEVICE not in (None, *typing.get_args(types.Device)):
     raise ValueError(f"unknown OSAM_SERVE_DEVICE {_DEVICE!r}")
-# When the loaded model unloads, as time.time(); None keeps it loaded.
-# Written only on _worker.
-_expires_at: Optional[float] = None
-_unload_timer: Optional[threading.Timer] = None
+# A second model loads next to the first, so an application using two, such as
+# one for clicks and one for text, doesn't reload them in turn.
+_MAX_LOADED_MODELS: Final = int(os.environ.get("OSAM_MAX_LOADED_MODELS") or 2)
+if _MAX_LOADED_MODELS < 1:
+    raise ValueError(f"OSAM_MAX_LOADED_MODELS must be 1 or more: {_MAX_LOADED_MODELS}")
+
+
+@dataclasses.dataclass
+class _Loaded:
+    model: types.Model
+    # When it unloads, as time.time(); None keeps it loaded.
+    expires_at: Optional[float] = None
+    timer: Optional[threading.Timer] = None
+
+
+# By model name, least recently used first. Written only on _worker, under
+# _loaded_lock, which /api/ps takes to read it from another thread.
+_loaded: collections.OrderedDict[str, _Loaded] = collections.OrderedDict()
+_loaded_lock = threading.Lock()
 
 
 @contextlib.asynccontextmanager
@@ -195,14 +212,15 @@ def list_models() -> ModelList:
 
 @app.get("/api/ps")
 def list_running_models() -> RunningModelList:
-    model: Optional[types.Model] = _apis.running_model
-    if model is None:
-        return RunningModelList(models=[])
+    # Most recently used first, as Ollama lists them.
     return RunningModelList(
         models=[
             types.RunningModel(
-                name=model.name, device=model.device, expires_at=_expires_at
+                name=loaded.model.name,
+                device=loaded.model.device,
+                expires_at=loaded.expires_at,
             )
+            for loaded in reversed(_loaded_snapshot())
         ]
     )
 
@@ -274,8 +292,7 @@ def _keep_alive_only(
     # A request with only a model sets how long that model stays loaded, so
     # keep_alive 0 unloads it, as in Ollama.
     # ponytail: doesn't load an unloaded model; add preloading if a client needs it.
-    if _apis.running_model is not None and _apis.running_model.name == model_name:
-        _keep_alive(seconds=request.keep_alive)
+    _keep_alive(model_name=model_name, seconds=request.keep_alive)
     return types.GenerateResponse(model=request.model, annotations=[])
 
 
@@ -285,7 +302,7 @@ def _generate_and_keep_alive(
     try:
         return _generate_with_cache(request=request, model_name=model_name)
     finally:
-        _keep_alive(seconds=request.keep_alive)
+        _keep_alive(model_name=model_name, seconds=request.keep_alive)
 
 
 def _generate_with_cache(
@@ -296,21 +313,21 @@ def _generate_with_cache(
     # ponytail: fixed size, make it configurable if memory or hit rate matters.
     EMBEDDING_CACHE_SIZE: Final = 4
 
+    model: types.Model = _load(model_name=model_name)
     if request.image is None:  # a prompt without an image, which the model rejects
-        return _apis.generate(request=request, device=_DEVICE)
+        return model.generate(request=request)
     key: tuple[str, str] = (model_name, _json.hash_image(image=request.image))
     if key in _embeddings:
         _embeddings.move_to_end(key)
-        return _apis.generate(
+        return model.generate(
             request=types.GenerateRequest(
                 model=request.model,
                 image_embedding=_embeddings[key],
                 prompt=request.prompt,
                 annotations=request.annotations,
-            ),
-            device=_DEVICE,
+            )
         )
-    response: types.GenerateResponse = _apis.generate(request=request, device=_DEVICE)
+    response: types.GenerateResponse = model.generate(request=request)
     if response.image_embedding is not None:
         _embeddings[key] = response.image_embedding
         while len(_embeddings) > EMBEDDING_CACHE_SIZE:
@@ -318,40 +335,77 @@ def _generate_with_cache(
     return response
 
 
-def _keep_alive(*, seconds: float) -> None:
+def _load(*, model_name: str) -> types.Model:
+    # On _worker. When the server is full, the least recently used model unloads
+    # first; one worker runs one request, so that model is idle.
+    if model_name in _loaded:
+        with _loaded_lock:
+            _loaded.move_to_end(model_name)
+        return _loaded[model_name].model
+    model_type: type[types.Model] = _apis.get_model_type_by_name(name=model_name)
+    # Before unloading anything, so a failed download leaves the others loaded.
+    model_type.pull()
+    while len(_loaded) >= _MAX_LOADED_MODELS:
+        _unload(model_name=next(iter(_loaded)))
+    try:
+        model: types.Model = model_type(device=_DEVICE)
+    except Exception:
+        if not _loaded:
+            raise
+        # Likely out of memory, so unload the others and try once more, as Ollama
+        # does.
+        logger.exception("Failed to load {}; unloading the other models", model_name)
+        while _loaded:
+            _unload(model_name=next(iter(_loaded)))
+        model = model_type(device=_DEVICE)
+    with _loaded_lock:
+        _loaded[model_name] = _Loaded(model=model)
+    return model
+
+
+def _loaded_snapshot() -> tuple[_Loaded, ...]:
+    with _loaded_lock:
+        return tuple(_loaded.values())
+
+
+def _keep_alive(*, model_name: str, seconds: float) -> None:
     # On _worker. A timer submits the unload back to _worker, which skips it if a
     # later request replaced the timer.
-    global _expires_at, _unload_timer
-
-    if _unload_timer is not None:
-        _unload_timer.cancel()
-        _unload_timer = None
+    loaded: Optional[_Loaded] = _loaded.get(model_name)
+    if loaded is None:  # it failed to load, or it isn't loaded
+        return
+    if loaded.timer is not None:
+        loaded.timer.cancel()
+        loaded.timer = None
     if seconds < 0:
-        _expires_at = None
+        loaded.expires_at = None
         return
     if seconds == 0:
-        _unload()
+        _unload(model_name=model_name)
         return
-    _expires_at = time.time() + seconds
+    loaded.expires_at = time.time() + seconds
     timer = threading.Timer(
-        seconds, lambda: _worker.submit(_unload_if_current, timer=timer)
+        seconds,
+        lambda: _worker.submit(_unload_if_current, model_name=model_name, timer=timer),
     )
     timer.daemon = True
     timer.start()
-    _unload_timer = timer
+    loaded.timer = timer
 
 
-def _unload_if_current(*, timer: threading.Timer) -> None:
-    if timer is _unload_timer:
-        _unload()
+def _unload_if_current(*, model_name: str, timer: threading.Timer) -> None:
+    loaded: Optional[_Loaded] = _loaded.get(model_name)
+    if loaded is not None and loaded.timer is timer:
+        _unload(model_name=model_name)
 
 
-def _unload() -> None:
-    global _expires_at, _unload_timer
-    _apis.unload()
-    _embeddings.clear()
-    _expires_at = None
-    _unload_timer = None
+def _unload(*, model_name: str) -> None:
+    with _loaded_lock:
+        loaded: _Loaded = _loaded.pop(model_name)
+    if loaded.timer is not None:
+        loaded.timer.cancel()
+    for key in [key for key in _embeddings if key[0] == model_name]:
+        del _embeddings[key]
 
 
 async def _run(*, call: Callable[[], Any]) -> Any:
