@@ -153,7 +153,8 @@ class Client:
         """Download a model, calling progress with each line the server sends.
 
         Lines look like {"status": "pulling encoder.onnx", "completed": 524288,
-        "total": 24799761}.
+        "total": 24799761}. An exception raised from progress, such as on a
+        cancel, stops the download on the server too.
         """
         for line in self._stream(path="/api/pull", body={"model": model}):
             if "error" in line:
