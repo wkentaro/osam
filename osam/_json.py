@@ -16,6 +16,10 @@ def image_ndarray_to_b64data(*, ndarray):
 
 
 def image_b64data_to_ndarray(*, b64data):
+    # ValueError, so pydantic reports bad input as a validation error.
     data = base64.b64decode(b64data)
-    pil = PIL.Image.open(io.BytesIO(data))
+    try:
+        pil = PIL.Image.open(io.BytesIO(data))
+    except PIL.UnidentifiedImageError as e:
+        raise ValueError(f"not an image file: {e}") from e
     return np.asarray(pil)

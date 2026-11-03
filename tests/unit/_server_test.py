@@ -78,6 +78,12 @@ def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "not found" in response.json()["error"]
     response = client.post("/api/generate", json={"model": "efficientsam:10m"})
     assert response.status_code == 400
+    for body in [{"image": "eA=="}, {"annotations": [{"mask": "eA=="}]}]:
+        response = client.post(
+            "/api/generate", json={"model": "efficientsam:10m", **body}
+        )
+        assert response.status_code == 422, body
+        assert "not an image file" in response.json()["error"]
 
     def fail(request, device):
         assert device == "cpu"
