@@ -104,12 +104,28 @@ def test_private_server_exits_with_its_parent(tmp_path: pathlib.Path) -> None:
     assert not _listening(port=port)
 
 
-def test_private_server_ignores_osam_serve_device(
+def test_private_server_ignores_osam_serve_settings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OSAM_SERVE_DEVICE", "invalid")
+    monkeypatch.setenv("OSAM_MAX_LOADED_MODELS", "0")
     with osam.Client() as client:
         assert client.version() == osam.__version__
+
+
+def test_private_server_keeps_max_loaded_models() -> None:
+    prompt = osam.types.Prompt(
+        points=np.array([[1280, 800]]), point_labels=np.array([1])
+    )
+    with osam.Client(max_loaded_models=2) as client:
+        for model in ["efficientsam:10m", "sam2:tiny"]:
+            client.generate(model, image=_IMAGE, prompt=prompt)
+        assert [model.name for model in client.ps()] == [
+            "sam2:tiny",
+            "efficientsam:10m",
+        ]
+    with pytest.raises(ValueError, match="1 or more"):
+        osam.Client(max_loaded_models=0)
 
 
 def test_failed_start_reported_without_traceback(
@@ -158,6 +174,8 @@ def test_host_checks_the_version(monkeypatch: pytest.MonkeyPatch) -> None:
             osam.Client(host=f"ftp://{host}")
         with pytest.raises(ValueError, match="device"):
             osam.Client(host=host, device="cpu")
+        with pytest.raises(ValueError, match="max_loaded_models"):
+            osam.Client(host=host, max_loaded_models=2)
     finally:
         server.should_exit = True
         thread.join()

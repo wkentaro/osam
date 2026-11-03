@@ -254,7 +254,16 @@ def _load_inference_sessions(
         inference_session: onnxruntime.InferenceSession = _load_inference_session(
             blob=blob, providers=providers
         )
-        providers = inference_session.get_providers()
+        actual = list(inference_session.get_providers())
+        if providers not in (None, actual):
+            # This one fell back to CPU, e.g. out of GPU memory. Move the others
+            # too, so the model runs on one device and Model.device reports it.
+            for k in list(inference_sessions):
+                del inference_sessions[k]  # free it before loading its copy
+                inference_sessions[k] = _load_inference_session(
+                    blob=blobs[k], providers=actual
+                )
+        providers = actual
         inference_sessions[key] = inference_session
     logger.info(
         "Initialized inference sessions with providers {providers!r}",

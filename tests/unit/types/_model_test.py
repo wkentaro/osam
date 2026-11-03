@@ -4,6 +4,7 @@ import sys
 import types
 from typing import Any
 from typing import Iterator
+from typing import cast
 
 import numpy as np
 import onnx
@@ -317,6 +318,32 @@ def test_model_device_reports_the_picked_device(
         ort.InferenceSession, "get_providers", lambda self: ["CPUExecutionProvider"]
     )
     assert Sam3().device == "cpu"
+
+
+def test_partial_fallback_moves_every_session_to_cpu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Session:
+        def __init__(self, path: str, providers: list[str]) -> None:
+            self._providers = providers
+
+        def get_providers(self) -> list[str]:
+            return self._providers
+
+    # The decoder runs out of GPU memory and falls back to CPU alone.
+    cuda = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    cpu = ["CPUExecutionProvider"]
+    loaded = iter([Session("", cuda), Session("", cpu)])
+
+    def load(*, blob: Any, providers: list[str] | None) -> Session:
+        return Session("", cpu) if providers == cpu else next(loaded)
+
+    monkeypatch.setattr(_model, "_load_inference_session", load)
+    blobs = cast(Any, {key: types.SimpleNamespace(path=key) for key in "abc"})
+    sessions = _model._load_inference_sessions(blobs=blobs)
+    assert {k: s.get_providers() for k, s in sessions.items()} == dict.fromkeys(
+        "abc", cpu
+    )
 
 
 def test_coreml_model_rewrites_gemm_to_trans_b(
