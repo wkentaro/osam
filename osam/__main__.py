@@ -101,8 +101,17 @@ def rm(model_name):
 @cli.command(help="Start server")
 @click.option("--host", default="127.0.0.1", show_default=True, help="address to bind")
 @click.option("--port", default=11368, show_default=True, help="port to bind")
+@click.option(
+    "--device",
+    type=click.Choice(typing.get_args(types.Device)),
+    help="execution device (default: the onnxruntime providers available)",
+)
 @click.option("--reload", is_flag=True, help="reload server on file changes")
-def serve(host: str, port: int, reload: bool) -> None:
+def serve(host: str, port: int, device: types.Device | None, reload: bool) -> None:
+    if device is not None:
+        # An environment variable reaches the app even when --reload starts
+        # it in a new process.
+        os.environ["OSAM_SERVE_DEVICE"] = device
     try:
         import uvicorn
 

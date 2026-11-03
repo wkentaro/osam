@@ -65,8 +65,11 @@ def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     response = client.post("/api/generate", json={"model": "efficientsam:10m"})
     assert response.status_code == 400
 
-    def fail(request):
+    def fail(request, device):
+        assert device == "cpu"
         raise RuntimeError("out of GPU memory")
+
+    monkeypatch.setattr(_server, "_DEVICE", "cpu")
 
     monkeypatch.setattr(_server.apis, "generate", fail)
     response = client.post("/api/generate", json={"model": "efficientsam:10m"})
@@ -77,7 +80,7 @@ def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_queued_generates_leave_the_thread_pool_free(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def blocked(request):
+    def blocked(request, device):
         release.wait()
         raise ValueError("released")
 

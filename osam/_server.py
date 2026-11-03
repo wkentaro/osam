@@ -6,8 +6,10 @@ import json
 import logging
 import os
 import threading
+import typing
 from collections.abc import Callable
 from typing import Any
+from typing import Final
 from typing import Optional
 
 import fastapi
@@ -25,6 +27,13 @@ from . import types
 # routes stay free.
 # ponytail: one worker, so a long pull also delays generate.
 _worker = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+# One loaded model serves every request, so the device is a server setting.
+# `osam serve --device` sets it; unset picks one automatically.
+_DEVICE: Final = typing.cast(
+    Optional[types.Device], os.environ.get("OSAM_SERVE_DEVICE") or None
+)
+if _DEVICE not in (None, *typing.get_args(types.Device)):
+    raise ValueError(f"unknown OSAM_SERVE_DEVICE {_DEVICE!r}")
 
 
 @contextlib.asynccontextmanager
@@ -134,7 +143,9 @@ async def remove(name: str) -> None:
 async def generate(request: GenerateRequest) -> types.GenerateResponse:
     _get_model_type(name=request.model)
     try:
-        return await _run(call=functools.partial(apis.generate, request=request))
+        return await _run(
+            call=functools.partial(apis.generate, request=request, device=_DEVICE)
+        )
     except ValueError as e:
         raise fastapi.HTTPException(400, str(e))
     except Exception as e:  # e.g. onnxruntime running out of GPU memory

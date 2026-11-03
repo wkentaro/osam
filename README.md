@@ -269,7 +269,10 @@ base64 < examples/_images/dogs.jpg \
   | jq -r '.annotations[0].mask' | base64 --decode > mask.png
 ```
 
-`/api/models`, `/api/pull` and `DELETE /api/models/{name}` match `osam list`,
-`osam pull` and `osam rm`. `/api/pull` streams NDJSON lines such as
+`/api/generate` takes the fields of `osam.types.GenerateRequest`, with the image
+base64-encoded. `osam serve --device` picks the execution device for every
+request. `/api/models`, `/api/pull` and `DELETE /api/models/{name}` match
+`osam list`, `osam pull` and `osam rm`. `/api/pull` streams NDJSON lines such as
 `{"status": "pulling encoder.onnx", "completed": 524288, "total": 24799761}` and
-ends with `{"status": "success"}` or `{"error": "..."}`. The full schema is at <http://127.0.0.1:11368/docs>.
+ends with `{"status": "success"}` or `{"error": "..."}`. The full schema is at
+<http://127.0.0.1:11368/docs>.
