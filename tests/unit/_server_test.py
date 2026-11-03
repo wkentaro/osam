@@ -1,6 +1,9 @@
 import asyncio
+import base64
 import json
+import pathlib
 import threading
+from typing import Final
 
 import anyio
 import httpx
@@ -9,7 +12,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from osam import _server
+from osam import apis
 from osam import types
+
+_IMAGE_B64: Final = base64.b64encode(
+    (
+        pathlib.Path(__file__).resolve().parents[2] / "examples/_images/dogs.jpg"
+    ).read_bytes()
+).decode()
 
 
 def test_openapi_documents_every_route() -> None:
@@ -141,3 +151,21 @@ def test_generate_keeps_image_embedding_inside(
         },
     )
     assert response.status_code == 422
+
+
+def test_generate_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
+    _server._embeddings.clear()
+    client = TestClient(_server.app)
+    prompt = {"points": [[1280, 800]], "point_labels": [1]}
+    body = {"model": "efficientsam:10m", "image": _IMAGE_B64, "prompt": prompt}
+    first = client.post("/api/generate", json=body)
+    assert first.status_code == 200, first.text
+    assert first.json()["annotations"][0]["mask"]
+
+    def fail(*args, **kwargs):
+        raise AssertionError("encoded the image again")
+
+    monkeypatch.setattr(type(apis.running_model), "encode_image", fail)
+    second = client.post("/api/generate", json=body)
+    assert second.status_code == 200, second.text
+    assert second.json()["annotations"] == first.json()["annotations"]

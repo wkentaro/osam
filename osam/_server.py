@@ -1,7 +1,9 @@
 import asyncio
+import collections
 import concurrent.futures
 import contextlib
 import functools
+import hashlib
 import json
 import logging
 import os
@@ -13,6 +15,7 @@ from typing import Final
 from typing import Optional
 
 import fastapi
+import numpy as np
 import pydantic
 from loguru import logger
 from pydantic.json_schema import SkipJsonSchema
@@ -27,6 +30,10 @@ from . import types
 # routes stay free.
 # ponytail: one worker, so a long pull also delays generate.
 _worker = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+# Used only on _worker.
+_embeddings: collections.OrderedDict[
+    tuple[str, str], types.ImageEmbedding
+] = collections.OrderedDict()
 # One loaded model serves every request, so the device is a server setting.
 # `osam serve --device` sets it; unset picks one automatically.
 _DEVICE: Final = typing.cast(
@@ -141,16 +148,48 @@ async def remove(name: str) -> None:
 
 @app.post("/api/generate", response_model=GenerateResponse)
 async def generate(request: GenerateRequest) -> types.GenerateResponse:
-    _get_model_type(name=request.model)
+    model_name: str = _get_model_type(name=request.model).name
     try:
         return await _run(
-            call=functools.partial(apis.generate, request=request, device=_DEVICE)
+            call=functools.partial(
+                _generate_with_cache, request=request, model_name=model_name
+            )
         )
     except ValueError as e:
         raise fastapi.HTTPException(400, str(e))
     except Exception as e:  # e.g. onnxruntime running out of GPU memory
         logger.exception("Failed to generate")
         raise fastapi.HTTPException(500, str(e))
+
+
+def _generate_with_cache(
+    *, request: GenerateRequest, model_name: str
+) -> types.GenerateResponse:
+    # Recent image embeddings, so several prompts on one image encode it once.
+    # A SAM3 embedding takes about 100 MB.
+    # ponytail: fixed size, make it configurable if memory or hit rate matters.
+    EMBEDDING_CACHE_SIZE: Final = 4
+
+    if request.image is None:
+        return apis.generate(request=request, device=_DEVICE)
+    key: tuple[str, str] = (model_name, _hash_image(image=request.image))
+    if key in _embeddings:
+        _embeddings.move_to_end(key)
+        return apis.generate(
+            request=types.GenerateRequest(
+                model=request.model,
+                image_embedding=_embeddings[key],
+                prompt=request.prompt,
+                annotations=request.annotations,
+            ),
+            device=_DEVICE,
+        )
+    response: types.GenerateResponse = apis.generate(request=request, device=_DEVICE)
+    if response.image_embedding is not None:
+        _embeddings[key] = response.image_embedding
+        while len(_embeddings) > EMBEDDING_CACHE_SIZE:
+            _embeddings.popitem(last=False)
+    return response
 
 
 async def _run(*, call: Callable[[], Any]) -> Any:
@@ -162,3 +201,9 @@ def _get_model_type(*, name: str) -> type[types.Model]:
         return apis.get_model_type_by_name(name=name)
     except ValueError as e:
         raise fastapi.HTTPException(404, str(e))
+
+
+def _hash_image(*, image: np.ndarray) -> str:
+    digest = hashlib.sha256(np.ascontiguousarray(image).data)
+    digest.update(repr((image.shape, image.dtype.str)).encode())
+    return digest.hexdigest()
