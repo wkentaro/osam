@@ -234,7 +234,8 @@ class Model(abc.ABC):
     def encode_image(self, image: np.ndarray) -> ImageEmbedding:
         raise NotImplementedError
 
-    def default_prompt(self, height: int, width: int) -> Prompt:
+    @classmethod
+    def default_prompt(cls, height: int, width: int) -> Prompt:
         """Return the prompt used when a request gives none."""
         raise NotImplementedError
 

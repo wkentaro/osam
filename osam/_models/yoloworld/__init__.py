@@ -25,8 +25,9 @@ class _YoloWorld(types.Model):
 
     _input_size: int
 
+    @classmethod
     @override
-    def default_prompt(self, height: int, width: int) -> types.Prompt:
+    def default_prompt(cls, height: int, width: int) -> types.Prompt:
         return types.Prompt(texts=["anything"])
 
     @override

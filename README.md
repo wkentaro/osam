@@ -223,6 +223,10 @@ osam run sam3 --image examples/_images/dogs.jpg --prompt @prompt.json \
 <img src="assets/dogs_efficientsam.png" width="24%"> <img src="assets/dogs_sam2.png" width="24%"> <img src="assets/dogs_sam3.png" width="24%"> <img src="assets/dogs_sam3_box.png" width="24%">\
 <i>Output images: 'efficientsam_point.png', 'sam2_box.png', 'sam3_text.png', 'sam3_box.png'</i>
 
+Each command starts a private server for its run. Set `OSAM_HOST`, such as
+`OSAM_HOST=gpu-box:11368`, to run `list`, `pull`, `rm` and `run` on a running
+`osam serve` instead.
+
 ### Python
 
 ```python
