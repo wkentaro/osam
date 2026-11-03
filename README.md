@@ -16,9 +16,9 @@
 
 *Osam* (/oʊˈsɑm/) is a Python library and CLI that runs open-source promptable
 vision models locally. Applications such as
-[labelme](https://github.com/wkentaro/labelme) embed it, and each one runs its
-models in a server process of its own. `osam serve` is an optional shared
-server, and its commands and HTTP API follow
+[labelme](https://github.com/wkentaro/labelme) embed it, and each
+`osam.Client` runs models in a server process of its own. `osam serve` is an
+optional shared server, and its commands and HTTP API follow
 [Ollama](https://github.com/ollama/ollama).
 
 *Osam* provides:
