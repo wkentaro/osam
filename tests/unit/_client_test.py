@@ -118,6 +118,8 @@ def test_host_checks_the_version(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(_client, "__version__", "0.0.1")
         with pytest.raises(RuntimeError, match="versions differ"):
             osam.Client(host=host)
+        with pytest.raises(ValueError, match="http or https"):
+            osam.Client(host=f"ftp://{host}")
         with pytest.raises(ValueError, match="device"):
             osam.Client(host=host, device="cpu")
     finally:

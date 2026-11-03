@@ -57,6 +57,7 @@ class Client:
         self._lock = threading.Lock()
         self._host: str = "127.0.0.1"
         self._port: int = 0
+        self._https: bool = False
         self._process: Optional[_Process] = None
         # Closing it tells the private server to exit.
         self._pipe: Optional[
@@ -70,8 +71,11 @@ class Client:
             self._start()
             return
         url = urllib.parse.urlsplit(host if "://" in host else f"http://{host}")
+        if url.scheme not in ("http", "https"):
+            raise ValueError(f"host must be an http or https URL: {host!r}")
+        self._https = url.scheme == "https"
         self._host = url.hostname or "127.0.0.1"
-        self._port = url.port or 11368
+        self._port = url.port or (443 if self._https else 11368)
         server_version: str = self.version()
         if server_version.split(".")[:2] != __version__.split(".")[:2]:
             raise RuntimeError(
@@ -239,7 +243,9 @@ class Client:
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self._token is not None:
             headers["Authorization"] = f"Bearer {self._token}"
-        connection = http.client.HTTPConnection(self._host, self._port)
+        connection = (
+            http.client.HTTPSConnection if self._https else http.client.HTTPConnection
+        )(self._host, self._port)
         connection.request(
             method,
             path,
