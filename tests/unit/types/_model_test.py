@@ -318,6 +318,19 @@ def test_model_device_reports_the_picked_device(
     )
     assert Sam3().device == "cpu"
 
+    # A session that runs out of GPU memory falls back alone, e.g. the decoder.
+    monkeypatch.setattr(
+        ort.InferenceSession, "get_providers", lambda self: ["WebGpuExecutionProvider"]
+    )
+    model = Sam3()
+    assert model.device == "webgpu"
+    monkeypatch.setattr(
+        model._inference_sessions["decoder"],
+        "get_providers",
+        lambda: ["CPUExecutionProvider"],
+    )
+    assert model.device == "cpu"
+
 
 def test_coreml_model_rewrites_gemm_to_trans_b(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path

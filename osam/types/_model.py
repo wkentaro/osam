@@ -184,10 +184,13 @@ class Model(abc.ABC):
 
     @property
     def device(self) -> str:
-        """Device the model runs on, e.g. "webgpu", or "cpu" after a fallback."""
-        session = next(iter(self._inference_sessions.values()))
-        provider: str = session.get_providers()[0]
-        return {v: k for k, v in _DEVICE_PROVIDERS.items()}.get(provider, provider)
+        """Device the model runs on, e.g. "webgpu", or "cpu" if a session fell back."""
+        providers = [s.get_providers()[0] for s in self._inference_sessions.values()]
+        if _DEVICE_PROVIDERS["cpu"] in providers:
+            return "cpu"
+        return {v: k for k, v in _DEVICE_PROVIDERS.items()}.get(
+            providers[0], providers[0]
+        )
 
     @classmethod
     def pull(
