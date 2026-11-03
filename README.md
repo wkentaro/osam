@@ -14,8 +14,12 @@
   <img src="assets/dogs_efficientsam.png" width="32%">
 </div>
 
-*Osam* (/oʊˈsɑm/) is a tool to run open-source promptable vision models locally
-(inspired by [Ollama](https://github.com/ollama/ollama)).
+*Osam* (/oʊˈsɑm/) is a Python library and CLI that runs open-source promptable
+vision models locally. Applications such as
+[labelme](https://github.com/wkentaro/labelme) embed it, and each
+`osam.Client` runs models in a server process of its own. `osam serve` is an
+optional shared server, and its commands and HTTP API follow
+[Ollama](https://github.com/ollama/ollama).
 
 *Osam* provides:
 
@@ -223,9 +227,23 @@ osam run sam3 --image examples/_images/dogs.jpg --prompt @prompt.json \
 <img src="assets/dogs_efficientsam.png" width="24%"> <img src="assets/dogs_sam2.png" width="24%"> <img src="assets/dogs_sam3.png" width="24%"> <img src="assets/dogs_sam3_box.png" width="24%">\
 <i>Output images: 'efficientsam_point.png', 'sam2_box.png', 'sam3_text.png', 'sam3_box.png'</i>
 
-Each command starts a private server for its run. Set `OSAM_HOST`, such as
-`OSAM_HOST=gpu-box:11368`, to run `list`, `pull`, `rm` and `run` on a running
-`osam serve` instead.
+Each command starts a private server for its run, so every `osam run` loads
+the model again. To keep it loaded across commands, start `osam serve` and set
+`OSAM_HOST`, which `list`, `pull`, `rm` and `run` then use:
+
+```bash
+# In one terminal
+osam serve
+
+# In another, once it has started
+export OSAM_HOST=127.0.0.1:11368
+osam run efficientsam --image examples/_images/dogs.jpg --point 1439,504 > a.png
+# The model and the image embedding are still loaded, so this skips both.
+osam run efficientsam --image examples/_images/dogs.jpg --point 1439,1289 > b.png
+```
+
+The server unloads a model 5 minutes after its last request. `OSAM_HOST` can
+also name another machine, such as `gpu-box:11368`.
 
 ### Python
 
