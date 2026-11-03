@@ -3,6 +3,8 @@ import base64
 import json
 import pathlib
 import threading
+import time
+import typing
 from typing import Final
 
 import anyio
@@ -30,12 +32,14 @@ def test_openapi_documents_every_route() -> None:
         "/api/models",
         "/api/pull",
         "/api/models/{name}",
+        "/api/ps",
+        "/api/version",
     } <= set(response.json()["paths"])
 
 
 def test_list_models() -> None:
     response = TestClient(_server.app).get("/api/models")
-    models = {model["name"]: model for model in response.json()}
+    models = {model["name"]: model for model in response.json()["models"]}
     assert models["efficientsam:10m"]["size"] > 0
     assert models["efficientsam:10m"]["metadata"]["license_spdx"] == "Apache-2.0"
 
@@ -71,7 +75,7 @@ def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     client = TestClient(_server.app)
     response = client.post("/api/generate", json={"model": "missing"})
     assert response.status_code == 404
-    assert "not found" in response.json()["detail"]
+    assert "not found" in response.json()["error"]
     response = client.post("/api/generate", json={"model": "efficientsam:10m"})
     assert response.status_code == 400
 
@@ -84,7 +88,7 @@ def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_server.apis, "generate", fail)
     response = client.post("/api/generate", json={"model": "efficientsam:10m"})
     assert response.status_code == 500
-    assert response.json()["detail"] == "out of GPU memory"
+    assert response.json() == {"error": "out of GPU memory"}
 
 
 def test_queued_generates_leave_the_thread_pool_free(
@@ -151,6 +155,7 @@ def test_generate_keeps_image_embedding_inside(
         },
     )
     assert response.status_code == 422
+    assert "image_embedding" in response.json()["error"]
 
 
 def test_generate_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -169,3 +174,41 @@ def test_generate_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> No
     second = client.post("/api/generate", json=body)
     assert second.status_code == 200, second.text
     assert second.json()["annotations"] == first.json()["annotations"]
+
+
+def test_version() -> None:
+    response = TestClient(_server.app).get("/api/version")
+    assert response.json() == {"version": _server.__version__}
+
+
+@pytest.mark.parametrize(
+    ("value", "seconds"),
+    [(300, 300), ("10", 10), ("5m", 300), ("1h30m", 5400), ("-1s", -1)],
+)
+def test_parse_duration(value, seconds) -> None:
+    assert _server._parse_duration(value) == seconds
+
+
+def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = TestClient(_server.app)
+    body = {"model": "efficientsam:10m", "image": _IMAGE_B64}
+
+    response = client.post("/api/generate", json={**body, "keep_alive": -1})
+    assert response.status_code == 200, response.text
+    (running,) = client.get("/api/ps").json()["models"]
+    assert running["name"] == "efficientsam:10m"
+    assert running["device"] in typing.get_args(types.Device)
+    assert running["expires_at"] is None
+
+    response = client.post("/api/generate", json={**body, "keep_alive": "0.2s"})
+    assert response.status_code == 200, response.text
+    (running,) = client.get("/api/ps").json()["models"]
+    assert running["expires_at"] > time.time()
+    deadline = time.monotonic() + 5
+    while client.get("/api/ps").json()["models"] and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert client.get("/api/ps").json() == {"models": []}
+    assert not _server._embeddings
+
+    response = client.post("/api/generate", json={**body, "keep_alive": "1x"})
+    assert response.status_code == 422

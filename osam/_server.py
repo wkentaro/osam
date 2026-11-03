@@ -7,12 +7,16 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
+import time
 import typing
 from collections.abc import Callable
+from collections.abc import Sequence
 from typing import Any
 from typing import Final
 from typing import Optional
+from typing import Union
 
 import fastapi
 import numpy as np
@@ -41,6 +45,10 @@ _DEVICE: Final = typing.cast(
 )
 if _DEVICE not in (None, *typing.get_args(types.Device)):
     raise ValueError(f"unknown OSAM_SERVE_DEVICE {_DEVICE!r}")
+# When the loaded model unloads, as time.time(); None keeps it loaded.
+# Written only on _worker.
+_expires_at: Optional[float] = None
+_unload_timer: Optional[threading.Timer] = None
 
 
 @contextlib.asynccontextmanager
@@ -59,9 +67,65 @@ app: fastapi.FastAPI = fastapi.FastAPI(
 )
 
 
+# Errors are {"error": message}, as in Ollama.
+def _error(
+    *, message: str, status_code: int, headers: Optional[dict[str, str]] = None
+) -> fastapi.responses.JSONResponse:
+    return fastapi.responses.JSONResponse(
+        {"error": message}, status_code=status_code, headers=headers
+    )
+
+
+def _describe_validation_errors(*, errors: Sequence[Any]) -> str:
+    return "; ".join(
+        f"{'.'.join(map(str, error['loc']))}: {error['msg']}" for error in errors
+    )
+
+
+app.add_exception_handler(
+    fastapi.HTTPException,
+    lambda request, exc: _error(
+        message=exc.detail, status_code=exc.status_code, headers=exc.headers
+    ),
+)
+app.add_exception_handler(
+    fastapi.exceptions.RequestValidationError,
+    lambda request, exc: _error(
+        message=_describe_validation_errors(errors=exc.errors()), status_code=422
+    ),
+)
+
+
+def _parse_duration(value: Union[float, str]) -> float:
+    # Seconds, or a duration such as "5m", "1h30m" or "10s", as in Ollama.
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    assert isinstance(value, str)
+    UNITS: Final = {"h": 3600, "m": 60, "s": 1}
+    PART: Final = r"(\d+(?:\.\d+)?)([hms])"
+    magnitude: str = value.removeprefix("-")
+    if not re.fullmatch(f"(?:{PART})+", magnitude):
+        raise ValueError(f"invalid duration {value!r}")
+    seconds: float = sum(
+        float(number) * UNITS[unit] for number, unit in re.findall(PART, magnitude)
+    )
+    return -seconds if value.startswith("-") else seconds
+
+
+Duration = typing.Annotated[float, pydantic.BeforeValidator(_parse_duration)]
+
+
 # Image embeddings stay inside the server: clients send the image each time.
 class GenerateRequest(types.GenerateRequest):
     image_embedding: SkipJsonSchema[None] = None
+    keep_alive: Duration = pydantic.Field(
+        default=300,
+        description="How long the model stays loaded after this request, in "
+        'seconds or as a duration such as "5m"; negative keeps it loaded, 0 '
+        "unloads it now",
+    )
 
 
 class GenerateResponse(pydantic.BaseModel):
@@ -81,6 +145,28 @@ class ModelInfo(pydantic.BaseModel):
     metadata: types.ModelMetadata
 
 
+class ModelList(pydantic.BaseModel):
+    models: list[ModelInfo]
+
+
+class RunningModel(pydantic.BaseModel):
+    name: str
+    device: str = pydantic.Field(
+        description='Device it runs on, such as "cuda", or "cpu" after a fallback'
+    )
+    expires_at: Optional[float] = pydantic.Field(
+        description="Unix time the model unloads; null if it stays loaded"
+    )
+
+
+class RunningModelList(pydantic.BaseModel):
+    models: list[RunningModel]
+
+
+class Version(pydantic.BaseModel):
+    version: str
+
+
 class PullRequest(pydantic.BaseModel):
     model: str
 
@@ -90,18 +176,37 @@ def index() -> fastapi.Response:
     return fastapi.Response("osam is running")
 
 
+@app.get("/api/version")
+def version() -> Version:
+    return Version(version=__version__)
+
+
 @app.get("/api/models")
-def list_models() -> list[ModelInfo]:
-    return [
-        ModelInfo(
-            name=model_type.name,
-            id=model_type.get_id(),
-            size=model_type.get_size(),
-            modified_at=model_type.get_modified_at(),
-            metadata=model_type.metadata,
-        )
-        for model_type in apis.registered_model_types
-    ]
+def list_models() -> ModelList:
+    return ModelList(
+        models=[
+            ModelInfo(
+                name=model_type.name,
+                id=model_type.get_id(),
+                size=model_type.get_size(),
+                modified_at=model_type.get_modified_at(),
+                metadata=model_type.metadata,
+            )
+            for model_type in apis.registered_model_types
+        ]
+    )
+
+
+@app.get("/api/ps")
+def list_running_models() -> RunningModelList:
+    model: Optional[types.Model] = apis.running_model
+    if model is None:
+        return RunningModelList(models=[])
+    return RunningModelList(
+        models=[
+            RunningModel(name=model.name, device=model.device, expires_at=_expires_at)
+        ]
+    )
 
 
 # Streams NDJSON progress lines, as Ollama does, ending in success or error.
@@ -152,7 +257,7 @@ async def generate(request: GenerateRequest) -> types.GenerateResponse:
     try:
         return await _run(
             call=functools.partial(
-                _generate_with_cache, request=request, model_name=model_name
+                _generate_and_keep_alive, request=request, model_name=model_name
             )
         )
     except ValueError as e:
@@ -160,6 +265,15 @@ async def generate(request: GenerateRequest) -> types.GenerateResponse:
     except Exception as e:  # e.g. onnxruntime running out of GPU memory
         logger.exception("Failed to generate")
         raise fastapi.HTTPException(500, str(e))
+
+
+def _generate_and_keep_alive(
+    *, request: GenerateRequest, model_name: str
+) -> types.GenerateResponse:
+    try:
+        return _generate_with_cache(request=request, model_name=model_name)
+    finally:
+        _keep_alive(seconds=request.keep_alive)
 
 
 def _generate_with_cache(
@@ -190,6 +304,42 @@ def _generate_with_cache(
         while len(_embeddings) > EMBEDDING_CACHE_SIZE:
             _embeddings.popitem(last=False)
     return response
+
+
+def _keep_alive(*, seconds: float) -> None:
+    # On _worker. A timer submits the unload back to _worker, which skips it if a
+    # later request replaced the timer.
+    global _expires_at, _unload_timer
+
+    if _unload_timer is not None:
+        _unload_timer.cancel()
+        _unload_timer = None
+    if seconds < 0:
+        _expires_at = None
+        return
+    if seconds == 0:
+        _unload()
+        return
+    _expires_at = time.time() + seconds
+    timer = threading.Timer(
+        seconds, lambda: _worker.submit(_unload_if_current, timer=timer)
+    )
+    timer.daemon = True
+    timer.start()
+    _unload_timer = timer
+
+
+def _unload_if_current(*, timer: threading.Timer) -> None:
+    if timer is _unload_timer:
+        _unload()
+
+
+def _unload() -> None:
+    global _expires_at, _unload_timer
+    apis.unload()
+    _embeddings.clear()
+    _expires_at = None
+    _unload_timer = None
 
 
 async def _run(*, call: Callable[[], Any]) -> Any:

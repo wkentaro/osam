@@ -273,8 +273,12 @@ base64 < examples/_images/dogs.jpg \
 base64-encoded. `osam serve --device` picks the execution device for every
 request. The server keeps the last model loaded and the embeddings of recent
 images, so further prompts on the same image skip the image encoder.
-`/api/models`, `/api/pull` and `DELETE /api/models/{name}` match `osam list`,
-`osam pull` and `osam rm`. `/api/pull` streams NDJSON lines such as
+A model unloads 5 minutes after its last request; `keep_alive` changes that,
+in seconds or as a duration such as `"10m"`, with `-1` to keep it loaded and `0`
+to unload it now. `/api/ps` lists the loaded model and `/api/version` the
+server's version. Errors come back as `{"error": "..."}`. `/api/models`,
+`/api/pull` and `DELETE /api/models/{name}` match `osam list`, `osam pull` and
+`osam rm`. `/api/pull` streams NDJSON lines such as
 `{"status": "pulling encoder.onnx", "completed": 524288, "total": 24799761}` and
 ends with `{"status": "success"}` or `{"error": "..."}`. The full schema is at
 <http://127.0.0.1:11368/docs>.
