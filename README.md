@@ -232,7 +232,10 @@ the model again. To keep it loaded across commands, start `osam serve` and set
 `OSAM_HOST`, which `list`, `pull`, `rm` and `run` then use:
 
 ```bash
-osam serve &
+# In one terminal
+osam serve
+
+# In another, once it has started
 export OSAM_HOST=127.0.0.1:11368
 osam run efficientsam --image examples/_images/dogs.jpg --point 1439,504 > a.png
 # The model and the image embedding are still loaded, so this skips both.
