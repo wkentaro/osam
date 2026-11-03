@@ -44,16 +44,34 @@ class Client:
     first. host, or OSAM_HOST when host is None, connects to a running
     `osam serve` instead, such as "127.0.0.1:11368".
 
-    device: as in `osam serve --device`, for the private server only.
+    device, max_loaded_models: as in `osam serve --device` and
+    `--max-loaded-models`, for the private server only.
     """
 
     def __init__(
-        self, host: Optional[str] = None, *, device: Optional[types.Device] = None
+        self,
+        host: Optional[str] = None,
+        *,
+        device: Optional[types.Device] = None,
+        max_loaded_models: Optional[int] = None,
     ):
         host = host or os.environ.get("OSAM_HOST") or None
-        if host is not None and device is not None:
-            raise ValueError("device sets up a private server; host has its own")
-        self._device: Optional[types.Device] = device
+        if host is not None and (device, max_loaded_models) != (None, None):
+            raise ValueError(
+                "device and max_loaded_models set up a private server; "
+                "host has its own"
+            )
+        if max_loaded_models is not None and max_loaded_models < 1:
+            raise ValueError(
+                f"max_loaded_models must be 1 or more: {max_loaded_models}"
+            )
+        # The private server's settings, which _server reads on import. Set even
+        # when unset, so a value meant for `osam serve` in the caller's
+        # environment doesn't reach it.
+        self._server_env: dict[str, str] = {
+            "OSAM_SERVE_DEVICE": device or "",
+            "OSAM_MAX_LOADED_MODELS": str(max_loaded_models or ""),
+        }
         self._lock = threading.Lock()
         # host, port and token of the server, swapped whole on a restart, so a
         # request never sends one server's token to another's port.
@@ -269,9 +287,9 @@ class Client:
     def _start(self) -> None:
         token: str = secrets.token_urlsafe(32)
         if getattr(sys, "frozen", False):
-            process, pipe, port = _start_frozen(token=token, device=self._device)
+            process, pipe, port = _start_frozen(token=token, env=self._server_env)
         else:
-            process, pipe, port = _start_subprocess(token=token, device=self._device)
+            process, pipe, port = _start_subprocess(token=token, env=self._server_env)
         # The endpoint first: a request that sees the new process must also see
         # its endpoint, or it would restart a healthy server.
         self._endpoint = ("127.0.0.1", port, token)
@@ -292,7 +310,7 @@ _Process = Union[subprocess.Popen, multiprocessing.process.BaseProcess]
 
 
 def _start_subprocess(
-    *, token: str, device: Optional[types.Device]
+    *, token: str, env: dict[str, str]
 ) -> tuple[_Process, IO[bytes], int]:
     # A fresh interpreter, unlike multiprocessing, which re-runs the caller's
     # script in the child unless it is guarded by `if __name__ == "__main__"`.
@@ -303,7 +321,7 @@ def _start_subprocess(
     )
     assert process.stdin is not None and process.stdout is not None
     try:
-        process.stdin.write(json.dumps({"token": token, "device": device}).encode())
+        process.stdin.write(json.dumps({"token": token, "env": env}).encode())
         process.stdin.write(b"\n")
         process.stdin.flush()
         # ponytail: no timeout, the child exits rather than hangs on a failed start.
@@ -321,7 +339,7 @@ def _start_subprocess(
 
 
 def _start_frozen(
-    *, token: str, device: Optional[types.Device]
+    *, token: str, env: dict[str, str]
 ) -> tuple[_Process, multiprocessing.connection.Connection, int]:
     # A frozen application has no Python to run, so the server runs from its
     # executable through multiprocessing.freeze_support().
@@ -332,7 +350,7 @@ def _start_frozen(
     conn, child_conn = context.Pipe()
     process = context.Process(
         target=_serve_connection,
-        kwargs={"conn": child_conn, "token": token, "device": device},
+        kwargs={"conn": child_conn, "token": token, "env": env},
         name="osam-server",
         daemon=True,
     )
@@ -387,7 +405,7 @@ def _serve_stdio() -> None:
 
     _serve(
         token=settings["token"],
-        device=settings["device"],
+        env=settings["env"],
         report=report,
         wait_for_parent=sys.stdin.read,
     )
@@ -397,7 +415,7 @@ def _serve_connection(
     *,
     conn: multiprocessing.connection.Connection,
     token: str,
-    device: Optional[types.Device],
+    env: dict[str, str],
 ) -> None:
     def wait_for_parent() -> None:
         try:
@@ -407,7 +425,7 @@ def _serve_connection(
 
     _serve(
         token=token,
-        device=device,
+        env=env,
         report=conn.send,
         wait_for_parent=wait_for_parent,
     )
@@ -416,13 +434,11 @@ def _serve_connection(
 def _serve(
     *,
     token: str,
-    device: Optional[types.Device],
+    env: dict[str, str],
     report: Callable[[dict[str, Any]], object],
     wait_for_parent: Callable[[], object],
 ) -> None:
-    # Read when _server is imported. Set even when unset, so a value meant for
-    # `osam serve` in the caller's environment doesn't reach this server.
-    os.environ["OSAM_SERVE_DEVICE"] = device or ""
+    os.environ.update(env)  # before _server is imported
     # A windowed frozen application, such as a PyInstaller --noconsole build,
     # has no standard streams, and logging to them fails.
     if sys.stdout is None:
