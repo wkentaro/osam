@@ -40,12 +40,6 @@ For other GPUs (AMD, Intel, or NVIDIA without the CUDA libraries), install
 Direct3D 12 or Metal, and needs Python 3.11 or later. On Linux it also needs
 the system Vulkan loader (`libvulkan.so.1`).
 
-**For `osam serve`**:
-
-```bash
-pip install osam[cpu,serve]
-```
-
 ## Quickstart
 
 To run with EfficientSAM:
@@ -164,7 +158,7 @@ osam run sam3 --image examples/_images/dogs.jpg --text dog --device coreml
 ```
 
 ```python
-model = osam.apis.get_model_type_by_name("sam3")(device="cuda")
+client = osam.Client(device="cuda")
 ```
 
 `cpu`, `cuda`, `coreml` and `webgpu` are supported. An unavailable device raises an
@@ -175,7 +169,7 @@ faster on CoreML than on WebGPU, but its first CoreML load takes about 40 s.
 Without a device, inference runs on CUDA when the installed onnxruntime has it,
 then on WebGPU when `osam[webgpu]` finds a GPU, otherwise on CPU. A session that
 fails to start on the GPU, for example without a Vulkan driver, runs on CPU.
-`model.device` tells which one was picked. To use another accelerator (CoreML on
+`client.ps()` tells which one was picked. To use another accelerator (CoreML on
 macOS, DirectML on Windows, TensorRT, ROCm), set `OSAM_ONNX_PROVIDERS` to a
 comma-separated list tried in the given order:
 
@@ -238,12 +232,14 @@ from PIL import Image
 import osam
 
 image = np.asarray(Image.open("examples/_images/dogs.jpg"))
-request = osam.types.GenerateRequest(
-    model="efficientsam",
-    image=image,
-    prompt=osam.types.Prompt(points=[[1439, 504], [1439, 1289]], point_labels=[1, 1]),
-)
-response = osam.apis.generate(request=request)
+with osam.Client() as client:
+    response = client.generate(
+        "efficientsam",
+        image=image,
+        prompt=osam.types.Prompt(
+            points=np.array([[1439, 504], [1439, 1289]]), point_labels=np.array([1, 1])
+        ),
+    )
 annotation = response.annotations[0]
 mask = np.zeros(image.shape[:2], dtype=np.bool_)
 bbox = annotation.bounding_box
@@ -254,11 +250,17 @@ Image.fromarray(mask).save("mask.png")
 <img src="examples/_images/dogs.jpg" width="35%"> <img src="assets/dogs_efficientsam_mask.png" width="35%">\
 <i>Input and output images ('dogs.jpg', 'mask.png').</i>
 
+`osam.Client()` starts a server process of its own and stops it on `close()` or
+when your program exits, so each program keeps its model and image embeddings
+loaded between calls. Further prompts on the same image skip the image encoder.
+A frozen application, such as a PyInstaller bundle, must call
+`multiprocessing.freeze_support()` first. `osam.Client(host="gpu-box:11368")`, or
+`OSAM_HOST`, uses a running `osam serve` instead; it checks that both run the
+same minor version of osam. Errors from the server raise `osam.ResponseError`.
+
 ### HTTP
 
 ```bash
-# pip install osam[cpu,serve]  # required for `osam serve`
-
 # Get up the server (--host and --port change where it listens)
 osam serve
 

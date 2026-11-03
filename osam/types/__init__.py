@@ -7,6 +7,8 @@ from ._generate import GenerateResponse
 from ._image_embedding import ImageEmbedding
 from ._model import Device
 from ._model import Model
+from ._model_info import ModelInfo
+from ._model_info import RunningModel
 from ._model_metadata import ModelMetadata
 from ._prompt import Prompt
 
@@ -20,6 +22,8 @@ __all__ = [
     "ImageEmbedding",
     "Device",
     "Model",
+    "ModelInfo",
     "ModelMetadata",
     "Prompt",
+    "RunningModel",
 ]

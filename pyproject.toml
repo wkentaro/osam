@@ -29,12 +29,15 @@ classifiers = [
 ]
 dependencies = [
   "click",
+  # osam.Client runs its own server.
+  "fastapi",
   "gdown>=6.4.0",
   "imgviz>=2.0.0",
   "loguru",
   "Pillow",
   "pydantic",
   "typing-extensions>=4.4",
+  "uvicorn",
 ]
 dynamic = ["readme", "version"]
 
@@ -64,7 +67,8 @@ webgpu = [
   "onnxruntime-ep-webgpu>=0.5; python_version >= '3.11'",
   "onnx>=1.17.0; sys_platform == 'darwin' and python_version >= '3.11'",
 ]
-serve = ["fastapi", "uvicorn"]
+# Kept so `pip install osam[serve]` still resolves; the server is built in.
+serve = []
 
 [tool.uv]
 conflicts = [
@@ -84,7 +88,7 @@ conflicts = [
 
 [dependency-groups]
 dev = [
-  "osam[cpu,serve]",
+  "osam[cpu]",
   "httpx>=0.27",
   "pytest-xdist>=3.6.1",
   "pytest>=8.3.4",

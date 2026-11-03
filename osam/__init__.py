@@ -11,8 +11,12 @@ except ImportError as e:
 
 from . import apis
 from . import types
+from ._client import Client
+from ._client import ResponseError
 
 __all__ = [
+    "Client",
+    "ResponseError",
     "apis",
     "types",
 ]

@@ -3,11 +3,12 @@ import collections
 import concurrent.futures
 import contextlib
 import functools
-import hashlib
 import json
 import logging
 import os
 import re
+import secrets
+import socket
 import threading
 import time
 import typing
@@ -18,12 +19,13 @@ from typing import Final
 from typing import Optional
 
 import fastapi
-import numpy as np
 import pydantic
 import starlette.exceptions
+import uvicorn
 from pydantic.json_schema import SkipJsonSchema
 
 from . import __version__
+from . import _json
 from . import apis
 from . import types
 
@@ -53,6 +55,7 @@ _unload_timer: Optional[threading.Timer] = None
 @contextlib.asynccontextmanager
 async def _lifespan(app: fastapi.FastAPI):
     # https://github.com/tiangolo/fastapi/issues/1508#issuecomment-638365277
+    os.makedirs(os.path.expanduser("~/.cache/osam"), exist_ok=True)
     handler = logging.FileHandler(os.path.expanduser("~/.cache/osam/osam.log"))
     handler.setLevel(logging.DEBUG)
     fmt = "%(asctime)s [%(levelname)s] %(module)s:%(funcName)s:%(lineno)s - %(message)s"
@@ -148,34 +151,12 @@ class GenerateResponse(pydantic.BaseModel):
     annotations: list[types.Annotation]
 
 
-class ModelInfo(pydantic.BaseModel):
-    name: str
-    id: str
-    size: Optional[int] = pydantic.Field(
-        description="Bytes on disk; null if not pulled"
-    )
-    modified_at: Optional[float] = pydantic.Field(
-        description="Unix time of the last download; null if not pulled"
-    )
-    metadata: types.ModelMetadata
-
-
 class ModelList(pydantic.BaseModel):
-    models: list[ModelInfo]
-
-
-class RunningModel(pydantic.BaseModel):
-    name: str
-    device: str = pydantic.Field(
-        description='Device it runs on, such as "cuda", or "cpu" after a fallback'
-    )
-    expires_at: Optional[float] = pydantic.Field(
-        description="Unix time the model unloads; null if it stays loaded"
-    )
+    models: list[types.ModelInfo]
 
 
 class RunningModelList(pydantic.BaseModel):
-    models: list[RunningModel]
+    models: list[types.RunningModel]
 
 
 class Version(pydantic.BaseModel):
@@ -200,7 +181,7 @@ def version() -> Version:
 def list_models() -> ModelList:
     return ModelList(
         models=[
-            ModelInfo(
+            types.ModelInfo(
                 name=model_type.name,
                 id=model_type.get_id(),
                 size=model_type.get_size(),
@@ -219,7 +200,9 @@ def list_running_models() -> RunningModelList:
         return RunningModelList(models=[])
     return RunningModelList(
         models=[
-            RunningModel(name=model.name, device=model.device, expires_at=_expires_at)
+            types.RunningModel(
+                name=model.name, device=model.device, expires_at=_expires_at
+            )
         ]
     )
 
@@ -315,7 +298,7 @@ def _generate_with_cache(
 
     if request.image is None:  # a prompt without an image, which the model rejects
         return apis.generate(request=request, device=_DEVICE)
-    key: tuple[str, str] = (model_name, _hash_image(image=request.image))
+    key: tuple[str, str] = (model_name, _json.hash_image(image=request.image))
     if key in _embeddings:
         _embeddings.move_to_end(key)
         return apis.generate(
@@ -382,7 +365,34 @@ def _get_model_type(*, name: str) -> type[types.Model]:
         raise fastapi.HTTPException(404, str(e))
 
 
-def _hash_image(*, image: np.ndarray) -> str:
-    digest = hashlib.sha256(np.ascontiguousarray(image).data)
-    digest.update(repr((image.shape, image.dtype.str)).encode())
-    return digest.hexdigest()
+def run_private(
+    *,
+    token: str,
+    report_port: Callable[[int], object],
+    wait_for_parent: Callable[[], object],
+) -> None:
+    # The server osam.Client starts: it serves only requests that carry token,
+    # until wait_for_parent returns.
+    AUTHORIZATION: Final = f"Bearer {token}"
+
+    @app.middleware("http")
+    async def check_token(request: fastapi.Request, call_next):
+        given: str = request.headers.get("authorization", "")
+        if not secrets.compare_digest(given.encode(), AUTHORIZATION.encode()):
+            return fastapi.responses.JSONResponse(
+                {"error": "missing or wrong token"}, status_code=401
+            )
+        return await call_next(request)
+
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    sock.listen()  # so requests sent before uvicorn starts wait instead of failing
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+
+    def exit_with_parent() -> None:
+        wait_for_parent()
+        server.should_exit = True
+
+    threading.Thread(target=exit_with_parent, daemon=True).start()
+    report_port(sock.getsockname()[1])
+    server.run(sockets=[sock])
