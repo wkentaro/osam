@@ -1,4 +1,5 @@
 import builtins
+import contextlib
 import http.client
 import json
 import multiprocessing
@@ -46,6 +47,9 @@ class Client:
 
     device, max_loaded_models: as in `osam serve --device` and
     `--max-loaded-models`, for the private server only.
+    timeout: seconds to wait for each response, such as 600, or None to wait
+    forever. A request that times out raises TimeoutError, and a private
+    server restarts, so a hung model stops.
     """
 
     def __init__(
@@ -54,7 +58,9 @@ class Client:
         *,
         device: Optional[types.Device] = None,
         max_loaded_models: Optional[int] = None,
+        timeout: Optional[float] = None,
     ):
+        self._timeout: Optional[float] = timeout
         host = host or os.environ.get("OSAM_HOST") or None
         if host is not None and (device, max_loaded_models) != (None, None):
             raise ValueError(
@@ -82,9 +88,10 @@ class Client:
         self._pipe: Optional[
             Union[IO[bytes], multiprocessing.connection.Connection]
         ] = None
-        # The last image sent and its encoding, as a client often sends one
-        # image with several prompts.
-        self._image: tuple[str, str] = ("", "")
+        # The last image sent: its local hash, its encoding, and the hash the
+        # server returned for it, as a client often sends one image with
+        # several prompts.
+        self._image: tuple[str, str, str] = ("", "", "")
         # Whether this client owns its server, set once: _process is briefly
         # None while another request restarts it.
         self._private: bool = host is None
@@ -174,8 +181,6 @@ class Client:
         default of five minutes.
         """
         body: dict[str, Any] = {"model": model}
-        if image is not None:
-            body["image"] = self._encode_image(image=image)
         if prompt is not None:
             body["prompt"] = prompt.model_dump(mode="json")
         if annotations is not None:
@@ -184,20 +189,33 @@ class Client:
             ]
         if keep_alive is not None:
             body["keep_alive"] = keep_alive
-        return types.GenerateResponse.model_validate(
-            self._request(method="POST", path="/api/generate", body=body)
-        )
 
-    def _encode_image(self, *, image: np.ndarray) -> str:
-        # Hashing takes a fraction of the time PNG encoding does.
-        # Read and written whole, so a concurrent call can't mix up two images.
+        def post(**image_fields: str) -> dict[str, Any]:
+            return self._request(
+                method="POST", path="/api/generate", body=body | image_fields
+            )
+
+        if image is None:
+            return types.GenerateResponse.model_validate(post())
+        # Hashing takes a fraction of the time PNG encoding does. Read and
+        # written whole, so a concurrent call can't mix up two images.
         key: str = _json.hash_image(image=image)
-        cached_key, cached = self._image
-        if cached_key == key:
-            return cached
-        encoded: str = _json.image_ndarray_to_b64data(ndarray=image)
-        self._image = (key, encoded)
-        return encoded
+        cached_key, encoded, server_hash = self._image
+        if cached_key != key:
+            encoded = _json.image_ndarray_to_b64data(ndarray=image)
+        elif server_hash:
+            # Sent before, so the server likely has its embedding; 412 if not,
+            # such as for another model or after a restart.
+            try:
+                return types.GenerateResponse.model_validate(
+                    post(image_hash=server_hash)
+                )
+            except ResponseError as e:
+                if e.status_code != 412:
+                    raise
+        response: dict[str, Any] = post(image=encoded)
+        self._image = (key, encoded, response.get("image_hash") or "")
+        return types.GenerateResponse.model_validate(response)
 
     def _request(
         self, *, method: str, path: str, body: Optional[dict[str, Any]] = None
@@ -209,7 +227,10 @@ class Client:
     def _restarting(self, *, call: Callable[[], Any]) -> Any:
         process = self._process
         try:
-            return call()
+            with self._restart_on_timeout():
+                return call()
+        except TimeoutError:
+            raise  # an OSError, but not one to retry
         except (OSError, http.client.HTTPException) as e:
             if not self._private:
                 raise
@@ -220,6 +241,23 @@ class Client:
             error = e
         # The private server crashed, or failed in a way that can leave it
         # broken, such as a CUDA load that keeps its memory: start a new one.
+        self._restart(process=process, error=error)
+        with self._restart_on_timeout():
+            return call()
+
+    @contextlib.contextmanager
+    def _restart_on_timeout(self) -> Iterator[None]:
+        # Stops a hung private server and re-raises; the request would likely
+        # time out again, so it isn't retried.
+        process = self._process
+        try:
+            yield
+        except TimeoutError as e:
+            if self._private:
+                self._restart(process=process, error=e)
+            raise
+
+    def _restart(self, *, process: Optional["_Process"], error: Exception) -> None:
         logger.warning("Restarting the osam server after: {error}", error=error)
         with self._lock:
             if self._closed:
@@ -228,7 +266,6 @@ class Client:
             if self._process is process:
                 self._stop()
                 self._start()
-        return call()
 
     def _send(self, *, method: str, path: str, body: Optional[dict[str, Any]]) -> Any:
         connection = self._connect(method=method, path=path, body=body)
@@ -242,13 +279,15 @@ class Client:
         return json.loads(data) if data else None
 
     def _stream(self, *, path: str, body: dict[str, Any]) -> Iterator[dict[str, Any]]:
-        # Restarts like _request only until the stream starts.
+        # Retries like _request only until the stream starts; a timeout after
+        # that restarts a private server and raises.
         connection, response = self._restarting(
             call=lambda: self._open_stream(path=path, body=body)
         )
         try:
-            for line in response:
-                yield json.loads(line)
+            with self._restart_on_timeout():
+                for line in response:
+                    yield json.loads(line)
         finally:
             # Closing it early tells the server to stop, as for an unfinished pull.
             connection.close()
@@ -275,7 +314,7 @@ class Client:
             headers["Authorization"] = f"Bearer {token}"
         connection = (
             http.client.HTTPSConnection if self._https else http.client.HTTPConnection
-        )(host, port)
+        )(host, port, timeout=self._timeout)
         connection.request(
             method,
             path,

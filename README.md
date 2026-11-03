@@ -279,6 +279,8 @@ A frozen application, such as a PyInstaller bundle, must call
 `multiprocessing.freeze_support()` first. `osam.Client(host="gpu-box:11368")`, or
 `OSAM_HOST`, uses a running `osam serve` instead; it checks that both run the
 same minor version of osam. Errors from the server raise `osam.ResponseError`.
+`timeout=600` raises `TimeoutError` when a response takes longer, and restarts
+a private server, so a hung model stops.
 
 ### HTTP
 
@@ -300,7 +302,10 @@ request. The server keeps one model loaded. An application using two passes
 server, so they don't reload in turn; a full server unloads the least recently
 used model first. It also keeps the
 embeddings of recent images, so further prompts on the same image skip the
-image encoder. A model unloads 5 minutes after its last request; `keep_alive` changes that,
+image encoder. A response to a request with an image includes its
+`image_hash`, which further requests can send in place of the image; the
+server answers 412 when it no longer has
+that image, and `osam.Client` then sends the image. A model unloads 5 minutes after its last request; `keep_alive` changes that,
 in seconds or as a duration such as `"10m"`, with `-1` to keep it loaded and `0`
 to unload it now. `/api/ps` lists the loaded models and `/api/version` the
 server's version. Errors come back as `{"error": "..."}`. `/api/models`,

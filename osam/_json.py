@@ -6,14 +6,19 @@ import numpy as np
 import PIL.Image
 
 
-def image_ndarray_to_png(*, ndarray: np.ndarray) -> bytes:
+def image_ndarray_to_png(*, ndarray: np.ndarray, compress_level: int = 6) -> bytes:
     with io.BytesIO() as f:
-        PIL.Image.fromarray(ndarray).save(f, format="PNG")
+        PIL.Image.fromarray(ndarray).save(
+            f, format="PNG", compress_level=compress_level
+        )
         return f.getvalue()
 
 
 def image_ndarray_to_b64data(*, ndarray):
-    return base64.b64encode(image_ndarray_to_png(ndarray=ndarray)).decode("utf-8")
+    # Level 1 encodes a 2560x1600 image in 0.2 s, not 0.8 s, for 6% more bytes,
+    # which a local server reads faster than it would wait for the encoder.
+    png: bytes = image_ndarray_to_png(ndarray=ndarray, compress_level=1)
+    return base64.b64encode(png).decode("utf-8")
 
 
 def image_b64data_to_ndarray(*, b64data):

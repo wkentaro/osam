@@ -5,7 +5,9 @@ import subprocess
 import sys
 import threading
 import time
+from typing import Any
 from typing import Final
+from typing import Iterator
 
 import numpy as np
 import PIL.Image
@@ -189,21 +191,97 @@ def _listening(*, port: int) -> bool:
     return True
 
 
-def test_generate_encodes_a_repeated_image_once(
+def test_generate_sends_a_repeated_image_by_hash(
     client: osam.Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     encoded: list[np.ndarray] = []
     encode = _client._json.image_ndarray_to_b64data
+    sent: list[set[str]] = []
+    request = client._request
 
     def counting(*, ndarray: np.ndarray) -> str:
         encoded.append(ndarray)
         return encode(ndarray=ndarray)
 
+    def recording(*, method: str, path: str, body: Any = None) -> Any:
+        sent.append({"image", "image_hash"} & set(body or {}))
+        return request(method=method, path=path, body=body)
+
     monkeypatch.setattr(_client._json, "image_ndarray_to_b64data", counting)
+    monkeypatch.setattr(client, "_request", recording)
     image = _IMAGE[::2, ::2].copy()  # not sent by an earlier test
     for _ in range(2):
         client.generate("efficientsam:10m", image=image)
+    assert sent == [{"image"}, {"image_hash"}]
     assert len(encoded) == 1
+
+    # Another model has no embedding of it yet, so the server asks for it.
+    sent.clear()
+    client.generate("sam2:tiny", image=image)
+    assert sent == [{"image_hash"}, {"image"}]
+    assert len(encoded) == 1
+
     image[0, 0] += 1  # edited in place, so it is a new image
     client.generate("efficientsam:10m", image=image)
     assert len(encoded) == 2
+
+
+def test_timeout_restarts_a_private_server(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    process = client._process
+    send = client._send
+
+    def hang(**kwargs: Any) -> Any:
+        monkeypatch.setattr(client, "_send", send)
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(client, "_send", hang)
+    with pytest.raises(TimeoutError):
+        client.version()
+    assert client._process is not process
+    assert client.version() == osam.__version__
+
+
+def test_timeout_restarts_a_private_server_on_a_retry_or_a_stream(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    send = client._send
+    processes: list[Any] = []
+
+    def crash_then_hang(**kwargs: Any) -> Any:
+        processes.append(client._process)
+        if len(processes) == 1:
+            raise ConnectionResetError("crashed")
+        monkeypatch.setattr(client, "_send", send)
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(client, "_send", crash_then_hang)
+    with pytest.raises(TimeoutError):
+        client.version()
+    assert client._process not in processes  # the retry's server restarted too
+
+    class Connection:
+        def close(self) -> None:
+            pass
+
+    def stall() -> Iterator[bytes]:
+        yield b'{"status": "pulling"}'
+        raise TimeoutError("timed out")
+
+    process = client._process
+    monkeypatch.setattr(
+        client, "_open_stream", lambda **kwargs: (Connection(), stall())
+    )
+    with pytest.raises(TimeoutError):
+        client.pull("efficientsam:10m")
+    assert client._process is not process
+
+
+def test_timeout_on_a_silent_host() -> None:
+    with socket.create_server(("127.0.0.1", 0)) as server:  # accepts, never answers
+        port = server.getsockname()[1]
+        start = time.monotonic()
+        with pytest.raises(TimeoutError):
+            osam.Client(host=f"127.0.0.1:{port}", timeout=0.5)
+        assert time.monotonic() - start < 5
