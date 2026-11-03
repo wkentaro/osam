@@ -1,3 +1,5 @@
+import base64
+
 import numpy as np
 import pytest
 
@@ -16,7 +18,8 @@ def image():
 def test_image_ndarray_to_b64data(image):
     b64data = _json.image_ndarray_to_b64data(ndarray=image)
     assert isinstance(b64data, str)
-    assert len(b64data) in [204, 208]  # pillow version differences v10 vs v12
+    # The PNG signature; its length varies with the pillow and zlib version.
+    assert base64.b64decode(b64data).startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_image_b64data_to_ndarray(image):
