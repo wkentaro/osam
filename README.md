@@ -279,6 +279,8 @@ A frozen application, such as a PyInstaller bundle, must call
 `multiprocessing.freeze_support()` first. `osam.Client(host="gpu-box:11368")`, or
 `OSAM_HOST`, uses a running `osam serve` instead; it checks that both run the
 same minor version of osam. Errors from the server raise `osam.ResponseError`.
+`timeout=600` raises `TimeoutError` when a response takes longer, and restarts
+a private server, so a hung model stops.
 
 ### HTTP
 

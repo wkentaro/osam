@@ -46,6 +46,9 @@ class Client:
 
     device, max_loaded_models: as in `osam serve --device` and
     `--max-loaded-models`, for the private server only.
+    timeout: seconds to wait for each response, such as 600, or None to wait
+    forever. A request that times out raises TimeoutError, and a private
+    server restarts, so a hung model stops.
     """
 
     def __init__(
@@ -54,7 +57,9 @@ class Client:
         *,
         device: Optional[types.Device] = None,
         max_loaded_models: Optional[int] = None,
+        timeout: Optional[float] = None,
     ):
+        self._timeout: Optional[float] = timeout
         host = host or os.environ.get("OSAM_HOST") or None
         if host is not None and (device, max_loaded_models) != (None, None):
             raise ValueError(
@@ -222,6 +227,11 @@ class Client:
         process = self._process
         try:
             return call()
+        except TimeoutError as e:
+            # Likely to time out again, so not retried.
+            if self._private:
+                self._restart(process=process, error=e)
+            raise
         except (OSError, http.client.HTTPException) as e:
             if not self._private:
                 raise
@@ -232,6 +242,10 @@ class Client:
             error = e
         # The private server crashed, or failed in a way that can leave it
         # broken, such as a CUDA load that keeps its memory: start a new one.
+        self._restart(process=process, error=error)
+        return call()
+
+    def _restart(self, *, process: Optional["_Process"], error: Exception) -> None:
         logger.warning("Restarting the osam server after: {error}", error=error)
         with self._lock:
             if self._closed:
@@ -240,7 +254,6 @@ class Client:
             if self._process is process:
                 self._stop()
                 self._start()
-        return call()
 
     def _send(self, *, method: str, path: str, body: Optional[dict[str, Any]]) -> Any:
         connection = self._connect(method=method, path=path, body=body)
@@ -287,7 +300,7 @@ class Client:
             headers["Authorization"] = f"Bearer {token}"
         connection = (
             http.client.HTTPSConnection if self._https else http.client.HTTPConnection
-        )(host, port)
+        )(host, port, timeout=self._timeout)
         connection.request(
             method,
             path,

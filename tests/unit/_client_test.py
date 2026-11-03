@@ -223,3 +223,29 @@ def test_generate_sends_a_repeated_image_by_hash(
     image[0, 0] += 1  # edited in place, so it is a new image
     client.generate("efficientsam:10m", image=image)
     assert len(encoded) == 2
+
+
+def test_timeout_restarts_a_private_server(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    process = client._process
+    send = client._send
+
+    def hang(**kwargs: Any) -> Any:
+        monkeypatch.setattr(client, "_send", send)
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(client, "_send", hang)
+    with pytest.raises(TimeoutError):
+        client.version()
+    assert client._process is not process
+    assert client.version() == osam.__version__
+
+
+def test_timeout_on_a_silent_host() -> None:
+    with socket.create_server(("127.0.0.1", 0)) as server:  # accepts, never answers
+        port = server.getsockname()[1]
+        start = time.monotonic()
+        with pytest.raises(TimeoutError):
+            osam.Client(host=f"127.0.0.1:{port}", timeout=0.5)
+        assert time.monotonic() - start < 5
