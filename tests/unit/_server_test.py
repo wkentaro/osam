@@ -272,6 +272,7 @@ def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_two_models_stay_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(_server, "_MAX_LOADED_MODELS", 2)
     client = TestClient(_server.app)
 
     def generate(model: str) -> None:
@@ -302,6 +303,7 @@ def test_two_models_stay_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_failed_load_unloads_the_others_and_retries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(_server, "_MAX_LOADED_MODELS", 2)
     client = TestClient(_server.app)
     body = {"image": _TINY_IMAGE_B64, "keep_alive": -1}
     response = client.post("/api/generate", json={**body, "model": "efficientsam:10m"})
@@ -343,6 +345,7 @@ def test_failed_load_unloads_the_others_and_retries(
 def test_cpu_fallback_next_to_a_gpu_model_retries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(_server, "_MAX_LOADED_MODELS", 2)
     efficientsam = _server._apis.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(efficientsam, "device", property(lambda self: "cuda"))
     sam2 = _server._apis.get_model_type_by_name(name="sam2:tiny")

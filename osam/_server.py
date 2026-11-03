@@ -48,9 +48,9 @@ _DEVICE: Final = typing.cast(
 )
 if _DEVICE not in (None, *typing.get_args(types.Device)):
     raise ValueError(f"unknown OSAM_SERVE_DEVICE {_DEVICE!r}")
-# A second model loads next to the first, so an application using two, such as
-# one for clicks and one for text, doesn't reload them in turn.
-_MAX_LOADED_MODELS: Final = int(os.environ.get("OSAM_MAX_LOADED_MODELS") or 2)
+# One model by default. An application using two, such as one for clicks and
+# one for text, sets 2 so they don't reload in turn.
+_MAX_LOADED_MODELS: Final = int(os.environ.get("OSAM_MAX_LOADED_MODELS") or 1)
 if _MAX_LOADED_MODELS < 1:
     raise ValueError(f"OSAM_MAX_LOADED_MODELS must be 1 or more: {_MAX_LOADED_MODELS}")
 
