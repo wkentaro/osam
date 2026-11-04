@@ -169,3 +169,11 @@ def to_json_fields(*, fields: dict[str, Any]) -> dict[str, Any]:
         for name, value in fields.items()
         if value is not None
     }
+
+
+class SegmentResponse(pydantic.BaseModel):
+    annotations: list[types.Annotation]
+    image_hash: str = pydantic.Field(
+        description="Of the request's image, to send as image_hash with further "
+        "prompts on it",
+    )

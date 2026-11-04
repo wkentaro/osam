@@ -1,8 +1,6 @@
 import asyncio
-import collections
 import concurrent.futures
 import contextlib
-import dataclasses
 import functools
 import json
 import logging
@@ -19,56 +17,37 @@ from typing import Final
 from typing import Optional
 
 import fastapi
-import numpy as np
 import pydantic
 import starlette.exceptions
 import uvicorn
 from loguru import logger
 
 from . import __version__
-from . import _json
 from . import _registry
+from . import _runtime as _runtime_module
 from . import _types as types
 from ._requests import DEFAULT_KEEP_ALIVE
 from ._requests import KeepAlive
 from ._requests import SegmentRequest
+from ._requests import SegmentResponse
 
-# Loading and running models, and pull and remove, which must not change the
-# files under a model being loaded, all run on one thread, in order.
+# Every call runs on one thread, in order, as the runtime runs one at a time.
 # Queued requests wait here instead of holding FastAPI's thread pool, so other
 # routes stay free.
 # ponytail: one worker, so a long pull also delays segment.
 _worker = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-# Used only on _worker.
-_embeddings: collections.OrderedDict[
-    tuple[str, str], types.ImageEmbedding
-] = collections.OrderedDict()
-# Every loaded model runs on one device, a server setting.
-# `osam serve --device` sets it; unset picks one automatically.
-_DEVICE: Final = typing.cast(
-    Optional[types.Device], os.environ.get("OSAM_SERVE_DEVICE") or None
-)
-if _DEVICE not in (None, *typing.get_args(types.Device)):
-    raise ValueError(f"unknown OSAM_SERVE_DEVICE {_DEVICE!r}")
-# One model by default. An application using two, such as one for clicks and
-# one for text, sets 2 so they don't reload in turn.
-_MAX_LOADED_MODELS: Final = int(os.environ.get("OSAM_MAX_LOADED_MODELS") or 1)
-if _MAX_LOADED_MODELS < 1:
-    raise ValueError(f"OSAM_MAX_LOADED_MODELS must be 1 or more: {_MAX_LOADED_MODELS}")
-
-
-@dataclasses.dataclass
-class _Loaded:
-    model: types.Model
-    # When it unloads, as time.time(); None keeps it loaded.
-    expires_at: Optional[float] = None
-    timer: Optional[threading.Timer] = None
-
-
-# By model name, least recently used first. Written only on _worker, under
-# _loaded_lock, which /api/ps takes to read it from another thread.
-_loaded: collections.OrderedDict[str, _Loaded] = collections.OrderedDict()
-_loaded_lock = threading.Lock()
+# `osam serve --device` and `--max-loaded-models` set these. One model by
+# default; an application using two, such as one for clicks and one for text,
+# sets 2 so they don't reload in turn.
+try:
+    _runtime = _runtime_module.Runtime(
+        device=typing.cast(
+            Optional[types.Device], os.environ.get("OSAM_SERVE_DEVICE") or None
+        ),
+        max_loaded_models=int(os.environ.get("OSAM_MAX_LOADED_MODELS") or 1),
+    )
+except ValueError as e:
+    raise ValueError(f"OSAM_SERVE_DEVICE or OSAM_MAX_LOADED_MODELS: {e}") from None
 
 
 @contextlib.asynccontextmanager
@@ -125,14 +104,6 @@ app.add_exception_handler(
 )
 
 
-class SegmentResponse(pydantic.BaseModel):
-    annotations: list[types.Annotation]
-    image_hash: str = pydantic.Field(
-        description="Of the request's image, to send as image_hash with further "
-        "prompts on it",
-    )
-
-
 class LoadRequest(pydantic.BaseModel):
     model: str
     keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
@@ -177,33 +148,12 @@ def version() -> Version:
 
 @app.get("/api/models")
 def list_models() -> ModelList:
-    return ModelList(
-        models=[
-            types.ModelInfo(
-                name=model_type.name,
-                id=model_type.get_id(),
-                size=model_type.get_size(),
-                modified_at=model_type.get_modified_at(),
-                metadata=model_type.metadata,
-            )
-            for model_type in _registry.registered_model_types
-        ]
-    )
+    return ModelList(models=_runtime.list())
 
 
 @app.get("/api/ps")
 def list_running_models() -> RunningModelList:
-    # Most recently used first, as Ollama lists them.
-    return RunningModelList(
-        models=[
-            types.RunningModel(
-                name=loaded.model.name,
-                device=loaded.model.device,
-                expires_at=loaded.expires_at,
-            )
-            for loaded in reversed(_loaded_snapshot())
-        ]
-    )
+    return RunningModelList(models=_runtime.ps())
 
 
 # Streams NDJSON progress lines, as Ollama does, ending in success or error.
@@ -220,7 +170,7 @@ async def pull(request: PullRequest) -> fastapi.responses.StreamingResponse:
 
     def work() -> None:
         try:
-            model_type.pull(progress=progress, cancel=cancel)
+            _runtime.pull(model=model_type.name, progress=progress, cancel=cancel)
             last: dict[str, Any] = {"status": "success"}
         except Exception as e:
             last = {"error": str(e)}
@@ -245,34 +195,29 @@ async def pull(request: PullRequest) -> fastapi.responses.StreamingResponse:
 
 @app.delete("/api/models/{name}")
 async def remove(name: str) -> None:
-    await _run(call=_get_model_type(name=name).remove)
+    model_type: type[types.Model] = _get_model_type(name=name)
+    await _run(call=functools.partial(_runtime.remove, model=model_type.name))
 
 
 @app.post("/api/segment", response_model=SegmentResponse)
 async def segment(request: SegmentRequest) -> SegmentResponse:
-    model_type: type[types.Model] = _get_model_type(name=request.model)
+    _get_model_type(name=request.model)
     try:
-        return await _run(
-            call=functools.partial(
-                _segment_and_keep_alive, request=request, model_type=model_type
-            )
-        )
+        return await _run(call=functools.partial(_runtime.segment, request=request))
+    except _runtime_module.UnknownImageError as e:
+        raise fastapi.HTTPException(412, str(e))
     except ValueError as e:
         raise fastapi.HTTPException(400, str(e))
 
 
 @app.post("/api/load")
 async def load(request: LoadRequest) -> None:
-    # Loads the model, pulling it if needed, and sets how long it stays loaded;
-    # keep_alive 0 unloads it, as in Ollama.
     model_type: type[types.Model] = _get_model_type(name=request.model)
-
-    def work() -> None:
-        if request.keep_alive != 0:
-            _load(model_name=model_type.name)
-        _keep_alive(model_name=model_type.name, seconds=request.keep_alive)
-
-    await _run(call=work)
+    await _run(
+        call=functools.partial(
+            _runtime.load, model=model_type.name, keep_alive=request.keep_alive
+        )
+    )
 
 
 @app.post("/api/generate", deprecated=True)
@@ -284,26 +229,22 @@ async def generate(request: LegacyGenerateRequest) -> LegacyGenerateResponse:
         raise fastapi.HTTPException(
             400, "send the image; the server keeps image embeddings itself"
         )
-    image: np.ndarray = request.image
     model_type: type[types.Model] = _get_model_type(name=request.model)
-
-    def work() -> LegacyGenerateResponse:
-        try:
-            response = _generate_with_cache(
-                key=(model_type.name, _json.hash_image(image=image)),
-                image=image,
-                prompt=request.prompt,
-            )
-        finally:
-            _keep_alive(model_name=model_type.name, seconds=DEFAULT_KEEP_ALIVE)
-        return LegacyGenerateResponse(
-            model=response.model, annotations=response.annotations
-        )
-
     try:
-        return await _run(call=work)
+        response: types.GenerateResponse = await _run(
+            call=functools.partial(
+                _runtime.generate,
+                model=model_type.name,
+                image=request.image,
+                prompt=request.prompt,
+                keep_alive=DEFAULT_KEEP_ALIVE,
+            )
+        )
     except ValueError as e:
         raise fastapi.HTTPException(400, str(e))
+    return LegacyGenerateResponse(
+        model=response.model, annotations=response.annotations
+    )
 
 
 @functools.cache
@@ -312,160 +253,6 @@ def _warn_generate_deprecated() -> None:
         "/api/generate is deprecated and will be removed in osam 1.0; "
         "use /api/segment"
     )
-
-
-def _segment_and_keep_alive(
-    *, request: SegmentRequest, model_type: type[types.Model]
-) -> SegmentResponse:
-    try:
-        return _segment_with_cache(request=request, model_type=model_type)
-    finally:
-        _keep_alive(model_name=model_type.name, seconds=request.keep_alive)
-
-
-def _segment_with_cache(
-    *, request: SegmentRequest, model_type: type[types.Model]
-) -> SegmentResponse:
-    image_hash: str = (
-        typing.cast(str, request.image_hash)
-        if request.image is None
-        else _json.hash_image(image=request.image)
-    )
-    key: tuple[str, str] = (model_type.name, image_hash)
-    embedding: Optional[types.ImageEmbedding] = _embeddings.get(key)
-    if request.image is None:
-        if embedding is None:
-            # Before loading the model, which the client's retry with the image
-            # would otherwise load a second time after keep_alive 0 unloads it.
-            raise fastapi.HTTPException(
-                412, f"no embedding for image {image_hash}; send the image"
-            )
-        height, width = embedding.original_height, embedding.original_width
-    else:
-        height, width = request.image.shape[:2]
-    prompt: Optional[types.Prompt] = request.to_prompt(
-        model_type=model_type, height=height, width=width
-    )
-    response: types.GenerateResponse = _generate_with_cache(
-        key=key, image=request.image, prompt=prompt
-    )
-    return SegmentResponse(annotations=response.annotations, image_hash=image_hash)
-
-
-def _generate_with_cache(
-    *,
-    key: tuple[str, str],
-    image: Optional[np.ndarray],
-    prompt: Optional[types.Prompt],
-) -> types.GenerateResponse:
-    # On _worker. Runs prompt on the embedding cached under key, or on image.
-    # Recent image embeddings stay cached, so several prompts on one image
-    # encode it once.
-    # A SAM3 embedding takes about 100 MB.
-    # ponytail: fixed size, make it configurable if memory or hit rate matters.
-    EMBEDDING_CACHE_SIZE: Final = 4
-
-    # key: the model's name and the image's hash.
-    model: types.Model = _load(model_name=key[0])
-    embedding: Optional[types.ImageEmbedding] = _embeddings.get(key)
-    # Models use the embedding when given one, and return the one they used.
-    response: types.GenerateResponse = model.generate(
-        request=types.GenerateRequest(
-            model=model.name, image=image, image_embedding=embedding, prompt=prompt
-        )
-    )
-    if response.image_embedding is not None:
-        _embeddings[key] = response.image_embedding
-        _embeddings.move_to_end(key)
-        while len(_embeddings) > EMBEDDING_CACHE_SIZE:
-            _embeddings.popitem(last=False)
-    return response
-
-
-def _load(*, model_name: str) -> types.Model:
-    # On _worker. When the server is full, the least recently used model unloads
-    # first; one worker runs one request, so that model is idle.
-    if model_name in _loaded:
-        with _loaded_lock:
-            _loaded.move_to_end(model_name)
-        return _loaded[model_name].model
-    model_type: type[types.Model] = _registry.get_model_type_by_name(name=model_name)
-    # Before unloading anything, so a failed download leaves the others loaded.
-    model_type.pull()
-    while len(_loaded) >= _MAX_LOADED_MODELS:
-        _unload(model_name=next(iter(_loaded)))
-    model: Optional[types.Model] = None
-    try:
-        model = model_type(device=_DEVICE)
-    except Exception:
-        if not _loaded:
-            raise
-        logger.exception("Failed to load {}; unloading the other models", model_name)
-    if (
-        model is not None
-        and _DEVICE is None
-        and model.device == "cpu"
-        and any(loaded.model.device != "cpu" for loaded in _loaded.values())
-    ):
-        # An automatic device falls back to CPU when the GPU, which the others
-        # use, is out of memory.
-        logger.warning("{} fell back to CPU; unloading the other models", model_name)
-        model = None
-    if model is None:
-        # Likely out of memory, so unload the others and try once more, as Ollama
-        # does. Outside the except block, whose traceback would keep the failed
-        # load's sessions, and their memory, alive.
-        while _loaded:
-            _unload(model_name=next(iter(_loaded)))
-        model = model_type(device=_DEVICE)
-    with _loaded_lock:
-        _loaded[model_name] = _Loaded(model=model)
-    return model
-
-
-def _loaded_snapshot() -> tuple[_Loaded, ...]:
-    with _loaded_lock:
-        return tuple(_loaded.values())
-
-
-def _keep_alive(*, model_name: str, seconds: float) -> None:
-    # On _worker. A timer submits the unload back to _worker, which skips it if a
-    # later request replaced the timer.
-    loaded: Optional[_Loaded] = _loaded.get(model_name)
-    if loaded is None:  # it failed to load, or it isn't loaded
-        return
-    if loaded.timer is not None:
-        loaded.timer.cancel()
-        loaded.timer = None
-    if seconds < 0:
-        loaded.expires_at = None
-        return
-    if seconds == 0:
-        _unload(model_name=model_name)
-        return
-    loaded.expires_at = time.time() + seconds
-    timer = threading.Timer(
-        seconds,
-        lambda: _worker.submit(_unload_if_current, model_name=model_name, timer=timer),
-    )
-    timer.daemon = True
-    timer.start()
-    loaded.timer = timer
-
-
-def _unload_if_current(*, model_name: str, timer: threading.Timer) -> None:
-    loaded: Optional[_Loaded] = _loaded.get(model_name)
-    if loaded is not None and loaded.timer is timer:
-        _unload(model_name=model_name)
-
-
-def _unload(*, model_name: str) -> None:
-    with _loaded_lock:
-        loaded: _Loaded = _loaded.pop(model_name)
-    if loaded.timer is not None:
-        loaded.timer.cancel()
-    for key in [key for key in _embeddings if key[0] == model_name]:
-        del _embeddings[key]
 
 
 async def _run(*, call: Callable[[], Any]) -> Any:
