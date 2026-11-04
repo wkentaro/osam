@@ -27,7 +27,7 @@ from . import _registry
 from . import _runtime as _runtime_module
 from . import _types as types
 from ._requests import DEFAULT_KEEP_ALIVE
-from ._requests import KeepAlive
+from ._requests import LoadRequest
 from ._requests import SegmentRequest
 from ._requests import SegmentResponse
 
@@ -104,11 +104,6 @@ app.add_exception_handler(
 )
 
 
-class LoadRequest(pydantic.BaseModel):
-    model: str
-    keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
-
-
 class LegacyGenerateRequest(types.GenerateRequest):
     # osam 0.10's /api/generate request, with no ndarray in its JSON schema.
     image_embedding: Optional[Any] = pydantic.Field(
@@ -164,8 +159,7 @@ async def pull(request: PullRequest) -> fastapi.responses.StreamingResponse:
     lines: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
     cancel = threading.Event()
 
-    def progress(filename: str, completed: int, total: Optional[int]) -> None:
-        line = {"status": f"pulling {filename}", "completed": completed, "total": total}
+    def progress(line: dict[str, Any]) -> None:
         loop.call_soon_threadsafe(lines.put_nowait, line)
 
     def work() -> None:
@@ -212,12 +206,8 @@ async def segment(request: SegmentRequest) -> SegmentResponse:
 
 @app.post("/api/load")
 async def load(request: LoadRequest) -> None:
-    model_type: type[types.Model] = _get_model_type(name=request.model)
-    await _run(
-        call=functools.partial(
-            _runtime.load, model=model_type.name, keep_alive=request.keep_alive
-        )
-    )
+    _get_model_type(name=request.model)
+    await _run(call=functools.partial(_runtime.load, request=request))
 
 
 @app.post("/api/generate", deprecated=True)

@@ -7,6 +7,7 @@ import threading
 import time
 import typing
 from collections.abc import Callable
+from typing import Any
 from typing import Final
 from typing import Optional
 
@@ -16,6 +17,7 @@ from loguru import logger
 from . import _json
 from . import _registry
 from . import _types as types
+from ._requests import LoadRequest
 from ._requests import SegmentRequest
 from ._requests import SegmentResponse
 
@@ -91,27 +93,33 @@ class Runtime:
         self,
         *,
         model: str,
-        progress: Optional[Callable[[str, int, Optional[int]], None]] = None,
+        progress: Optional[Callable[[dict[str, Any]], None]] = None,
         cancel: Optional[threading.Event] = None,
     ) -> None:
-        # progress(filename, completed, total) for each chunk; cancel stops it.
+        # progress gets a line for each chunk, as /api/pull streams them; cancel
+        # stops the download.
         model_type: type[types.Model] = _registry.get_model_type_by_name(name=model)
+
+        def report(filename: str, completed: int, total: Optional[int]) -> None:
+            line = {"status": f"pulling {filename}", "completed": completed}
+            typing.cast(Callable, progress)(line | {"total": total})
+
         with self._lock:
-            model_type.pull(progress=progress, cancel=cancel)
+            model_type.pull(progress=report if progress else None, cancel=cancel)
 
     def remove(self, *, model: str) -> None:
         model_type: type[types.Model] = _registry.get_model_type_by_name(name=model)
         with self._lock:
             model_type.remove()
 
-    def load(self, *, model: str, keep_alive: float) -> None:
-        # Loads model, pulling it if needed, and keeps it loaded for keep_alive
-        # seconds; negative keeps it loaded, 0 unloads it, as in Ollama.
-        name: str = _registry.get_model_type_by_name(name=model).name
+    def load(self, *, request: LoadRequest) -> None:
+        # Loads the model, pulling it if needed, and keeps it loaded for
+        # keep_alive seconds; negative keeps it loaded, 0 unloads it, as in Ollama.
+        name: str = _registry.get_model_type_by_name(name=request.model).name
         with self._lock:
-            if keep_alive != 0:
+            if request.keep_alive != 0:
                 self._load(model_name=name)
-            self._keep_alive(model_name=name, seconds=keep_alive)
+            self._keep_alive(model_name=name, seconds=request.keep_alive)
 
     def segment(self, *, request: SegmentRequest) -> SegmentResponse:
         # Raises UnknownImageError for an image_hash it has no embedding for,

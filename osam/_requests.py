@@ -57,6 +57,11 @@ Box = tuple[float, float, float, float]
 PointLabel = typing.Literal[0, 1]
 
 
+class LoadRequest(pydantic.BaseModel):
+    model: str
+    keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
+
+
 class SegmentRequest(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
