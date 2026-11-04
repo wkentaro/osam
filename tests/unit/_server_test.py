@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from osam import _json
+from osam import _requests
 from osam import _server
 from osam import _types as types
 
@@ -235,7 +236,7 @@ def test_version() -> None:
     [(300, 300), ("10", 10), ("5m", 300), ("1h30m", 5400), ("-1s", -1)],
 )
 def test_parse_duration(value, seconds) -> None:
-    assert _server._parse_duration(value) == seconds
+    assert _requests._parse_duration(value) == seconds
 
 
 def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -370,7 +371,7 @@ def test_cpu_fallback_next_to_a_gpu_model_retries(
 
 
 def _to_prompt(**fields) -> typing.Any:
-    request = _server.SegmentRequest(model="sam3", image_hash="0", **fields)
+    request = _requests.SegmentRequest(model="sam3", image_hash="0", **fields)
     sam3 = _server._apis.get_model_type_by_name(name="sam3")
     return request.to_prompt(model_type=sam3, height=10, width=20)
 
