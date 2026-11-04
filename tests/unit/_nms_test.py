@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+import osam
 from osam import _nms
 from osam import types
 
@@ -23,7 +24,7 @@ def test_non_maximum_suppression_runs_without_downloading(
         [[0.9, 0.1], [0.8, 0.2], [0.3, 0.7], [0.2, 0.6]], dtype=np.float32
     )
 
-    kept_boxes, kept_scores, labels, indices = _nms.non_maximum_suppression(
+    kept_boxes, kept_scores, labels, indices = osam.non_maximum_suppression(
         boxes=boxes,
         scores=scores,
         iou_threshold=0.5,

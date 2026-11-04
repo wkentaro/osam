@@ -275,6 +275,12 @@ annotation's `mask` covers its `bounding_box`, and is `None` from YOLO-World.
 `client.load(model, keep_alive=-1)` loads a model ahead of time, and
 `keep_alive=0` unloads it.
 
+`osam.segment(model, image, ...)` takes the same arguments as `client.segment`
+but runs the model in your own process, with no server. It keeps the model
+loaded until a call asks for another one, and further prompts on the same image
+skip the image encoder. `osam.non_maximum_suppression` keeps the best of
+overlapping boxes, given as (N, 4) boxes and (N, C) per-class scores, on CPU.
+
 `osam.Client()` starts a server process of its own and stops it on `close()` or
 when your program exits, so each program keeps its model and image embeddings
 loaded between calls. Further prompts on the same image skip the image encoder.

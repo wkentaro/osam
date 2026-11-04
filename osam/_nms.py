@@ -28,6 +28,13 @@ def non_maximum_suppression(
 ) -> tuple[
     NDArray[np.floating], NDArray[np.floating], NDArray[np.int64], NDArray[np.int64]
 ]:
+    """Keep the best of the overlapping boxes, per class, on CPU.
+
+    boxes (N, 4) as xmin, ymin, xmax, ymax; scores (N, C), a score per class.
+    A box can be kept for more than one class. Return the kept boxes, their
+    scores, their classes and their indices into boxes, at most
+    max_num_detections of them.
+    """
     global _non_maximum_suppression_inference_session
     if _non_maximum_suppression_inference_session is None:
         _non_maximum_suppression_inference_session = onnxruntime.InferenceSession(

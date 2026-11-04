@@ -24,6 +24,7 @@ from numpy.typing import ArrayLike
 
 from . import __version__
 from . import _json
+from . import _requests
 from . import types
 
 
@@ -228,12 +229,9 @@ class Client:
             "max_annotations": max_annotations,
             "keep_alive": keep_alive,
         }
-        # tolist turns arrays, and the numbers in them, into JSON types.
-        body: dict[str, Any] = {"model": model} | {
-            name: np.asarray(value).tolist()
-            for name, value in prompt.items()
-            if value is not None
-        }
+        body: dict[str, Any] = {"model": model} | _requests.to_json_fields(
+            fields=prompt
+        )
 
         def post(**image_fields: str) -> builtins.list[types.Annotation]:
             response: dict[str, Any] = self._request(

@@ -5,6 +5,7 @@ import imgviz
 import numpy as np
 import pytest
 
+import osam
 from osam import _apis
 from osam import _types as types
 
@@ -338,3 +339,30 @@ def test_generate_point_with_text_rejected_by_sam3(
     )
     with pytest.raises(ValueError, match="can't be combined with text"):
         _apis.generate(request=request)
+
+
+def test_segment_runs_in_this_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    image = imgviz.io.imread(image_path)
+    (annotation,) = osam.segment(
+        "efficientsam:10m", image, points=np.array([[1280, 800]]), point_labels=[1]
+    )
+    assert annotation.mask is not None and annotation.mask.any()
+
+    # Another prompt on the same image reuses its embedding.
+    def no_encoding(**kwargs):
+        raise AssertionError("encoded the image again")
+
+    monkeypatch.setattr(_apis.running_model, "_encode_image", no_encoding)
+    (other,) = osam.segment(
+        "efficientsam:10m", image, box=[1233, 376, 1649, 691], max_annotations=1
+    )
+    assert other.mask is not None and other.mask.any()
+
+    prompts: list[dict] = [
+        {"points": [[1280, 800]], "point_labels": [1], "texts": ["dog"]},
+        {"points": [[1280, 800]]},
+        {"texts": ["dog"]},
+    ]
+    for prompt in prompts:
+        with pytest.raises(ValueError):
+            osam.segment("efficientsam:10m", image, **prompt)
