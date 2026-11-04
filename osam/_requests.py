@@ -43,6 +43,8 @@ Duration = typing.Annotated[
 ]
 
 
+# Five minutes, as in Ollama.
+DEFAULT_KEEP_ALIVE: Final = 300
 KeepAlive = typing.Annotated[
     Duration,
     pydantic.Field(
@@ -90,7 +92,7 @@ class SegmentRequest(pydantic.BaseModel):
     iou_threshold: Optional[float] = None
     score_threshold: Optional[float] = None
     max_annotations: Optional[int] = pydantic.Field(default=None, ge=0)
-    keep_alive: KeepAlive = 300
+    keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
 
     @pydantic.field_validator("image", mode="before")
     @classmethod
