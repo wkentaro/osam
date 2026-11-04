@@ -70,6 +70,8 @@ class SamBase(types.Model):
             prompt = request.prompt
         del request
 
+        if prompt.texts is not None:
+            raise ValueError(f"{self.name} takes points and a box, not texts")
         if prompt.points is None or prompt.point_labels is None:
             raise ValueError(f"Prompt must contain points and point_labels: {prompt!r}")
         if np.isin(prompt.point_labels, [4, 5]).any():

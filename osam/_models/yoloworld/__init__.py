@@ -46,6 +46,8 @@ class _YoloWorld(types.Model):
 
         if prompt.texts is None:
             raise ValueError(f"prompt.texts is required: prompt={prompt!r}")
+        if prompt.points is not None:
+            raise ValueError(f"{self.name} takes texts only, not points or boxes")
         token = clip.tokenize(texts=prompt.texts + [" "])
         outputs = self._inference_sessions["textual"].run(None, {"input": token})
         text_features: NDArray[np.float32] = cast(NDArray[np.float32], outputs[0])

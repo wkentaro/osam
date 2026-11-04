@@ -267,6 +267,20 @@ def test_generate_negative_box_rejected_by_sam2() -> None:
         _apis.generate(request=request)
 
 
+def test_generate_box_rejected_by_yoloworld() -> None:
+    request: types.GenerateRequest = types.GenerateRequest(
+        model="yoloworld",
+        image=imgviz.io.imread(image_path),
+        prompt=types.Prompt(
+            texts=["visual"],
+            points=np.array([[450, 551], [1059, 1421]]),
+            point_labels=np.array([2, 3]),
+        ),
+    )
+    with pytest.raises(ValueError, match="takes texts only"):
+        _apis.generate(request=request)
+
+
 def test_generate_point_to_mask_sam3(
     sam3_text_response: types.GenerateResponse,
 ) -> None:
