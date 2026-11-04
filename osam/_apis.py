@@ -2,7 +2,7 @@ from typing import Optional
 from typing import Type
 
 from . import _models
-from . import types
+from . import _types as types
 
 running_model: Optional[types.Model] = None
 # The device running_model was asked for; None for automatic selection.

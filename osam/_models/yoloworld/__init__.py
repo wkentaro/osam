@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 from typing_extensions import override
 
 from ... import _nms
-from ... import types
+from ... import _types as types
 from . import clip
 
 __all__ = [
@@ -27,11 +27,11 @@ class _YoloWorld(types.Model):
 
     @classmethod
     @override
-    def default_prompt(cls, height: int, width: int) -> types.Prompt:
+    def default_prompt(cls, *, height: int, width: int) -> types.Prompt:
         return types.Prompt(texts=["anything"])
 
     @override
-    def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
+    def generate(self, *, request: types.GenerateRequest) -> types.GenerateResponse:
         if request.image is None:
             raise ValueError(f"request.image is required: request={request!r}")
         if request.prompt is None:
@@ -46,6 +46,8 @@ class _YoloWorld(types.Model):
 
         if prompt.texts is None:
             raise ValueError(f"prompt.texts is required: prompt={prompt!r}")
+        if prompt.points is not None:
+            raise ValueError(f"{self.name} takes texts only, not points or boxes")
         token = clip.tokenize(texts=prompt.texts + [" "])
         outputs = self._inference_sessions["textual"].run(None, {"input": token})
         text_features: NDArray[np.float32] = cast(NDArray[np.float32], outputs[0])
@@ -156,7 +158,7 @@ def _untransform_bboxes(
 ) -> np.ndarray:
     bboxes -= np.array([padding_hw[1] // 2, padding_hw[0] // 2] * 2)
     bboxes /= input_size / max(original_image_hw)
-    bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, original_image_hw[1])
-    bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, original_image_hw[0])
+    bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, original_image_hw[1] - 1)
+    bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, original_image_hw[0] - 1)
     bboxes = bboxes.round().astype(int)
     return bboxes

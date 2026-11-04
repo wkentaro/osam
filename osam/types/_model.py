@@ -184,7 +184,7 @@ class Model(abc.ABC):
 
     @property
     def device(self) -> str:
-        """Device the model runs on, e.g. "webgpu", or "cpu" after a fallback."""
+        # The device the model runs on, e.g. "webgpu", or "cpu" after a fallback.
         session = next(iter(self._inference_sessions.values()))
         provider: str = session.get_providers()[0]
         return {v: k for k, v in _DEVICE_PROVIDERS.items()}.get(provider, provider)
@@ -192,6 +192,7 @@ class Model(abc.ABC):
     @classmethod
     def pull(
         cls,
+        *,
         progress: Callable[[str, int, int | None], None] | None = None,
         cancel: threading.Event | None = None,
         timeout: float | tuple[float, float] | None = 30,
@@ -231,16 +232,16 @@ class Model(abc.ABC):
             modified_at = max(modified_at, blob_modified_at)
         return modified_at
 
-    def encode_image(self, image: np.ndarray) -> ImageEmbedding:
+    def encode_image(self, *, image: np.ndarray) -> ImageEmbedding:
         raise NotImplementedError
 
     @classmethod
-    def default_prompt(cls, height: int, width: int) -> Prompt:
-        """Return the prompt used when a request gives none."""
+    def default_prompt(cls, *, height: int, width: int) -> Prompt:
+        # The prompt used when a request gives none.
         raise NotImplementedError
 
     @abc.abstractmethod
-    def generate(self, request: GenerateRequest) -> GenerateResponse:
+    def generate(self, *, request: GenerateRequest) -> GenerateResponse:
         pass
 
 

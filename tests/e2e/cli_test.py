@@ -101,12 +101,52 @@ def test_run_prompt_file_missing_rejected(tmp_path: pathlib.Path):
 
 def test_run_invalid_prompt_rejected_before_loading_model():
     result = subprocess.run(
-        ["osam", "run", "sam3", "--image", str(image_path), "--prompt", "{}"],
+        ["osam", "run", "sam3", "--image", str(image_path)]
+        + ["--prompt", '{"points": [[1, 1]]}'],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 1
     assert "Initialized inference sessions" not in result.stderr
+
+
+def test_run_threshold_flag_overrides_prompt():
+    cmd = ["osam", "run", "efficientsam:10m", "--image", str(image_path), "--json"]
+    prompt = '{"points": [[1439, 504]], "point_labels": [1], "score_threshold": 0.1}'
+    output = subprocess.check_output(
+        cmd + ["--prompt", prompt, "--score-threshold", "0.5"]
+    )
+    assert len(json.loads(output)["annotations"]) == 1
+
+
+def test_run_prompt_in_old_fields_rejected():
+    result = subprocess.run(
+        ["osam", "run", "efficientsam:10m", "--image", str(image_path)]
+        + ["--prompt", '{"points": [[1, 1], [2, 2]], "point_labels": [2, 3]}'],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1  # point_labels are 0 or 1; boxes go in "box"
+    result = subprocess.run(
+        ["osam", "run", "efficientsam:10m", "--image", str(image_path)]
+        + ["--prompt", '{"prompt": {"texts": ["dog"]}}'],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "keys among" in result.stderr
+
+
+def test_run_boxes_need_text():
+    cmd = ["osam", "run", "sam2:tiny", "--image", str(image_path)]
+    for flags, message in [
+        (["--box", "0,0,9,9", "--box", "1,1,8,8"], "give one --box"),
+        (["--negative-box", "0,0,9,9"], "--negative-box needs --text"),
+        (["--point", "1,1", "--text", "dog"], "--point can't be combined"),
+    ]:
+        result = subprocess.run(cmd + flags, capture_output=True, text=True)
+        assert result.returncode == 2, flags
+        assert message in result.stderr, flags
 
 
 def test_run_negative_max_annotations_rejected():

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from osam import _apis
-from osam import types
+from osam import _types as types
 
 image_path = (
     pathlib.Path(__file__).resolve().parents[2] / "examples" / "_images" / "dogs.jpg"
@@ -264,6 +264,20 @@ def test_generate_negative_box_rejected_by_sam2() -> None:
         ),
     )
     with pytest.raises(ValueError, match="does not support negative boxes"):
+        _apis.generate(request=request)
+
+
+def test_generate_box_rejected_by_yoloworld() -> None:
+    request: types.GenerateRequest = types.GenerateRequest(
+        model="yoloworld",
+        image=imgviz.io.imread(image_path),
+        prompt=types.Prompt(
+            texts=["visual"],
+            points=np.array([[450, 551], [1059, 1421]]),
+            point_labels=np.array([2, 3]),
+        ),
+    )
+    with pytest.raises(ValueError, match="takes texts only"):
         _apis.generate(request=request)
 
 

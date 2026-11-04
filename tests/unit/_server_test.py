@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from osam import _json
 from osam import _server
-from osam import types
+from osam import _types as types
 
 _IMAGE_B64: Final = base64.b64encode(
     (
@@ -48,7 +48,8 @@ def test_openapi_documents_every_route() -> None:
     response = TestClient(_server.app).get("/openapi.json")
     assert response.status_code == 200, response.text
     assert {
-        "/api/generate",
+        "/api/segment",
+        "/api/load",
         "/api/models",
         "/api/pull",
         "/api/models/{name}",
@@ -91,19 +92,20 @@ def test_pull_streams_progress(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.status_code == 404
 
 
-def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_segment_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     client = TestClient(_server.app)
-    response = client.post("/api/generate", json={"model": "missing"})
+    response = client.post(
+        "/api/segment", json={"model": "missing", "image": _TINY_IMAGE_B64}
+    )
     assert response.status_code == 404
     assert "not found" in response.json()["error"]
     truncated: str = base64.b64encode(base64.b64decode(_IMAGE_B64)[:1000]).decode()
     for body in [
         {"image": "eA=="},
         {"image": truncated},
-        {"annotations": [{"mask": "eA=="}]},
     ]:
         response = client.post(
-            "/api/generate", json={"model": "efficientsam:10m", **body}
+            "/api/segment", json={"model": "efficientsam:10m", **body}
         )
         assert response.status_code == 422, body
         assert "not an image file" in response.json()["error"]
@@ -115,13 +117,13 @@ def test_generate_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_server, "_DEVICE", "cpu")
     _patch_generate(monkeypatch=monkeypatch, generate=fail)
     response = TestClient(_server.app, raise_server_exceptions=False).post(
-        "/api/generate", json={"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
+        "/api/segment", json={"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
     )
     assert response.status_code == 500
     assert response.json() == {"error": "out of GPU memory"}
 
 
-def test_queued_generates_leave_the_thread_pool_free(
+def test_queued_segments_leave_the_thread_pool_free(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def blocked(self, request):
@@ -136,7 +138,7 @@ def test_queued_generates_leave_the_thread_pool_free(
             # More than the thread pool's 40 workers.
             body = {"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
             tasks = [
-                asyncio.create_task(client.post("/api/generate", json=body))
+                asyncio.create_task(client.post("/api/segment", json=body))
                 for _ in range(50)
             ]
             await asyncio.sleep(0.2)
@@ -156,7 +158,7 @@ def test_queued_generates_leave_the_thread_pool_free(
         asyncio.run(scenario())
 
 
-def test_generate_keeps_image_embedding_inside(
+def test_segment_keeps_image_embedding_inside(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     embedding = types.ImageEmbedding(
@@ -173,28 +175,18 @@ def test_generate_keeps_image_embedding_inside(
     client = TestClient(_server.app)
 
     response = client.post(
-        "/api/generate", json={"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
+        "/api/segment", json={"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
     )
     assert response.status_code == 200, response.text
-    assert response.json().keys() == {"model", "annotations", "image_hash"}
-
-    response = client.post(
-        "/api/generate",
-        json={
-            "model": "efficientsam:10m",
-            "image_embedding": embedding.model_dump(),
-        },
-    )
-    assert response.status_code == 422
-    assert "image_embedding" in response.json()["error"]
+    assert response.json().keys() == {"annotations", "image_hash"}
 
 
-def test_generate_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_segment_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
     _server._embeddings.clear()
     client = TestClient(_server.app)
     prompt = {"points": [[1280, 800]], "point_labels": [1]}
-    body = {"model": "efficientsam:10m", "image": _IMAGE_B64, "prompt": prompt}
-    first = client.post("/api/generate", json=body)
+    body = {"model": "efficientsam:10m", "image": _IMAGE_B64, **prompt}
+    first = client.post("/api/segment", json=body)
     assert first.status_code == 200, first.text
     assert first.json()["annotations"][0]["mask"]
 
@@ -203,7 +195,7 @@ def test_generate_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> No
 
     model = _server._loaded["efficientsam:10m"].model
     monkeypatch.setattr(type(model), "encode_image", fail)
-    second = client.post("/api/generate", json=body)
+    second = client.post("/api/segment", json=body)
     assert second.status_code == 200, second.text
     assert second.json()["annotations"] == first.json()["annotations"]
 
@@ -211,18 +203,15 @@ def test_generate_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> No
     image_hash = first.json()["image_hash"]
     assert second.json()["image_hash"] == image_hash
     by_hash = {**body, "image": None, "image_hash": image_hash}
-    third = client.post("/api/generate", json=by_hash)
+    third = client.post("/api/segment", json=by_hash)
     assert third.status_code == 200, third.text
     assert third.json()["annotations"] == first.json()["annotations"]
     assert third.json()["image_hash"] == image_hash
     monkeypatch.setattr(_server, "_load", fail)  # 412 without loading the model
-    missing = client.post("/api/generate", json={**by_hash, "image_hash": "0" * 64})
-    assert missing.status_code == 412
-    del by_hash["prompt"]  # not a request that only sets keep_alive
-    missing = client.post("/api/generate", json={**by_hash, "image_hash": "0" * 64})
+    missing = client.post("/api/segment", json={**by_hash, "image_hash": "0" * 64})
     assert missing.status_code == 412
     assert "send the image" in missing.json()["error"]
-    both = client.post("/api/generate", json={**body, "image_hash": image_hash})
+    both = client.post("/api/segment", json={**body, "image_hash": image_hash})
     assert both.status_code == 422
     assert "not both" in both.json()["error"]
 
@@ -253,14 +242,14 @@ def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     client = TestClient(_server.app)
     body = {"model": "efficientsam:10m", "image": _IMAGE_B64}
 
-    response = client.post("/api/generate", json={**body, "keep_alive": -1})
+    response = client.post("/api/segment", json={**body, "keep_alive": -1})
     assert response.status_code == 200, response.text
     (running,) = client.get("/api/ps").json()["models"]
     assert running["name"] == "efficientsam:10m"
     assert running["device"] in typing.get_args(types.Device)
     assert running["expires_at"] is None
 
-    response = client.post("/api/generate", json={**body, "keep_alive": "0.2s"})
+    response = client.post("/api/segment", json={**body, "keep_alive": "0.2s"})
     assert response.status_code == 200, response.text
     (running,) = client.get("/api/ps").json()["models"]
     assert running["expires_at"] > time.time()
@@ -270,27 +259,21 @@ def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     assert client.get("/api/ps").json() == {"models": []}
     assert not _server._embeddings
 
-    # A request with only a model sets its keep_alive, so 0 unloads it. It
-    # loads no model, and leaves another loaded model alone.
+    # /api/load loads a model and sets its keep_alive; 0 unloads it, and
+    # leaves another loaded model alone.
+    response = client.post("/api/load", json={"model": "efficientsam:10m"})
+    assert response.status_code == 200, response.text
+    (running,) = client.get("/api/ps").json()["models"]
+    assert running["expires_at"] > time.time()
     unload = {"model": "efficientsam:10m", "keep_alive": 0}
-    response = client.post("/api/generate", json={"model": "efficientsam:10m"})
-    assert response.json() == {
-        "model": "efficientsam:10m",
-        "annotations": [],
-        "image_hash": None,
-    }
-    assert client.get("/api/ps").json() == {"models": []}
-    client.post("/api/generate", json={**body, "keep_alive": -1})
-    assert client.post("/api/generate", json={**unload, "model": "sam2:tiny"}).json()
+    assert client.post("/api/load", json={**unload, "model": "sam2:tiny"}).is_success
     assert client.get("/api/ps").json()["models"]
-    assert client.post("/api/generate", json=unload).status_code == 200
+    assert client.post("/api/load", json=unload).is_success
     assert client.get("/api/ps").json() == {"models": []}
-    prompt = {"points": [[1, 1]], "point_labels": [1]}
-    response = client.post("/api/generate", json={**unload, "prompt": prompt})
-    assert response.status_code == 400
+    assert client.post("/api/load", json={"model": "missing"}).status_code == 404
 
     for keep_alive in ["1x", "inf", 1e20, None, []]:
-        response = client.post("/api/generate", json={**body, "keep_alive": keep_alive})
+        response = client.post("/api/segment", json={**body, "keep_alive": keep_alive})
         assert response.status_code == 422, keep_alive
 
 
@@ -298,27 +281,27 @@ def test_two_models_stay_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_server, "_MAX_LOADED_MODELS", 2)
     client = TestClient(_server.app)
 
-    def generate(model: str) -> None:
+    def segment(model: str) -> None:
         body = {"model": model, "image": _TINY_IMAGE_B64, "keep_alive": -1}
-        response = client.post("/api/generate", json=body)
+        response = client.post("/api/segment", json=body)
         assert response.status_code == 200, response.text
 
     def running() -> list[str]:
         return [model["name"] for model in client.get("/api/ps").json()["models"]]
 
-    generate("efficientsam:10m")
-    generate("sam2:tiny")
+    segment("efficientsam:10m")
+    segment("sam2:tiny")
     assert running() == ["sam2:tiny", "efficientsam:10m"]
     sam2 = _server._loaded["sam2:tiny"].model
-    generate("efficientsam:10m")
+    segment("efficientsam:10m")
     assert _server._loaded["sam2:tiny"].model is sam2  # not reloaded
     assert running() == ["efficientsam:10m", "sam2:tiny"]
 
     # A full server unloads the least recently used model and its embeddings.
-    client.post("/api/generate", json={"model": "sam2:tiny", "keep_alive": 0})
+    client.post("/api/load", json={"model": "sam2:tiny", "keep_alive": 0})
     assert [model for model, _ in _server._embeddings] == ["efficientsam:10m"]
     monkeypatch.setattr(_server, "_MAX_LOADED_MODELS", 1)
-    generate("sam2:tiny")
+    segment("sam2:tiny")
     assert running() == ["sam2:tiny"]
     assert [model for model, _ in _server._embeddings] == ["sam2:tiny"]
 
@@ -329,7 +312,7 @@ def test_failed_load_unloads_the_others_and_retries(
     monkeypatch.setattr(_server, "_MAX_LOADED_MODELS", 2)
     client = TestClient(_server.app)
     body = {"image": _TINY_IMAGE_B64, "keep_alive": -1}
-    response = client.post("/api/generate", json={**body, "model": "efficientsam:10m"})
+    response = client.post("/api/segment", json={**body, "model": "efficientsam:10m"})
     assert response.status_code == 200, response.text
     sam2 = _server._apis.get_model_type_by_name(name="sam2:tiny")
 
@@ -340,7 +323,7 @@ def test_failed_load_unloads_the_others_and_retries(
     with monkeypatch.context() as patch:
         patch.setattr(sam2, "pull", offline)
         response = TestClient(_server.app, raise_server_exceptions=False).post(
-            "/api/generate", json={**body, "model": "sam2:tiny"}
+            "/api/segment", json={**body, "model": "sam2:tiny"}
         )
     assert response.json() == {"error": "network is unreachable"}
     assert list(_server._loaded) == ["efficientsam:10m"]
@@ -359,7 +342,7 @@ def test_failed_load_unloads_the_others_and_retries(
         init(self, *args, **kwargs)
 
     monkeypatch.setattr(sam2, "__init__", out_of_memory_once)
-    response = client.post("/api/generate", json={**body, "model": "sam2:tiny"})
+    response = client.post("/api/segment", json={**body, "model": "sam2:tiny"})
     assert response.status_code == 200, response.text
     assert loaded_at_each_load == [["efficientsam:10m"], []]
     assert list(_server._loaded) == ["sam2:tiny"]
@@ -384,3 +367,51 @@ def test_cpu_fallback_next_to_a_gpu_model_retries(
     _server._load(model_name="sam2:tiny")  # lands on CPU next to "cuda"
     assert loads == [["efficientsam:10m"], []]
     assert list(_server._loaded) == ["sam2:tiny"]
+
+
+def _to_prompt(**fields) -> typing.Any:
+    request = _server.SegmentRequest(model="sam3", image_hash="0", **fields)
+    sam3 = _server._apis.get_model_type_by_name(name="sam3")
+    return request.to_prompt(model_type=sam3, height=10, width=20)
+
+
+def test_segment_request_builds_point_labels() -> None:
+    prompt = _to_prompt(points=[[1, 2]], point_labels=[0], box=[3, 4, 5, 6])
+    assert prompt.points.tolist() == [[1, 2], [3, 4], [5, 6]]
+    assert prompt.point_labels.tolist() == [0, 2, 3]
+    assert prompt.texts is None
+
+    prompt = _to_prompt(
+        texts=["dog"],
+        example_boxes=[[0, 0, 1, 1], [2, 2, 3, 3]],
+        example_box_labels=[1, 0],
+        score_threshold=0.01,
+    )
+    assert prompt.point_labels.tolist() == [2, 3, 4, 5]
+    assert (prompt.texts, prompt.score_threshold) == (["dog"], 0.01)
+
+    # Example boxes alone find every object like them.
+    prompt = _to_prompt(example_boxes=[[0, 0, 1, 1]])
+    assert (prompt.texts, prompt.point_labels.tolist()) == (["visual"], [2, 3])
+
+    assert _to_prompt() is None  # the model's default prompt
+    prompt = _to_prompt(max_annotations=1)  # the default prompt, with it
+    assert (prompt.texts, prompt.max_annotations) == (["visual"], 1)
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"points": [[1, 2]], "texts": ["dog"]},
+        {"box": [0, 0, 1, 1], "example_boxes": [[0, 0, 1, 1]]},
+        {"points": [[1, 2]]},
+        {"points": [[1, 2]], "point_labels": [1, 1]},
+        {"example_box_labels": [1]},
+        {"point_labels": [2], "points": [[1, 2]]},
+        {"box": [0, 0, 1]},
+    ],
+)
+def test_segment_request_rejects_invalid_prompts(fields: dict) -> None:
+    body = {"model": "sam3", "image_hash": "0", **fields}
+    response = TestClient(_server.app).post("/api/segment", json=body)
+    assert response.status_code == 422, response.text

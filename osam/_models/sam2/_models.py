@@ -4,7 +4,7 @@ import imgviz
 import numpy as np
 import numpy.typing as npt
 
-from osam import types
+from osam import _types as types
 from osam._models.sam import SamBase
 from osam._models.sam import get_input_size
 

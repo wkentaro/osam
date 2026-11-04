@@ -32,23 +32,31 @@ def client():
         yield client
 
 
-def test_private_server_generates(client: osam.Client) -> None:
+def test_private_server_segments(client: osam.Client) -> None:
     assert client.version() == osam.__version__
     assert "efficientsam:10m" in {model.name for model in client.list()}
 
-    response = client.generate(
-        "efficientsam:10m",
-        image=_IMAGE,
-        prompt=osam.types.Prompt(
-            points=np.array([[1280, 800]]), point_labels=np.array([1])
-        ),
+    (annotation,) = client.segment(
+        "efficientsam:10m", _IMAGE, points=np.array([[1280, 800]]), point_labels=[1]
     )
-    assert response.annotations[0].mask is not None
-    assert response.annotations[0].mask.any()
+    assert annotation.mask is not None
+    assert annotation.mask.any()
     assert [model.name for model in client.ps()] == ["efficientsam:10m"]
+    client.load("efficientsam:10m", keep_alive=0)
+    assert client.ps() == []
+
+    # Prompts the model doesn't take, as a local call would raise them.
+    prompts: list[dict[str, Any]] = [
+        {"points": [[1280, 800]], "point_labels": [1], "texts": ["dog"]},
+        {"example_boxes": [[0, 0, 9, 9]]},
+        {"texts": ["dog"]},
+    ]
+    for prompt in prompts:
+        with pytest.raises(ValueError):
+            client.segment("efficientsam:10m", _IMAGE, **prompt)
 
     with pytest.raises(osam.ResponseError) as e:
-        client.generate("missing")
+        client.segment("missing", _IMAGE)
     assert e.value.status_code == 404
     assert "not found" in str(e.value)
 
@@ -117,12 +125,9 @@ def test_private_server_ignores_osam_serve_settings(
 
 
 def test_private_server_keeps_max_loaded_models() -> None:
-    prompt = osam.types.Prompt(
-        points=np.array([[1280, 800]]), point_labels=np.array([1])
-    )
     with osam.Client(max_loaded_models=2) as client:
         for model in ["efficientsam:10m", "sam2:tiny"]:
-            client.generate(model, image=_IMAGE, prompt=prompt)
+            client.segment(model, _IMAGE, points=[[1280, 800]], point_labels=[1])
         assert [model.name for model in client.ps()] == [
             "sam2:tiny",
             "efficientsam:10m",
@@ -224,7 +229,7 @@ def _listening(*, port: int) -> bool:
     return True
 
 
-def test_generate_sends_a_repeated_image_by_hash(
+def test_segment_sends_a_repeated_image_by_hash(
     client: osam.Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     encoded: list[np.ndarray] = []
@@ -244,18 +249,18 @@ def test_generate_sends_a_repeated_image_by_hash(
     monkeypatch.setattr(client, "_request", recording)
     image = _IMAGE[::2, ::2].copy()  # not sent by an earlier test
     for _ in range(2):
-        client.generate("efficientsam:10m", image=image)
+        client.segment("efficientsam:10m", image)
     assert sent == [{"image"}, {"image_hash"}]
     assert len(encoded) == 1
 
     # Another model has no embedding of it yet, so the server asks for it.
     sent.clear()
-    client.generate("sam2:tiny", image=image)
+    client.segment("sam2:tiny", image)
     assert sent == [{"image_hash"}, {"image"}]
     assert len(encoded) == 1
 
     image[0, 0] += 1  # edited in place, so it is a new image
-    client.generate("efficientsam:10m", image=image)
+    client.segment("efficientsam:10m", image)
     assert len(encoded) == 2
 
 

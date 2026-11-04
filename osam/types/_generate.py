@@ -19,7 +19,6 @@ class GenerateRequest(pydantic.BaseModel):
     # Given in JSON as a base64-encoded image file, such as PNG or JPEG.
     image: Optional[Base64Image] = pydantic.Field(default=None)
     prompt: Optional[Prompt] = pydantic.Field(default=None)
-    annotations: Optional[list[Annotation]] = pydantic.Field(default=None)
 
     @pydantic.field_validator("image", mode="before")
     @classmethod

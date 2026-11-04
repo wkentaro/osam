@@ -20,22 +20,23 @@ from typing import Final
 from typing import Optional
 
 import fastapi
+import numpy as np
 import pydantic
 import starlette.exceptions
 import uvicorn
 from loguru import logger
-from pydantic.json_schema import SkipJsonSchema
 
 from . import __version__
 from . import _apis
 from . import _json
-from . import types
+from . import _types as types
+from .types._annotation import Base64Image
 
 # Loading and running models, and pull and remove, which must not change the
 # files under a model being loaded, all run on one thread, in order.
 # Queued requests wait here instead of holding FastAPI's thread pool, so other
 # routes stay free.
-# ponytail: one worker, so a long pull also delays generate.
+# ponytail: one worker, so a long pull also delays segment.
 _worker = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 # Used only on _worker.
 _embeddings: collections.OrderedDict[
@@ -152,37 +153,134 @@ Duration = typing.Annotated[
 ]
 
 
-# Image embeddings stay inside the server: clients send the image each time.
-class GenerateRequest(types.GenerateRequest):
-    image_embedding: SkipJsonSchema[None] = None
+KeepAlive = typing.Annotated[
+    Duration,
+    pydantic.Field(
+        description="How long the model stays loaded after this request, in "
+        'seconds or as a duration such as "5m"; negative keeps it loaded, 0 '
+        "unloads it now",
+    ),
+]
+Box = tuple[float, float, float, float]
+PointLabel = typing.Literal[0, 1]
+
+
+class SegmentRequest(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    model: str
+    image: Optional[Base64Image] = pydantic.Field(
+        default=None,
+        description="A base64-encoded image file, such as PNG or JPEG",
+    )
     image_hash: Optional[str] = pydantic.Field(
         default=None,
         description="In place of image, the hash of an image sent before, whose "
         "embedding the server may still have; 412 asks for the image itself",
     )
+    # One object: points with at most one box.
+    points: Optional[list[tuple[float, float]]] = pydantic.Field(
+        default=None, description="x, y in pixels"
+    )
+    point_labels: Optional[list[PointLabel]] = pydantic.Field(
+        default=None, description="1 for foreground, 0 for background"
+    )
+    box: Optional[Box] = pydantic.Field(
+        default=None, description="xmin, ymin, xmax, ymax in pixels"
+    )
+    # Every match: texts, example boxes, or both.
+    texts: Optional[list[str]] = None
+    example_boxes: Optional[list[Box]] = pydantic.Field(
+        default=None, description="xmin, ymin, xmax, ymax in pixels"
+    )
+    example_box_labels: Optional[list[PointLabel]] = pydantic.Field(
+        default=None,
+        description="1 for a positive example, 0 for a negative one; all 1 if unset",
+    )
+    iou_threshold: Optional[float] = None
+    score_threshold: Optional[float] = None
+    max_annotations: Optional[int] = pydantic.Field(default=None, ge=0)
+    keep_alive: KeepAlive = 300
+
+    @pydantic.field_validator("image", mode="before")
+    @classmethod
+    def _decode_image(cls, image: object) -> object:
+        if isinstance(image, str):
+            return _json.image_b64data_to_ndarray(b64data=image)
+        return image
 
     @pydantic.model_validator(mode="after")
-    def _image_or_hash(self) -> "GenerateRequest":
+    def _check(self) -> "SegmentRequest":
         if self.image is not None and self.image_hash is not None:
             raise ValueError("send image or image_hash, not both")
+        if self.image is None and self.image_hash is None:
+            raise ValueError("send image or image_hash")
+        if (self.points is None) != (self.point_labels is None) or len(
+            self.points or []
+        ) != len(self.point_labels or []):
+            raise ValueError("points and point_labels must have the same length")
+        if self.example_box_labels is not None and len(self.example_box_labels) != len(
+            self.example_boxes or []
+        ):
+            raise ValueError("example_box_labels must match example_boxes")
+        if (self.points is not None or self.box is not None) and (
+            self.texts is not None or self.example_boxes is not None
+        ):
+            raise ValueError(
+                "points and box segment one object, and texts and example_boxes "
+                "find every match; give one or the other"
+            )
         return self
 
-    keep_alive: Duration = pydantic.Field(
-        default=300,
-        description="How long the model stays loaded after this request, in "
-        'seconds or as a duration such as "5m"; negative keeps it loaded, 0 '
-        "unloads it now",
-    )
+    def to_prompt(
+        self, *, model_type: type[types.Model], height: int, width: int
+    ) -> Optional[types.Prompt]:
+        # The one place that builds the models' point labels: 2 and 3 for a
+        # box's corners, 4 and 5 for a negative box's.
+        thresholds: dict[str, Any] = self.model_dump(
+            include={"iou_threshold", "score_threshold", "max_annotations"},
+            exclude_none=True,
+        )
+        points: list[Sequence[float]] = list(self.points or [])
+        labels: list[int] = list(self.point_labels or [])
+        if self.box is not None:
+            points += [self.box[:2], self.box[2:]]
+            labels += [2, 3]
+        texts: Optional[list[str]] = self.texts
+        if self.example_boxes is not None:
+            for example, label in zip(
+                self.example_boxes,
+                self.example_box_labels or [1] * len(self.example_boxes),
+            ):
+                points += [example[:2], example[2:]]
+                labels += [2, 3] if label else [4, 5]
+            # SAM3's text for "every object like the boxes".
+            texts = texts or ["visual"]
+        if not points and texts is None:
+            if not thresholds:
+                return None  # the model's default prompt
+            return model_type.default_prompt(height=height, width=width).model_copy(
+                update=thresholds
+            )
+        return types.Prompt(
+            points=np.array(points, dtype=float) if points else None,
+            point_labels=np.array(labels, dtype=int) if labels else None,
+            texts=texts,
+            **thresholds,
+        )
 
 
-class GenerateResponse(pydantic.BaseModel):
-    model: str
+class SegmentResponse(pydantic.BaseModel):
     annotations: list[types.Annotation]
-    image_hash: Optional[str] = pydantic.Field(
-        default=None,
+    image_hash: str = pydantic.Field(
         description="Of the request's image, to send as image_hash with further "
         "prompts on it",
     )
+
+
+class LoadRequest(pydantic.BaseModel):
+    model: str
+    keep_alive: KeepAlive = 300
 
 
 class ModelList(pydantic.BaseModel):
@@ -284,92 +382,89 @@ async def remove(name: str) -> None:
     await _run(call=_get_model_type(name=name).remove)
 
 
-@app.post("/api/generate", response_model=GenerateResponse)
-async def generate(request: GenerateRequest) -> GenerateResponse:
-    model_name: str = _get_model_type(name=request.model).name
-    if (
-        request.image is None
-        and request.image_hash is None
-        and request.prompt is None
-        and not request.annotations
-    ):
-        return await _run(
-            call=functools.partial(
-                _keep_alive_only, request=request, model_name=model_name
-            )
-        )
+@app.post("/api/segment", response_model=SegmentResponse)
+async def segment(request: SegmentRequest) -> SegmentResponse:
+    model_type: type[types.Model] = _get_model_type(name=request.model)
     try:
         return await _run(
             call=functools.partial(
-                _generate_and_keep_alive, request=request, model_name=model_name
+                _segment_and_keep_alive, request=request, model_type=model_type
             )
         )
     except ValueError as e:
         raise fastapi.HTTPException(400, str(e))
 
 
-def _keep_alive_only(*, request: GenerateRequest, model_name: str) -> GenerateResponse:
-    # A request with only a model sets how long that model stays loaded, so
+@app.post("/api/load")
+async def load(request: LoadRequest) -> None:
+    # Loads the model, pulling it if needed, and sets how long it stays loaded;
     # keep_alive 0 unloads it, as in Ollama.
-    # ponytail: doesn't load an unloaded model; add preloading if a client needs it.
-    _keep_alive(model_name=model_name, seconds=request.keep_alive)
-    return GenerateResponse(model=request.model, annotations=[])
+    model_type: type[types.Model] = _get_model_type(name=request.model)
+
+    def work() -> None:
+        if request.keep_alive != 0:
+            _load(model_name=model_type.name)
+        _keep_alive(model_name=model_type.name, seconds=request.keep_alive)
+
+    await _run(call=work)
 
 
-def _generate_and_keep_alive(
-    *, request: GenerateRequest, model_name: str
-) -> GenerateResponse:
+def _segment_and_keep_alive(
+    *, request: SegmentRequest, model_type: type[types.Model]
+) -> SegmentResponse:
     try:
-        return _generate_with_cache(request=request, model_name=model_name)
+        return _segment_with_cache(request=request, model_type=model_type)
     finally:
-        _keep_alive(model_name=model_name, seconds=request.keep_alive)
+        _keep_alive(model_name=model_type.name, seconds=request.keep_alive)
 
 
-def _generate_with_cache(
-    *, request: GenerateRequest, model_name: str
-) -> GenerateResponse:
+def _segment_with_cache(
+    *, request: SegmentRequest, model_type: type[types.Model]
+) -> SegmentResponse:
     # Recent image embeddings, so several prompts on one image encode it once.
     # A SAM3 embedding takes about 100 MB.
     # ponytail: fixed size, make it configurable if memory or hit rate matters.
     EMBEDDING_CACHE_SIZE: Final = 4
 
-    image_hash: Optional[str] = (
-        request.image_hash
+    image_hash: str = (
+        typing.cast(str, request.image_hash)
         if request.image is None
         else _json.hash_image(image=request.image)
     )
-    key: tuple[str, str] = (model_name, image_hash or "")
-    if request.image_hash is not None and key not in _embeddings:
-        # Before loading the model, which the client's retry with the image
-        # would otherwise load a second time after keep_alive 0 unloads it.
-        raise fastapi.HTTPException(
-            412, f"no embedding for image {image_hash}; send the image"
-        )
-    model: types.Model = _load(model_name=model_name)
-    if image_hash is None:  # a prompt without an image, which the model rejects
-        return GenerateResponse(
-            model=request.model, annotations=model.generate(request=request).annotations
-        )
-    response: types.GenerateResponse
-    if key in _embeddings:
-        _embeddings.move_to_end(key)
-        response = model.generate(
+    key: tuple[str, str] = (model_type.name, image_hash)
+    embedding: Optional[types.ImageEmbedding] = _embeddings.get(key)
+    if request.image is None:
+        if embedding is None:
+            # Before loading the model, which the client's retry with the image
+            # would otherwise load a second time after keep_alive 0 unloads it.
+            raise fastapi.HTTPException(
+                412, f"no embedding for image {image_hash}; send the image"
+            )
+        height, width = embedding.original_height, embedding.original_width
+    else:
+        height, width = request.image.shape[:2]
+    prompt: Optional[types.Prompt] = request.to_prompt(
+        model_type=model_type, height=height, width=width
+    )
+    model: types.Model = _load(model_name=model_type.name)
+    if embedding is None:
+        response: types.GenerateResponse = model.generate(
             request=types.GenerateRequest(
-                model=request.model,
-                image_embedding=_embeddings[key],
-                prompt=request.prompt,
-                annotations=request.annotations,
+                model=model.name, image=request.image, prompt=prompt
             )
         )
-    else:
-        response = model.generate(request=request)
         if response.image_embedding is not None:
             _embeddings[key] = response.image_embedding
             while len(_embeddings) > EMBEDDING_CACHE_SIZE:
                 _embeddings.popitem(last=False)
-    return GenerateResponse(
-        model=response.model, annotations=response.annotations, image_hash=image_hash
-    )
+    else:
+        _embeddings.move_to_end(key)
+        response = model.generate(
+            request=types.GenerateRequest(
+                model=model.name, image_embedding=embedding, prompt=prompt
+            )
+        )
+    return SegmentResponse(annotations=response.annotations, image_hash=image_hash)
 
 
 def _load(*, model_name: str) -> types.Model:
