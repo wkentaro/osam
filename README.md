@@ -274,6 +274,8 @@ example box 0 to exclude what it covers. Coordinates are in pixels. Each
 annotation's `mask` covers its `bounding_box`, and is `None` from YOLO-World.
 `client.load(model, keep_alive=-1)` loads a model ahead of time, and
 `keep_alive=0` unloads it.
+`osam.non_maximum_suppression` keeps the best of overlapping boxes, given as
+(N, 4) boxes and (N, C) per-class scores, on CPU.
 
 `osam.Client()` starts a server process of its own and stops it on `close()` or
 when your program exits, so each program keeps its model and image embeddings
