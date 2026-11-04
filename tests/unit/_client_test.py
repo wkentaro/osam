@@ -73,6 +73,19 @@ def test_private_server_segments(client: osam.Client) -> None:
     assert "not found" in str(e.value)
 
 
+def test_invalid_arguments_raise_before_a_request(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unexpected(**kwargs: Any) -> Any:
+        raise AssertionError("sent a request")
+
+    monkeypatch.setattr(_backend(client), "_request", unexpected)
+    with pytest.raises(ValueError, match="same length"):
+        client.segment("efficientsam:10m", _IMAGE, points=[[1, 2]], point_labels=[])
+    with pytest.raises(ValueError, match="duration"):
+        client.load("efficientsam:10m", keep_alive="soon")
+
+
 def test_private_server_needs_its_token(client: osam.Client) -> None:
     connection = _http.http.client.HTTPConnection(*_backend(client)._endpoint[:2])
     connection.request("GET", "/api/version")
