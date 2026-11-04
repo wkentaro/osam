@@ -116,3 +116,53 @@ def test_generate_segments_one_object_from_points_and_one_box(
     )
 
     assert calls == [point_labels]
+
+
+def test_generate_finds_objects_for_each_text() -> None:
+    language_encoder = pytypes.SimpleNamespace(
+        run=lambda *_: [
+            np.ones((1, 32), bool),
+            np.zeros((32, 1, 8), np.float32),
+            np.zeros((1, 8), np.float32),  # the real encoder has more outputs
+        ]
+    )
+    # The first run, for "car", finds two objects; the second, for "dog", one.
+    runs = iter([[0.9, 0.2], [0.5]])
+
+    def run(*_):
+        scores = np.array(next(runs), np.float32)
+        return [
+            np.tile(np.array([[0.1, 0.1, 0.5, 0.5]], np.float32), (len(scores), 1)),
+            scores,
+            np.ones((len(scores), 1, 8, 8), np.float32),
+        ]
+
+    decoder = pytypes.SimpleNamespace(
+        get_inputs=lambda: [pytypes.SimpleNamespace(name="box_coords", shape=[1])],
+        run=run,
+    )
+    model = Sam3.__new__(Sam3)
+    model._inference_sessions = {
+        "language_encoder": language_encoder,
+        "decoder": decoder,
+    }
+    embedding = types.ImageEmbedding(
+        original_height=100,
+        original_width=100,
+        embedding=np.zeros((1, 1, 1), np.float32),
+        extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
+    )
+
+    response = model.generate(
+        types.GenerateRequest(
+            model="sam3",
+            image_embedding=embedding,
+            prompt=types.Prompt(texts=["car", "dog"], max_annotations=2),
+        )
+    )
+
+    # The cap applies across texts, keeping the highest scores.
+    assert [(a.text, a.score) for a in response.annotations] == [
+        ("car", pytest.approx(0.9)),
+        ("dog", pytest.approx(0.5)),
+    ]

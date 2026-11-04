@@ -159,21 +159,6 @@ class Sam3(types.Model):
                     max_annotations=prompt.max_annotations,
                 )
 
-        text_prompt: str = "visual"
-        if prompt.texts:
-            if len(prompt.texts) > 1:
-                logger.warning(
-                    "Only first text prompt is used, ignoring: {}", prompt.texts[1:]
-                )
-            text_prompt = prompt.texts[0]
-
-        tokens: NDArray[np.int64] = tokenize(texts=[text_prompt], context_length=32)
-        outputs = self._inference_sessions["language_encoder"].run(
-            None, {"tokens": tokens}
-        )
-        language_mask: NDArray[np.bool_] = cast(NDArray[np.bool_], outputs[0])
-        language_features: NDArray[np.float32] = cast(NDArray[np.float32], outputs[1])
-
         # The decoder takes a fixed number of boxes, and masks out the unused ones.
         (box_input,) = [
             i
@@ -210,26 +195,37 @@ class Sam3(types.Model):
             box_labels[:num_boxes, 0] = [pair == [2, 3] for pair in pairs]
             box_masks[0, :num_boxes] = False
 
-        outputs = self._inference_sessions["decoder"].run(
-            None,
-            {
-                "backbone_fpn_0": backbone_fpn_0,
-                "backbone_fpn_1": backbone_fpn_1,
-                "backbone_fpn_2": backbone_fpn_2,
-                "vision_pos_enc_2": vision_pos_enc_2,
-                "language_mask": language_mask,
-                "language_features": language_features,
-                "box_coords": box_coords,
-                "box_labels": box_labels,
-                "box_masks": box_masks,
-            },
-        )
+        # One decoder run per text, joined so max_annotations caps them all, as
+        # for YOLO-World.
+        texts: list[str] = prompt.texts or ["visual"]
+        runs: list[list[NDArray[np.float32]]] = []
+        for text in texts:
+            tokens: NDArray[np.int64] = tokenize(texts=[text], context_length=32)
+            outputs = self._inference_sessions["language_encoder"].run(
+                None, {"tokens": tokens}
+            )
+            outputs = self._inference_sessions["decoder"].run(
+                None,
+                {
+                    "backbone_fpn_0": backbone_fpn_0,
+                    "backbone_fpn_1": backbone_fpn_1,
+                    "backbone_fpn_2": backbone_fpn_2,
+                    "vision_pos_enc_2": vision_pos_enc_2,
+                    "language_mask": outputs[0],
+                    "language_features": outputs[1],
+                    "box_coords": box_coords,
+                    "box_labels": box_labels,
+                    "box_masks": box_masks,
+                },
+            )
+            runs.append(cast(list[NDArray[np.float32]], outputs))
         # Boxes of objects cut off by the image edge can extend past it.
         boxes_norm: NDArray[np.float32] = np.clip(
-            cast(NDArray[np.float32], outputs[0]), 0, 1
+            np.concatenate([run[0] for run in runs]), 0, 1
         )
-        scores: NDArray[np.float32] = cast(NDArray[np.float32], outputs[1])
-        masks_native: NDArray[np.float32] = cast(NDArray[np.float32], outputs[2])
+        scores: NDArray[np.float32] = np.concatenate([run[1] for run in runs])
+        masks_native: NDArray[np.float32] = np.concatenate([run[2] for run in runs])
+        row_texts: list[str] = [text for text, run in zip(texts, runs) for _ in run[1]]
         mask_h, mask_w = masks_native.shape[2], masks_native.shape[3]
 
         # Scale normalized boxes to inclusive pixel coordinates in the image
@@ -246,7 +242,7 @@ class Sam3(types.Model):
             [mask_w, mask_h, mask_w, mask_h], dtype=np.float32
         )
 
-        # Keep the highest-scoring annotations, in the decoder's order.
+        # Keep the highest-scoring annotations, in text then decoder order.
         keep = np.sort(np.argsort(-scores, kind="stable")[: prompt.max_annotations])
         annotations: list[types.Annotation] = []
         for i in keep:
@@ -277,7 +273,7 @@ class Sam3(types.Model):
                 types.Annotation(
                     mask=cropped_mask,
                     bounding_box=bb,
-                    text=text_prompt,
+                    text=row_texts[i],
                     score=float(scores[i]),
                 )
             )
