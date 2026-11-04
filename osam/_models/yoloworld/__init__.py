@@ -158,7 +158,7 @@ def _untransform_bboxes(
 ) -> np.ndarray:
     bboxes -= np.array([padding_hw[1] // 2, padding_hw[0] // 2] * 2)
     bboxes /= input_size / max(original_image_hw)
-    bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, original_image_hw[1])
-    bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, original_image_hw[0])
+    bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, original_image_hw[1] - 1)
+    bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, original_image_hw[0] - 1)
     bboxes = bboxes.round().astype(int)
     return bboxes
