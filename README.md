@@ -281,6 +281,8 @@ A frozen application, such as a PyInstaller bundle, must call
 same minor version of osam. Errors from the server raise `osam.ResponseError`.
 `timeout=600` raises `TimeoutError` when a response takes longer, and restarts
 a private server, so a hung model stops.
+`client.pull(model, progress=...)` calls `progress` with each line; raising
+from it, such as when the user cancels, stops the download.
 
 ### HTTP
 
