@@ -3,7 +3,7 @@ import types as pytypes
 import numpy as np
 import pytest
 
-from osam import types
+from osam import _types as types
 from osam._models.sam3._models import Sam3
 
 
@@ -43,7 +43,7 @@ def test_generate_keeps_mask_of_box_past_image_edge(
     )
 
     response = model.generate(
-        types.GenerateRequest(
+        request=types.GenerateRequest(
             model="sam3",
             image_embedding=embedding,
             prompt=types.Prompt(texts=["car"]),
@@ -74,7 +74,7 @@ def test_generate_rejects_boxes_without_text_beyond_one_box(
 
     with pytest.raises(ValueError, match=r"texts=\['visual'\]"):
         model.generate(
-            types.GenerateRequest(
+            request=types.GenerateRequest(
                 model="sam3",
                 image_embedding=embedding,
                 prompt=types.Prompt(
@@ -105,7 +105,7 @@ def test_generate_segments_one_object_from_points_and_one_box(
     )
 
     model.generate(
-        types.GenerateRequest(
+        request=types.GenerateRequest(
             model="sam3",
             image_embedding=embedding,
             prompt=types.Prompt(
@@ -154,7 +154,7 @@ def test_generate_finds_objects_for_each_text() -> None:
     )
 
     response = model.generate(
-        types.GenerateRequest(
+        request=types.GenerateRequest(
             model="sam3",
             image_embedding=embedding,
             prompt=types.Prompt(texts=["car", "dog"], max_annotations=2),

@@ -7,7 +7,7 @@ from loguru import logger
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from osam import types
+from osam import _types as types
 
 from ..yoloworld.clip import tokenize
 
@@ -43,7 +43,7 @@ class Sam3(types.Model):
     }
 
     @override
-    def encode_image(self, image: NDArray[np.uint8]) -> types.ImageEmbedding:
+    def encode_image(self, *, image: NDArray[np.uint8]) -> types.ImageEmbedding:
         logger.debug("Encoding image with shape: {}", image.shape)
         original_height: int = image.shape[0]
         original_width: int = image.shape[1]
@@ -92,11 +92,11 @@ class Sam3(types.Model):
 
     @classmethod
     @override
-    def default_prompt(cls, height: int, width: int) -> types.Prompt:
+    def default_prompt(cls, *, height: int, width: int) -> types.Prompt:
         return types.Prompt(texts=["visual"])
 
     @override
-    def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
+    def generate(self, *, request: types.GenerateRequest) -> types.GenerateResponse:
         image_embedding: types.ImageEmbedding
         if request.image_embedding is not None:
             image_embedding = request.image_embedding

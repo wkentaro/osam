@@ -29,7 +29,7 @@ from loguru import logger
 from . import __version__
 from . import _apis
 from . import _json
-from . import types
+from . import _types as types
 from .types._annotation import Base64Image
 
 # Loading and running models, and pull and remove, which must not change the

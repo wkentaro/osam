@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from osam import _apis
-from osam import types
+from osam import _types as types
 
 image_path = (
     pathlib.Path(__file__).resolve().parents[2] / "examples" / "_images" / "dogs.jpg"

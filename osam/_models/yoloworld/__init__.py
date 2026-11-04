@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 from typing_extensions import override
 
 from ... import _nms
-from ... import types
+from ... import _types as types
 from . import clip
 
 __all__ = [
@@ -27,11 +27,11 @@ class _YoloWorld(types.Model):
 
     @classmethod
     @override
-    def default_prompt(cls, height: int, width: int) -> types.Prompt:
+    def default_prompt(cls, *, height: int, width: int) -> types.Prompt:
         return types.Prompt(texts=["anything"])
 
     @override
-    def generate(self, request: types.GenerateRequest) -> types.GenerateResponse:
+    def generate(self, *, request: types.GenerateRequest) -> types.GenerateResponse:
         if request.image is None:
             raise ValueError(f"request.image is required: request={request!r}")
         if request.prompt is None:

@@ -8,14 +8,14 @@ import PIL.Image
 from loguru import logger
 
 import osam._apis
-import osam.types
+import osam._types
 
 
 def benchmark(model: str, n_times: int):
-    request = osam.types.GenerateRequest(
+    request = osam._types.GenerateRequest(
         model=model,
         image=np.asarray(PIL.Image.open("../_images/dogs.jpg")),
-        prompt=osam.types.Prompt(
+        prompt=osam._types.Prompt(
             points=np.array([[1280, 800]]), point_labels=np.array([1])
         ),
     )

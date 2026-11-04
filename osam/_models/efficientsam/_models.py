@@ -3,7 +3,7 @@ from typing import cast
 import numpy as np
 import numpy.typing as npt
 
-from osam import types
+from osam import _types as types
 from osam._models.sam import SamBase
 
 

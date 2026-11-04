@@ -21,22 +21,23 @@ import PIL.Image
 
 import osam
 import osam._apis
+import osam._types
 
 IMAGE_PATH: Final = pathlib.Path(__file__).parent / "_images" / "dogs.jpg"
 
-PROMPTS: Final[dict[str, osam.types.Prompt]] = {
-    "point": osam.types.Prompt(
+PROMPTS: Final[dict[str, osam._types.Prompt]] = {
+    "point": osam._types.Prompt(
         points=np.array([[1439, 504]]), point_labels=np.array([1])
     ),
-    "box": osam.types.Prompt(
+    "box": osam._types.Prompt(
         points=np.array([[1233, 376], [1649, 691]]), point_labels=np.array([2, 3])
     ),
-    "negative box": osam.types.Prompt(
+    "negative box": osam._types.Prompt(
         points=np.array([[1233, 376], [1649, 691], [1400, 500], [1500, 600]]),
         point_labels=np.array([2, 3, 4, 5]),
         texts=["visual"],
     ),
-    "text": osam.types.Prompt(texts=["dog"]),
+    "text": osam._types.Prompt(texts=["dog"]),
 }
 
 
@@ -60,28 +61,31 @@ def _benchmark(
         return [model_name, device, "fails to load"] + [""] * len(PROMPTS)
 
     try:
-        embedding = model.encode_image(image)  # also the warm-up
-        encode_ms = _median_ms(fn=lambda: model.encode_image(image), repeat=repeat)
+        embedding = model.encode_image(image=image)  # also the warm-up
+        encode_ms = _median_ms(
+            fn=lambda: model.encode_image(image=image), repeat=repeat
+        )
     except NotImplementedError:
         encode_ms = None
         embedding = None
 
     row = [model.name, device, "-" if encode_ms is None else f"{encode_ms:.0f}"]
     for prompt in PROMPTS.values():
-        request = osam.types.GenerateRequest(
+        request = osam._types.GenerateRequest(
             model=model.name,
             image=image if embedding is None else None,
             image_embedding=embedding,
             prompt=prompt,
         )
         try:
-            model.generate(request)  # also the warm-up
+            model.generate(request=request)  # also the warm-up
         except ValueError:
             row.append("✗")
             continue
-        row.append(
-            f"{_median_ms(fn=lambda: model.generate(request), repeat=repeat):.0f}"
+        generate_ms = _median_ms(
+            fn=lambda: model.generate(request=request), repeat=repeat
         )
+        row.append(f"{generate_ms:.0f}")
     return row
 
 

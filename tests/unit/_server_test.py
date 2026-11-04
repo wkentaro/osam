@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from osam import _json
 from osam import _server
-from osam import types
+from osam import _types as types
 
 _IMAGE_B64: Final = base64.b64encode(
     (
