@@ -20,6 +20,7 @@ from typing import Union
 
 import numpy as np
 from loguru import logger
+from numpy.typing import ArrayLike
 
 from . import __version__
 from . import _json
@@ -34,6 +35,12 @@ class ResponseError(Exception):
     def __init__(self, message: str, status_code: int):
         super().__init__(message)
         self.status_code = status_code
+
+
+class _InvalidRequestError(ResponseError, ValueError):
+    # A request the server rejected, with 400 or 422, such as a prompt that
+    # mixes one object with every match: a ValueError, as in a local call.
+    pass
 
 
 # Client.list shadows list inside the class, hence builtins.list there.
@@ -165,39 +172,79 @@ class Client:
     def remove(self, model: str) -> None:
         self._request(method="DELETE", path=f"/api/models/{urllib.parse.quote(model)}")
 
-    def generate(
-        self,
-        model: str,
-        *,
-        image: Optional[np.ndarray] = None,
-        prompt: Optional[types.Prompt] = None,
-        annotations: Optional[builtins.list[types.Annotation]] = None,
-        keep_alive: Optional[float | str] = None,
-    ) -> types.GenerateResponse:
-        """Run model on image.
+    def load(self, model: str, *, keep_alive: Optional[float | str] = None) -> None:
+        """Load model, pulling it if needed, and keep it loaded for keep_alive.
 
-        Prompts on an image the server saw recently reuse its embedding.
-        keep_alive: how long the model stays loaded, in seconds or as "5m";
-        -1 keeps it loaded, 0 unloads it now. None leaves the server's
-        default of five minutes.
+        keep_alive: in seconds or as "5m"; -1 keeps it loaded, 0 unloads it
+        now. None leaves the server's default of five minutes.
         """
         body: dict[str, Any] = {"model": model}
-        if prompt is not None:
-            body["prompt"] = prompt.model_dump(mode="json")
-        if annotations is not None:
-            body["annotations"] = [
-                annotation.model_dump(mode="json") for annotation in annotations
-            ]
         if keep_alive is not None:
             body["keep_alive"] = keep_alive
+        self._request(method="POST", path="/api/load", body=body)
 
-        def post(**image_fields: str) -> dict[str, Any]:
-            return self._request(
-                method="POST", path="/api/generate", body=body | image_fields
+    def segment(
+        self,
+        model: str,
+        image: np.ndarray,
+        *,
+        points: Optional[ArrayLike] = None,
+        point_labels: Optional[ArrayLike] = None,
+        box: Optional[ArrayLike] = None,
+        texts: Optional[builtins.list[str]] = None,
+        example_boxes: Optional[ArrayLike] = None,
+        example_box_labels: Optional[ArrayLike] = None,
+        iou_threshold: Optional[float] = None,
+        score_threshold: Optional[float] = None,
+        max_annotations: Optional[int] = None,
+        keep_alive: Optional[float | str] = None,
+    ) -> builtins.list[types.Annotation]:
+        """Segment image, an HxWx3 uint8 array, with model.
+
+        Give one object, or ask for every match:
+
+        - points (N, 2) as x, y in pixels, with point_labels (N,), 1 for
+          foreground and 0 for background, and at most one box as xmin, ymin,
+          xmax, ymax, segment one object.
+        - texts, example_boxes (M, 4), or both find every match.
+          example_box_labels (M,) is 1 for a positive example and 0 for a
+          negative one, all 1 if unset.
+
+        A prompt the model doesn't take raises ValueError, which is also an
+        osam.ResponseError. With no prompt, the model uses its default one.
+        The thresholds apply to models that find every match. Prompts on an
+        image the server saw recently reuse its embedding.
+        keep_alive: as in load.
+        """
+        prompt: dict[str, Any] = {
+            "points": points,
+            "point_labels": point_labels,
+            "box": box,
+            "texts": texts,
+            "example_boxes": example_boxes,
+            "example_box_labels": example_box_labels,
+            "iou_threshold": iou_threshold,
+            "score_threshold": score_threshold,
+            "max_annotations": max_annotations,
+            "keep_alive": keep_alive,
+        }
+        # tolist turns arrays, and the numbers in them, into JSON types.
+        body: dict[str, Any] = {"model": model} | {
+            name: np.asarray(value).tolist()
+            for name, value in prompt.items()
+            if value is not None
+        }
+
+        def post(**image_fields: str) -> builtins.list[types.Annotation]:
+            response: dict[str, Any] = self._request(
+                method="POST", path="/api/segment", body=body | image_fields
             )
+            self._image = (key, encoded, response["image_hash"])
+            return [
+                types.Annotation.model_validate(annotation)
+                for annotation in response["annotations"]
+            ]
 
-        if image is None:
-            return types.GenerateResponse.model_validate(post())
         # Hashing takes a fraction of the time PNG encoding does. Read and
         # written whole, so a concurrent call can't mix up two images.
         key: str = _json.hash_image(image=image)
@@ -208,15 +255,11 @@ class Client:
             # Sent before, so the server likely has its embedding; 412 if not,
             # such as for another model or after a restart.
             try:
-                return types.GenerateResponse.model_validate(
-                    post(image_hash=server_hash)
-                )
+                return post(image_hash=server_hash)
             except ResponseError as e:
                 if e.status_code != 412:
                     raise
-        response: dict[str, Any] = post(image=encoded)
-        self._image = (key, encoded, response.get("image_hash") or "")
-        return types.GenerateResponse.model_validate(response)
+        return post(image=encoded)
 
     def _request(
         self, *, method: str, path: str, body: Optional[dict[str, Any]] = None
@@ -428,6 +471,8 @@ def _response_error(*, status_code: int, data: bytes) -> ResponseError:
         message: str = json.loads(data)["error"]
     except (ValueError, KeyError, TypeError):
         message = data.decode(errors="replace")
+    if status_code in (400, 422):
+        return _InvalidRequestError(message, status_code=status_code)
     return ResponseError(message, status_code=status_code)
 
 

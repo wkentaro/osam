@@ -1,17 +1,20 @@
 import contextlib
 import datetime
 import http.client
+import inspect
 import json
 import os
 import pathlib
 import sys
 import typing
 from collections.abc import Iterator
+from typing import Final
 
 import click
 import imgviz
 import numpy as np
 import PIL.Image
+import pydantic
 from loguru import logger
 from numpy.typing import NDArray
 
@@ -23,6 +26,18 @@ from . import _tabulate
 from . import types
 from ._client import Client
 from ._client import ResponseError
+
+# The keyword names of Client.segment that --prompt takes.
+_PROMPT_KEYS: Final = frozenset(
+    name
+    for name in inspect.signature(Client.segment).parameters
+    if name not in ("self", "model", "image", "keep_alive")
+)
+
+
+class _RunOutput(pydantic.BaseModel):
+    model: str
+    annotations: list[types.Annotation]
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -259,44 +274,51 @@ def run(
         "max_annotations": max_annotations,
     }
     thresholds = {k: v for k, v in thresholds.items() if v is not None}
-    prompt_flags: dict = {"texts": list(texts)} if texts else {}
-    if points or boxes or negative_boxes:
-        xy: list[list[float]] = []
-        labels: list[int] = []
-        for point in points:
-            xy.append(point[:2])
-            label = point[2] if len(point) == 3 else 1
-            if label not in (0, 1):
-                raise click.BadParameter("label must be 0 or 1", param_hint="--point")
-            labels.append(int(label))
-        for box_labels, box_list in [((2, 3), boxes), ((4, 5), negative_boxes)]:
-            for box in box_list:
-                xy += [box[:2], box[2:]]
-                labels += box_labels
-        prompt_flags.update(points=xy, point_labels=labels)
+    prompt_flags: dict = {}
+    if texts:
+        # Boxes with text are examples of the objects to find.
+        prompt_flags["texts"] = list(texts)
+        if boxes or negative_boxes:
+            prompt_flags["example_boxes"] = boxes + negative_boxes
+            prompt_flags["example_box_labels"] = [1] * len(boxes) + [0] * len(
+                negative_boxes
+            )
+        if points:
+            raise click.UsageError("--point can't be combined with --text")
+    else:
+        if negative_boxes:
+            raise click.UsageError("--negative-box needs --text")
+        if len(boxes) > 1:
+            raise click.UsageError("give one --box, or add --text to find every match")
+        if boxes:
+            prompt_flags["box"] = boxes[0]
+        if points:
+            labels: list[int] = []
+            for point in points:
+                label = point[2] if len(point) == 3 else 1
+                if label not in (0, 1):
+                    raise click.BadParameter(
+                        "label must be 0 or 1", param_hint="--point"
+                    )
+                labels.append(int(label))
+            prompt_flags["points"] = [point[:2] for point in points]
+            prompt_flags["point_labels"] = labels
     if prompt is not None and prompt_flags:
         raise click.UsageError(
             "--prompt can't be combined with --point, --box, --negative-box or --text"
         )
+    if prompt is not None:
+        if not isinstance(prompt, dict) or not set(prompt) <= _PROMPT_KEYS:
+            raise click.BadParameter(
+                f"give an object with keys among {sorted(_PROMPT_KEYS)}",
+                param_hint="--prompt",
+            )
+        prompt_flags = prompt
 
     try:
-        base: types.Prompt | None = None
-        if prompt_flags:
-            base = types.Prompt(**prompt_flags)
-        elif prompt is not None:
-            base = types.Prompt.model_validate(prompt)
-        if base is None and thresholds:
-            try:
-                model_type = _apis.get_model_type_by_name(name=model_name)
-            except ValueError as e:
-                raise click.ClickException(str(e))
-            base = model_type.default_prompt(
-                height=image.shape[0], width=image.shape[1]
-            )
-        run_prompt: types.Prompt | None = base and base.model_copy(update=thresholds)
         with _client(device=device) as client:
-            response: types.GenerateResponse = client.generate(
-                model_name, image=image, prompt=run_prompt
+            annotations: list[types.Annotation] = client.segment(
+                model_name, image, **(prompt_flags | thresholds)
             )
     except click.ClickException:
         raise
@@ -305,22 +327,26 @@ def run(
         sys.exit(1)
 
     if json:
-        click.echo(response.model_dump_json())
+        click.echo(
+            _RunOutput(
+                model=_apis.get_model_type_by_name(name=model_name).name,
+                annotations=annotations,
+            ).model_dump_json()
+        )
     else:
         visualization: np.ndarray
 
-        if run_prompt and run_prompt.texts is not None:
-            labels = [
-                0
-                if annotation.text is None
-                else 1 + run_prompt.texts.index(annotation.text)
-                for annotation in response.annotations
+        run_texts: list[str] | None = prompt_flags.get("texts")
+        if run_texts:
+            instance_labels = [
+                0 if annotation.text is None else 1 + run_texts.index(annotation.text)
+                for annotation in annotations
             ]
         else:
-            labels = [1] * len(response.annotations)
+            instance_labels = [1] * len(annotations)
 
         captions = []
-        for annotation in response.annotations:
+        for annotation in annotations:
             if annotation.text is not None and annotation.score is not None:
                 caption = f"{annotation.text}: {annotation.score:.2f}"
             elif annotation.text is not None:
@@ -332,16 +358,14 @@ def run(
             captions.append(caption)
 
         bboxes: NDArray[np.float32] | None = None
-        if all(
-            annotation.bounding_box is not None for annotation in response.annotations
-        ):
+        if all(annotation.bounding_box is not None for annotation in annotations):
             bboxes = np.array(
                 [
                     [
                         getattr(annotation.bounding_box, key)
                         for key in ["ymin", "xmin", "ymax", "xmax"]
                     ]
-                    for annotation in response.annotations
+                    for annotation in annotations
                 ],
                 dtype=np.float32,
             )
@@ -349,11 +373,11 @@ def run(
         masks: NDArray[np.bool_] | None = None
         if all(
             annotation.mask is not None and annotation.bounding_box is not None
-            for annotation in response.annotations
+            for annotation in annotations
         ):
             h, w = image.shape[:2]
             mask_list = []
-            for annotation in response.annotations:
+            for annotation in annotations:
                 full_mask = np.zeros((h, w), dtype=bool)
                 assert annotation.bounding_box is not None
                 bb = annotation.bounding_box
@@ -365,7 +389,7 @@ def run(
 
         visualization = imgviz.instances2rgb(
             image=image,
-            labels=labels,
+            labels=instance_labels,
             bboxes=bboxes,
             masks=masks,
             captions=captions,
