@@ -7,12 +7,12 @@ import numpy as np
 import PIL.Image
 from loguru import logger
 
-import osam._local
 import osam._registry
 import osam._types
 
 
 def benchmark(model: str, n_times: int):
+    runner = osam._registry.get_model_type_by_name(name=model)()
     request = osam._types.GenerateRequest(
         model=model,
         image=np.asarray(PIL.Image.open("../_images/dogs.jpg")),
@@ -23,14 +23,14 @@ def benchmark(model: str, n_times: int):
 
     logger.info("Warming up")
     for _ in range(3):
-        osam._local.generate(request=request)
+        runner.generate(request=request)
     logger.info("Finished warming up")
 
     logger.info(f"Benchmarking {n_times} times")
     elapsed_times = []
     for _ in range(n_times):
         t_start = time.time()
-        osam._local.generate(request=request)
+        runner.generate(request=request)
         elapsed_time = time.time() - t_start
         elapsed_times.append(elapsed_time)
     logger.info(f"Average elapsed time: {np.mean(elapsed_times)} [s]")

@@ -60,7 +60,7 @@ def test_openapi_documents_every_route() -> None:
         "/api/ps",
         "/api/version",
     } <= set(response.json()["paths"])
-    assert response.json()["paths"]["/api/generate"]["post"]["deprecated"]
+    assert "/api/generate" not in response.json()["paths"]  # removed in 0.11
 
 
 def test_list_models() -> None:
@@ -422,39 +422,6 @@ def test_segment_request_rejects_invalid_prompts(fields: dict) -> None:
     body = {"model": "sam3", "image_hash": "0", **fields}
     response = TestClient(_server.app).post("/api/segment", json=body)
     assert response.status_code == 422, response.text
-
-
-def test_generate_keeps_osam_0_10_requests_working(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = TestClient(_server.app)
-    # As osam 0.10 sent it: a prompt in the models' point labels.
-    body = {
-        "model": "efficientsam:10m",
-        "image": _IMAGE_B64,
-        "prompt": {"points": [[1280, 800]], "point_labels": [1]},
-    }
-    first = client.post("/api/generate", json=body)
-    assert first.status_code == 200, first.text
-    assert first.json()["annotations"][0]["mask"]
-    assert first.json()["image_embedding"] is None
-
-    # The same image again reuses the embedding the server kept, and one sent
-    # back is ignored.
-    def fail(*args, **kwargs):
-        raise AssertionError("encoded the image again")
-
-    model = _server._runtime._loaded["efficientsam:10m"].model
-    monkeypatch.setattr(type(model), "encode_image", fail)
-    second = client.post(
-        "/api/generate", json={**body, "image_embedding": {"embedding": "from 0.10"}}
-    )
-    assert second.status_code == 200, second.text
-    assert second.json()["annotations"] == first.json()["annotations"]
-
-    no_image = client.post("/api/generate", json={**body, "image": None})
-    assert no_image.status_code == 400
-    assert "send the image" in no_image.json()["error"]
 
 
 def test_keep_alive_frees_the_model_before_another_load() -> None:

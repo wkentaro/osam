@@ -20,13 +20,11 @@ import fastapi
 import pydantic
 import starlette.exceptions
 import uvicorn
-from loguru import logger
 
 from . import __version__
 from . import _registry
 from . import _runtime as _runtime_module
 from . import _types as types
-from ._requests import DEFAULT_KEEP_ALIVE
 from ._requests import LoadRequest
 from ._requests import SegmentRequest
 from ._requests import SegmentResponse
@@ -102,17 +100,6 @@ app.add_exception_handler(
         message=_describe_validation_errors(errors=exc.errors()), status_code=422
     ),
 )
-
-
-class LegacyGenerateRequest(types.GenerateRequest):
-    # osam 0.10's /api/generate request, with no ndarray in its JSON schema.
-    image_embedding: Optional[Any] = pydantic.Field(
-        default=None, description="Ignored; the server keeps image embeddings itself"
-    )
-
-
-class LegacyGenerateResponse(types.GenerateResponse):
-    image_embedding: None = None
 
 
 class ModelList(pydantic.BaseModel):
@@ -208,41 +195,6 @@ async def segment(request: SegmentRequest) -> SegmentResponse:
 async def load(request: LoadRequest) -> None:
     _get_model_type(name=request.model)
     await _run(call=functools.partial(_runtime.load, request=request))
-
-
-@app.post("/api/generate", deprecated=True)
-async def generate(request: LegacyGenerateRequest) -> LegacyGenerateResponse:
-    # osam 0.10's route, kept until osam 1.0; /api/segment replaces it.
-    # image_embedding is ignored, as the server keeps embeddings itself.
-    _warn_generate_deprecated()
-    if request.image is None:
-        raise fastapi.HTTPException(
-            400, "send the image; the server keeps image embeddings itself"
-        )
-    model_type: type[types.Model] = _get_model_type(name=request.model)
-    try:
-        response: types.GenerateResponse = await _run(
-            call=functools.partial(
-                _runtime.generate,
-                model=model_type.name,
-                image=request.image,
-                prompt=request.prompt,
-                keep_alive=DEFAULT_KEEP_ALIVE,
-            )
-        )
-    except ValueError as e:
-        raise fastapi.HTTPException(400, str(e))
-    return LegacyGenerateResponse(
-        model=response.model, annotations=response.annotations
-    )
-
-
-@functools.cache
-def _warn_generate_deprecated() -> None:
-    logger.warning(
-        "/api/generate is deprecated and will be removed in osam 1.0; "
-        "use /api/segment"
-    )
 
 
 async def _run(*, call: Callable[[], Any]) -> Any:

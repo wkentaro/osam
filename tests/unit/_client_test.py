@@ -56,10 +56,11 @@ def test_client_segments(any_client: osam.Client) -> None:
     )
     assert annotation.mask is not None
     assert annotation.mask.any()
-    # The same as in this process.
-    (local,) = osam.segment(
-        "efficientsam:10m", _IMAGE, points=np.array([[1280, 800]]), point_labels=[1]
-    )
+    # The same on either backend.
+    with osam.Client(in_process=True) as in_process:
+        (local,) = in_process.segment(
+            "efficientsam:10m", _IMAGE, points=np.array([[1280, 800]]), point_labels=[1]
+        )
     assert local.bounding_box == annotation.bounding_box
     assert local.mask is not None
     assert (local.mask == annotation.mask).all()

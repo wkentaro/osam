@@ -12,7 +12,6 @@ from typing import Any
 from typing import Final
 from typing import Optional
 
-import numpy as np
 from loguru import logger
 
 from . import __version__
@@ -138,26 +137,6 @@ class Runtime:
             finally:
                 self._keep_alive(model_name=model_type.name, seconds=request.keep_alive)
 
-    def generate(
-        self,
-        *,
-        model: str,
-        image: np.ndarray,
-        prompt: Optional[types.Prompt],
-        keep_alive: float,
-    ) -> types.GenerateResponse:
-        # For osam 0.10's /api/generate: prompt in the models' point labels.
-        name: str = _registry.get_model_type_by_name(name=model).name
-        with self._lock:
-            try:
-                return self._generate(
-                    key=(name, _json.hash_image(image=image)),
-                    image=image,
-                    prompt=prompt,
-                )
-            finally:
-                self._keep_alive(model_name=name, seconds=keep_alive)
-
     def close(self) -> None:
         # Unloads every model and stops their timers, which hold this runtime.
         with self._lock:
@@ -167,6 +146,12 @@ class Runtime:
     def _segment(
         self, *, request: SegmentRequest, model_type: type[types.Model]
     ) -> SegmentResponse:
+        # Recent image embeddings stay cached, by model name and image hash, so
+        # several prompts on one image encode it once. A SAM3 embedding takes
+        # about 100 MB.
+        # ponytail: fixed size, make it configurable if memory or hit rate matters.
+        EMBEDDING_CACHE_SIZE: Final = 4
+
         image_hash: str = (
             typing.cast(str, request.image_hash)
             if request.image is None
@@ -187,31 +172,14 @@ class Runtime:
         prompt: Optional[types.Prompt] = request.to_prompt(
             model_type=model_type, height=height, width=width
         )
-        response: types.GenerateResponse = self._generate(
-            key=key, image=request.image, prompt=prompt
-        )
-        return SegmentResponse(annotations=response.annotations, image_hash=image_hash)
-
-    def _generate(
-        self,
-        *,
-        key: tuple[str, str],
-        image: Optional[np.ndarray],
-        prompt: Optional[types.Prompt],
-    ) -> types.GenerateResponse:
-        # Runs prompt on the embedding cached under key, the model's name and the
-        # image's hash, or on image. Recent image embeddings stay cached, so
-        # several prompts on one image encode it once.
-        # A SAM3 embedding takes about 100 MB.
-        # ponytail: fixed size, make it configurable if memory or hit rate matters.
-        EMBEDDING_CACHE_SIZE: Final = 4
-
-        model: types.Model = self._load(model_name=key[0])
-        embedding: Optional[types.ImageEmbedding] = self._embeddings.get(key)
         # Models use the embedding when given one, and return the one they used.
+        model: types.Model = self._load(model_name=model_type.name)
         response: types.GenerateResponse = model.generate(
             request=types.GenerateRequest(
-                model=model.name, image=image, image_embedding=embedding, prompt=prompt
+                model=model.name,
+                image=request.image,
+                image_embedding=embedding,
+                prompt=prompt,
             )
         )
         if response.image_embedding is not None:
@@ -219,7 +187,7 @@ class Runtime:
             self._embeddings.move_to_end(key)
             while len(self._embeddings) > EMBEDDING_CACHE_SIZE:
                 self._embeddings.popitem(last=False)
-        return response
+        return SegmentResponse(annotations=response.annotations, image_hash=image_hash)
 
     def _load(self, *, model_name: str) -> types.Model:
         # Under _lock. When full, the least recently used model unloads first;
