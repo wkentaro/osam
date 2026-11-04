@@ -41,6 +41,13 @@ def test_private_server_segments(client: osam.Client) -> None:
     )
     assert annotation.mask is not None
     assert annotation.mask.any()
+    # The same as in this process.
+    (local,) = osam.segment(
+        "efficientsam:10m", _IMAGE, points=np.array([[1280, 800]]), point_labels=[1]
+    )
+    assert local.bounding_box == annotation.bounding_box
+    assert local.mask is not None
+    assert (local.mask == annotation.mask).all()
     assert [model.name for model in client.ps()] == ["efficientsam:10m"]
     client.load("efficientsam:10m", keep_alive=0)
     assert client.ps() == []

@@ -10,6 +10,7 @@ except ImportError as e:
     ) from e
 
 from . import types
+from ._apis import segment
 from ._client import Client
 from ._client import ResponseError
 from ._nms import non_maximum_suppression
@@ -18,5 +19,6 @@ __all__ = [
     "Client",
     "ResponseError",
     "non_maximum_suppression",
+    "segment",
     "types",
 ]
