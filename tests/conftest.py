@@ -4,7 +4,7 @@ import pytest
 from loguru import logger
 
 import osam
-import osam._apis
+import osam._registry
 
 
 def pytest_configure(config):
@@ -24,7 +24,7 @@ def pytest_configure(config):
 
     # download should not happen in parallel
     logger.info("Pulling all registered model types")
-    for model in osam._apis.registered_model_types:
+    for model in osam._registry.registered_model_types:
         if default_test_models_only and model.name not in DEFAULT_TEST_MODELS:
             continue
         model.pull()

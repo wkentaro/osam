@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 
 import osam
-from osam import _apis
+from osam import _local
+from osam import _registry
 from osam import _types as types
 
 image_path = (
@@ -17,7 +18,7 @@ image_path = (
 @pytest.fixture(scope="module")
 def sam3_text_response() -> types.GenerateResponse:
     # All SAM3 prompts use the same image, so encode it once.
-    response = _apis.generate(
+    response = _local.generate(
         request=types.GenerateRequest(
             model="sam3:latest",
             image=imgviz.io.imread(image_path),
@@ -45,7 +46,7 @@ def sam3_text_response() -> types.GenerateResponse:
 def test_generate_point_to_mask(model: str) -> None:
     image = imgviz.io.imread(image_path)
     request: types.GenerateRequest = types.GenerateRequest(model=model, image=image)
-    response: types.GenerateResponse = _apis.generate(request=request)
+    response: types.GenerateResponse = _local.generate(request=request)
 
     assert response.model == model
 
@@ -73,7 +74,7 @@ def test_generate_text_to_bounding_box(
     if model == "sam3:latest":
         response = request.getfixturevalue("sam3_text_response")
     else:
-        response = _apis.generate(
+        response = _local.generate(
             request=types.GenerateRequest(
                 model=model,
                 image=imgviz.io.imread(image_path),
@@ -111,7 +112,7 @@ def test_generate_box_to_mask_sam2(model: str) -> None:
             point_labels=np.array([2, 3], dtype=np.int32),
         ),
     )
-    response: types.GenerateResponse = _apis.generate(request=request)
+    response: types.GenerateResponse = _local.generate(request=request)
 
     assert response.model == model
 
@@ -148,7 +149,7 @@ def test_generate_example_box_to_mask_sam3(
             point_labels=np.array([2, 3] * (len(points) // 2), dtype=np.int32),
         ),
     )
-    response: types.GenerateResponse = _apis.generate(request=request)
+    response: types.GenerateResponse = _local.generate(request=request)
 
     assert response.model == model
 
@@ -167,8 +168,8 @@ def test_generate_example_box_to_mask_sam3(
 def test_registered_models_have_immutable_license_metadata() -> None:
     revision_pattern = re.compile(r"/(?:blob|tree)/[0-9a-f]{40}(?:/|$)")
 
-    for model_type in _apis.registered_model_types:
-        metadata = _apis.get_model_metadata(name=model_type.name)
+    for model_type in _registry.registered_model_types:
+        metadata = _registry.get_model_metadata(name=model_type.name)
 
         assert metadata.license_name
         assert metadata.license_url.startswith("https://")
@@ -178,7 +179,7 @@ def test_registered_models_have_immutable_license_metadata() -> None:
 
 
 def test_yoloworld_metadata_points_to_artifact_provenance() -> None:
-    metadata = _apis.get_model_metadata(name="yoloworld")
+    metadata = _registry.get_model_metadata(name="yoloworld")
 
     assert metadata.license_spdx == "GPL-3.0-only"
     url_prefix = "https://github.com/wkentaro/yolo-world-onnx/blob/"
@@ -211,7 +212,7 @@ def test_generate_negative_box_sam3(
             texts=["visual"],
         ),
     )
-    response: types.GenerateResponse = _apis.generate(request=request)
+    response: types.GenerateResponse = _local.generate(request=request)
 
     [annotation] = response.annotations
     assert annotation.bounding_box is not None
@@ -230,7 +231,7 @@ def test_generate_box_to_mask_sam3(
             point_labels=np.array([2, 3], dtype=np.int32),
         ),
     )
-    response: types.GenerateResponse = _apis.generate(request=request)
+    response: types.GenerateResponse = _local.generate(request=request)
 
     [annotation] = response.annotations
     assert annotation.text is None
@@ -248,7 +249,7 @@ def test_generate_max_annotations_sam3(
         image_embedding=sam3_text_response.image_embedding,
         prompt=types.Prompt(texts=["dog"], max_annotations=1),
     )
-    response: types.GenerateResponse = _apis.generate(request=request)
+    response: types.GenerateResponse = _local.generate(request=request)
 
     [annotation] = response.annotations
     assert annotation.score is not None and annotation.score > 0.95
@@ -265,7 +266,7 @@ def test_generate_negative_box_rejected_by_sam2() -> None:
         ),
     )
     with pytest.raises(ValueError, match="does not support negative boxes"):
-        _apis.generate(request=request)
+        _local.generate(request=request)
 
 
 def test_generate_box_rejected_by_yoloworld() -> None:
@@ -279,7 +280,7 @@ def test_generate_box_rejected_by_yoloworld() -> None:
         ),
     )
     with pytest.raises(ValueError, match="takes texts only"):
-        _apis.generate(request=request)
+        _local.generate(request=request)
 
 
 def test_generate_point_to_mask_sam3(
@@ -293,7 +294,7 @@ def test_generate_point_to_mask_sam3(
             point_labels=np.array([1, 1], dtype=np.int32),
         ),
     )
-    response: types.GenerateResponse = _apis.generate(request=request)
+    response: types.GenerateResponse = _local.generate(request=request)
 
     [annotation] = response.annotations
     assert annotation.text is None
@@ -320,7 +321,7 @@ def test_generate_point_filtered_by_sam3(
             **limits,
         ),
     )
-    response: types.GenerateResponse = _apis.generate(request=request)
+    response: types.GenerateResponse = _local.generate(request=request)
 
     assert response.annotations == []
 
@@ -338,7 +339,7 @@ def test_generate_point_with_text_rejected_by_sam3(
         ),
     )
     with pytest.raises(ValueError, match="can't be combined with text"):
-        _apis.generate(request=request)
+        _local.generate(request=request)
 
 
 def test_segment_runs_in_this_process(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -352,7 +353,7 @@ def test_segment_runs_in_this_process(monkeypatch: pytest.MonkeyPatch) -> None:
     def no_encoding(**kwargs):
         raise AssertionError("encoded the image again")
 
-    monkeypatch.setattr(_apis.running_model, "_encode_image", no_encoding)
+    monkeypatch.setattr(_local.running_model, "_encode_image", no_encoding)
     (other,) = osam.segment(
         "efficientsam:10m", image, box=[1233, 376, 1649, 691], max_annotations=1
     )

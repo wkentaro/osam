@@ -26,8 +26,8 @@ import uvicorn
 from loguru import logger
 
 from . import __version__
-from . import _apis
 from . import _json
+from . import _registry
 from . import _types as types
 from ._requests import DEFAULT_KEEP_ALIVE
 from ._requests import KeepAlive
@@ -186,7 +186,7 @@ def list_models() -> ModelList:
                 modified_at=model_type.get_modified_at(),
                 metadata=model_type.metadata,
             )
-            for model_type in _apis.registered_model_types
+            for model_type in _registry.registered_model_types
         ]
     )
 
@@ -389,7 +389,7 @@ def _load(*, model_name: str) -> types.Model:
         with _loaded_lock:
             _loaded.move_to_end(model_name)
         return _loaded[model_name].model
-    model_type: type[types.Model] = _apis.get_model_type_by_name(name=model_name)
+    model_type: type[types.Model] = _registry.get_model_type_by_name(name=model_name)
     # Before unloading anything, so a failed download leaves the others loaded.
     model_type.pull()
     while len(_loaded) >= _MAX_LOADED_MODELS:
@@ -474,7 +474,7 @@ async def _run(*, call: Callable[[], Any]) -> Any:
 
 def _get_model_type(*, name: str) -> type[types.Model]:
     try:
-        return _apis.get_model_type_by_name(name=name)
+        return _registry.get_model_type_by_name(name=name)
     except ValueError as e:
         raise fastapi.HTTPException(404, str(e))
 

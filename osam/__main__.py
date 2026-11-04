@@ -19,9 +19,9 @@ from loguru import logger
 from numpy.typing import NDArray
 
 from . import __version__
-from . import _apis
 from . import _humanize
 from . import _json
+from . import _registry
 from . import _tabulate
 from . import types
 from ._client import Client
@@ -329,7 +329,7 @@ def run(
     if json:
         click.echo(
             _RunOutput(
-                model=_apis.get_model_type_by_name(name=model_name).name,
+                model=_registry.get_model_type_by_name(name=model_name).name,
                 annotations=annotations,
             ).model_dump_json()
         )

@@ -41,7 +41,7 @@ def _no_model_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _patch_generate(*, monkeypatch: pytest.MonkeyPatch, generate) -> None:
     # Replaces efficientsam:10m's generate.
-    model_type = _server._apis.get_model_type_by_name(name="efficientsam:10m")
+    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(model_type, "generate", generate)
 
 
@@ -68,7 +68,7 @@ def test_list_models() -> None:
 
 
 def test_pull_streams_progress(monkeypatch: pytest.MonkeyPatch) -> None:
-    model_type = _server._apis.get_model_type_by_name(name="efficientsam:10m")
+    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
 
     def pull(progress, cancel):
         progress("encoder.onnx", 1, 2)
@@ -316,7 +316,7 @@ def test_failed_load_unloads_the_others_and_retries(
     body = {"image": _TINY_IMAGE_B64, "keep_alive": -1}
     response = client.post("/api/segment", json={**body, "model": "efficientsam:10m"})
     assert response.status_code == 200, response.text
-    sam2 = _server._apis.get_model_type_by_name(name="sam2:tiny")
+    sam2 = _server._registry.get_model_type_by_name(name="sam2:tiny")
 
     def offline(*args, **kwargs) -> None:
         raise OSError("network is unreachable")
@@ -354,9 +354,9 @@ def test_cpu_fallback_next_to_a_gpu_model_retries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(_server, "_MAX_LOADED_MODELS", 2)
-    efficientsam = _server._apis.get_model_type_by_name(name="efficientsam:10m")
+    efficientsam = _server._registry.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(efficientsam, "device", property(lambda self: "cuda"))
-    sam2 = _server._apis.get_model_type_by_name(name="sam2:tiny")
+    sam2 = _server._registry.get_model_type_by_name(name="sam2:tiny")
     loads: list[list[str]] = []
     init = sam2.__init__
 
@@ -373,7 +373,7 @@ def test_cpu_fallback_next_to_a_gpu_model_retries(
 
 def _to_prompt(**fields) -> typing.Any:
     request = _requests.SegmentRequest(model="sam3", image_hash="0", **fields)
-    sam3 = _server._apis.get_model_type_by_name(name="sam3")
+    sam3 = _server._registry.get_model_type_by_name(name="sam3")
     return request.to_prompt(model_type=sam3, height=10, width=20)
 
 
