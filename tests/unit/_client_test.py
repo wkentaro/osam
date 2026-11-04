@@ -37,7 +37,17 @@ def client():
         yield client
 
 
-def test_private_server_segments(client: osam.Client) -> None:
+@pytest.fixture(scope="module", params=["private server", "in process"])
+def any_client(request: pytest.FixtureRequest, client: osam.Client):
+    if request.param == "private server":
+        yield client
+        return
+    with osam.Client(in_process=True) as in_process:
+        yield in_process
+
+
+def test_client_segments(any_client: osam.Client) -> None:
+    client = any_client
     assert client.version() == osam.__version__
     assert "efficientsam:10m" in {model.name for model in client.list()}
 
@@ -67,10 +77,10 @@ def test_private_server_segments(client: osam.Client) -> None:
         with pytest.raises(ValueError):
             client.segment("efficientsam:10m", _IMAGE, **prompt)
 
-    with pytest.raises(osam.ResponseError) as e:
+    # A ResponseError with 404 from a server, a ValueError in this process.
+    with pytest.raises((osam.ResponseError, ValueError), match="not found") as e:
         client.segment("missing", _IMAGE)
-    assert e.value.status_code == 404
-    assert "not found" in str(e.value)
+    assert getattr(e.value, "status_code", 404) == 404
 
 
 def test_invalid_arguments_raise_before_a_request(
@@ -84,6 +94,24 @@ def test_invalid_arguments_raise_before_a_request(
         client.segment("efficientsam:10m", _IMAGE, points=[[1, 2]], point_labels=[])
     with pytest.raises(ValueError, match="duration"):
         client.load("efficientsam:10m", keep_alive="soon")
+
+
+def test_in_process_takes_no_server_settings() -> None:
+    with pytest.raises(ValueError, match="host"):
+        osam.Client(host="127.0.0.1:11368", in_process=True)
+    with pytest.raises(ValueError, match="timeout"):
+        osam.Client(timeout=600, in_process=True)
+    with pytest.raises(ValueError, match="max_loaded_models"):
+        osam.Client(max_loaded_models=0, in_process=True)
+
+
+def test_in_process_close_unloads_its_models() -> None:
+    with osam.Client(in_process=True, device="cpu") as client:
+        client.load("efficientsam:10m", keep_alive=-1)
+        assert [(model.name, model.device) for model in client.ps()] == [
+            ("efficientsam:10m", "cpu")
+        ]
+    assert client.ps() == []
 
 
 def test_private_server_needs_its_token(client: osam.Client) -> None:

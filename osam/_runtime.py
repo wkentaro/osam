@@ -1,5 +1,6 @@
 # Runs models: loads and unloads them, keeps recent image embeddings, and
-# pulls and removes their files. osam serve runs one; its routes call it.
+# pulls and removes their files. osam serve runs one, and its routes call it;
+# so does Client(in_process=True).
 import builtins
 import collections
 import dataclasses
@@ -14,6 +15,7 @@ from typing import Optional
 import numpy as np
 from loguru import logger
 
+from . import __version__
 from . import _json
 from . import _registry
 from . import _types as types
@@ -63,6 +65,9 @@ class Runtime:
         self._embeddings: collections.OrderedDict[
             tuple[str, str], types.ImageEmbedding
         ] = collections.OrderedDict()
+
+    def version(self) -> str:
+        return __version__
 
     def list(self) -> list[types.ModelInfo]:
         return [

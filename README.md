@@ -293,6 +293,11 @@ a private server, so a hung model stops.
 `client.pull(model, progress=...)` calls `progress` with each line; raising
 from it, such as when the user cancels, stops the download.
 
+`osam.Client(in_process=True)` runs models in your own process instead, with
+no server, and takes the same calls. `device`, `max_loaded_models` and
+`keep_alive` work as they do with a private server, and `close()` unloads its
+models. An unknown model raises `ValueError` instead of `osam.ResponseError`.
+
 ### HTTP
 
 ```bash

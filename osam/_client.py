@@ -9,6 +9,7 @@ from numpy.typing import ArrayLike
 
 from . import _http
 from . import _requests
+from . import _runtime
 from . import types
 from ._http import ResponseError
 
@@ -57,10 +58,11 @@ class Client:
     With no host, it starts a private server for this process, which exits
     with it; a frozen application must call multiprocessing.freeze_support()
     first. host, or OSAM_HOST when host is None, connects to a running
-    `osam serve` instead, such as "127.0.0.1:11368".
+    `osam serve` instead, such as "127.0.0.1:11368". in_process=True runs
+    models in this process, with no server; it takes no host or timeout.
 
     device, max_loaded_models: as in `osam serve --device` and
-    `--max-loaded-models`, for the private server only.
+    `--max-loaded-models`, for the private server or this process.
     timeout: seconds to wait for each response, such as 600, or None to wait
     forever. A request that times out raises TimeoutError, and a private
     server restarts, so a hung model stops.
@@ -73,13 +75,28 @@ class Client:
         device: Optional[types.Device] = None,
         max_loaded_models: Optional[int] = None,
         timeout: Optional[float] = None,
+        in_process: bool = False,
     ):
-        self._backend: _Backend = _http.HttpBackend(
-            host, device=device, max_loaded_models=max_loaded_models, timeout=timeout
+        self._backend: _Backend
+        if not in_process:
+            self._backend = _http.HttpBackend(
+                host,
+                device=device,
+                max_loaded_models=max_loaded_models,
+                timeout=timeout,
+            )
+            return
+        if (host, timeout) != (None, None):
+            raise ValueError(
+                "in_process runs no server, so it takes no host or timeout"
+            )
+        self._backend = _runtime.Runtime(
+            device=device,
+            max_loaded_models=1 if max_loaded_models is None else max_loaded_models,
         )
 
     def close(self) -> None:
-        """Stop the private server, if this client started one."""
+        """Stop the private server this client started, or unload its models."""
         self._backend.close()
 
     def __enter__(self) -> "Client":
