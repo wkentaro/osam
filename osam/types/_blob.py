@@ -106,10 +106,17 @@ class Blob:
                 return None
 
             def report(bytes_so_far: int, bytes_total: int | None) -> None:
-                progress(filename, bytes_so_far, bytes_total)
+                try:
+                    progress(filename, bytes_so_far, bytes_total)
+                except Exception as e:
+                    progress_errors.append(e)
+                    raise
 
             return report
 
+        # Raised from progress, such as on a cancel: the caller's, so raised as
+        # is instead of retried as a failed download.
+        progress_errors: list[Exception] = []
         endpoints = _resolve_endpoints()
 
         def _download(blob: Blob, path: str) -> None:
@@ -139,6 +146,8 @@ class Blob:
                         )
                         return
                     except Exception as e:
+                        if progress_errors:
+                            raise progress_errors[0]
                         # gdown signals a cancel by raising with the event set,
                         # and a cancel can also race with a network failure.
                         if cancel is not None and cancel.is_set():
