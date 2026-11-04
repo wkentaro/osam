@@ -1,12 +1,12 @@
+# Runs models in this process, for osam.segment and osam.apis.
 import threading
 from typing import Optional
-from typing import Type
 
 import numpy as np
 from numpy.typing import ArrayLike
 
 from . import _json
-from . import _models
+from . import _registry
 from . import _requests
 from . import _types as types
 
@@ -19,39 +19,6 @@ _running_device: Optional[types.Device] = None
 _last_embedding: Optional[tuple[tuple[str, str], types.ImageEmbedding]] = None
 # Calls from several threads take turns on the one running model.
 _lock = threading.Lock()
-
-registered_model_types: list[Type[types.Model]] = [
-    _models.EfficientSam10m,
-    _models.EfficientSam30m,
-    _models.Sam100m,
-    _models.Sam2BasePlus,
-    _models.Sam2Large,
-    _models.Sam2Small,
-    _models.Sam2Tiny,
-    _models.Sam3,
-    _models.Sam300m,
-    _models.Sam600m,
-    _models.YoloWorldXL,
-]
-
-
-def get_model_type_by_name(*, name: str) -> Type[types.Model]:
-    model_name: str
-    if ":" in name:
-        model_name = name
-    else:
-        model_name = f"{name}:latest"
-
-    for cls in registered_model_types:
-        if cls.name == model_name:
-            break
-    else:
-        raise ValueError(f"Model {name!r} not found.")
-    return cls
-
-
-def get_model_metadata(*, name: str) -> types.ModelMetadata:
-    return get_model_type_by_name(name=name).metadata
 
 
 def generate(
@@ -107,7 +74,9 @@ def segment(
     )
     height, width = image.shape[:2]
     prompt: Optional[types.Prompt] = request.to_prompt(
-        model_type=get_model_type_by_name(name=model), height=height, width=width
+        model_type=_registry.get_model_type_by_name(name=model),
+        height=height,
+        width=width,
     )
     with _lock:
         running: types.Model = _run(name=model, device=device)
@@ -136,7 +105,7 @@ def _run(*, name: str, device: Optional[types.Device]) -> types.Model:
     # The running model for name and device, loading it if needed; under _lock.
     global running_model, _running_device
 
-    model_type = get_model_type_by_name(name=name)
+    model_type = _registry.get_model_type_by_name(name=name)
     model: types.Model | None = running_model
     if model is None or model.name != model_type.name or _running_device != device:
         # Release the previous model first, so two models are never loaded at once.

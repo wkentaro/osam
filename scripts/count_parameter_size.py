@@ -7,7 +7,7 @@ import onnx
 from loguru import logger
 
 import osam
-import osam._apis
+import osam._registry
 import osam._types
 
 
@@ -31,11 +31,13 @@ def main():
     parser.add_argument(
         "model",
         type=str,
-        choices=[model_type.name for model_type in osam._apis.registered_model_types],
+        choices=[
+            model_type.name for model_type in osam._registry.registered_model_types
+        ],
     )
     args = parser.parse_args()
 
-    model_type: Type[osam._types.Model] = osam._apis.get_model_type_by_name(
+    model_type: Type[osam._types.Model] = osam._registry.get_model_type_by_name(
         name=args.model
     )
     model_type.pull()

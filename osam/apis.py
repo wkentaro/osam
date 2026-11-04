@@ -6,10 +6,11 @@ from typing import Type
 import numpy as np
 from numpy.typing import NDArray
 
-from . import _apis
+from . import _local
 from . import _nms
+from . import _registry
 from . import _types as types
-from ._apis import registered_model_types  # noqa: F401
+from ._registry import registered_model_types  # noqa: F401
 
 
 def _warn(*, name: str, instead: str) -> None:
@@ -23,17 +24,17 @@ def _warn(*, name: str, instead: str) -> None:
 
 def get_model_type_by_name(name: str) -> Type[types.Model]:
     _warn(name="get_model_type_by_name", instead="osam.Client.list")
-    return _apis.get_model_type_by_name(name=name)
+    return _registry.get_model_type_by_name(name=name)
 
 
 def get_model_metadata(name: str) -> types.ModelMetadata:
     _warn(name="get_model_metadata", instead="osam.Client.list")
-    return _apis.get_model_metadata(name=name)
+    return _registry.get_model_metadata(name=name)
 
 
 def generate(request: types.GenerateRequest) -> types.GenerateResponse:
     _warn(name="generate", instead="osam.segment")
-    return _apis.generate(request=request)
+    return _local.generate(request=request)
 
 
 def non_maximum_suppression(
