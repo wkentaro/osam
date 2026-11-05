@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.10.2 - 2026-11-06
+
+### Fixed
+
+- Automatically use CPU when a Windows adapter lacks Direct3D 12 support, avoiding slow WebGPU software rendering in virtual machines such as VMware Fusion. ([#179](https://github.com/wkentaro/osam/pull/179))
+
 ## 0.10.1 - 2026-11-02
 
 ### Added
