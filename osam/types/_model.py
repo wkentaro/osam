@@ -21,6 +21,7 @@ import onnxruntime
 from loguru import logger
 
 from ._blob import Blob
+from ._d3d12 import supports_d3d12
 from ._generate import GenerateRequest
 from ._generate import GenerateResponse
 from ._image_embedding import ImageEmbedding
@@ -47,7 +48,7 @@ def resolve_providers() -> list[str]:
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
     try:
         device: Any | None = _webgpu_device()
-        if device is not None and not _is_software_adapter(ep_device=device):
+        if device is not None and _can_use_webgpu(ep_device=device):
             return ["WebGpuExecutionProvider", "CPUExecutionProvider"]
     except Exception as e:  # plugin missing or failing to register
         logger.debug("Skipping WebGpuExecutionProvider: {e}", e=e)
@@ -102,9 +103,31 @@ def _describe_adapter(*, ep_device: Any) -> str:
     return f"{name} ({hardware.vendor_id:#06x}:{hardware.device_id:#06x})"
 
 
+def _can_use_webgpu(*, ep_device: Any) -> bool:
+    if _is_software_adapter(ep_device=ep_device):
+        return False
+    if sys.platform != "win32":
+        return True
+    try:
+        supported = supports_d3d12(luid=int(ep_device.device.metadata["LUID"]))
+    except (KeyError, ValueError, OSError) as error:
+        logger.warning(
+            "Cannot check Direct3D 12 support for {}: {}; using CPU automatically",
+            _describe_adapter(ep_device=ep_device),
+            error,
+        )
+        return False
+    if not supported:
+        logger.debug(
+            "Skipping {}: no Direct3D 12 support; WebGPU would use software rendering",
+            _describe_adapter(ep_device=ep_device),
+        )
+    return supported
+
+
 @functools.cache
 def _webgpu_device() -> Any | None:
-    # Prefer a hardware adapter, then a software one.
+    # Prefer usable hardware; keep a fallback for explicit WebGPU requests.
     try:
         import onnxruntime_ep_webgpu as webgpu_ep  # type: ignore[unresolved-import]
     except ImportError:
@@ -123,14 +146,14 @@ def _webgpu_device() -> Any | None:
     )
     # The plugin accepts one device.
     for device in devices:
-        if not _is_software_adapter(ep_device=device):
+        if _can_use_webgpu(ep_device=device):
             logger.debug(
                 "Picked WebGPU adapter {}", _describe_adapter(ep_device=device)
             )
             return device
     if devices:
         logger.warning(
-            "Only software WebGPU adapters, which run slower than CPU: {adapters!r}. "
+            "No usable hardware WebGPU adapters: {adapters!r}. "
             "Automatic selection uses CPU; an explicit WebGPU request runs on {first}",
             adapters=[_describe_adapter(ep_device=d) for d in devices],
             first=_describe_adapter(ep_device=devices[0]),
