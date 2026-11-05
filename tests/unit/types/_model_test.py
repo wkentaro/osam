@@ -208,7 +208,7 @@ def test_device_dropped_provider_raises(
 def _webgpu_adapter(
     vendor_id: int = 0x10DE, device_id: int = 0x2208, description: str = ""
 ) -> Any:
-    metadata: dict[str, str] = {"Description": description} if description else {}
+    metadata: dict[str, str] = {"LUID": "1", "Description": description}
     return types.SimpleNamespace(
         ep_name="WebGpuExecutionProvider",
         device=types.SimpleNamespace(
@@ -240,6 +240,7 @@ def fake_webgpu(
     monkeypatch.setattr(ort, "register_execution_provider_library", lambda *a: None)
     monkeypatch.setattr(ort, "get_ep_devices", lambda: devices)
     monkeypatch.setattr(ort, "SessionOptions", FakeSessionOptions)
+    monkeypatch.setattr(_model, "supports_d3d12", lambda *, luid: True)
     _model._webgpu_device.cache_clear()
     yield devices
     _model._webgpu_device.cache_clear()
@@ -440,3 +441,102 @@ def test_device_webgpu_runs_on_software_when_requested(
 
     disabled = [p for p, providers in fake_sessions if providers == "fallback disabled"]
     assert disabled == ["WebGpuExecutionProvider"] * len(Sam3._blobs)
+
+
+@pytest.mark.parametrize("supported", [False, True])
+def test_windows_webgpu_requires_d3d12_hardware(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any], supported: bool
+) -> None:
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    checked: list[int] = []
+
+    def check(*, luid: int) -> bool:
+        checked.append(luid)
+        return supported
+
+    monkeypatch.setattr(_model, "supports_d3d12", check)
+    fake_webgpu.append(
+        _webgpu_adapter(
+            vendor_id=0x15AD, device_id=0x0406, description="VMware SVGA 3D"
+        )
+    )
+    assert resolve_providers() == (
+        ["WebGpuExecutionProvider", "CPUExecutionProvider"]
+        if supported
+        else ["CPUExecutionProvider"]
+    )
+    assert checked and set(checked) == {1}
+
+
+def test_windows_webgpu_prefers_d3d12_capable_adapter(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any]
+) -> None:
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(_model, "supports_d3d12", lambda *, luid: luid == 2)
+    unsupported = _webgpu_adapter(description="VMware SVGA 3D")
+    supported = _webgpu_adapter(description="Passed-through GPU")
+    supported.device.metadata["LUID"] = "2"
+    fake_webgpu += [unsupported, supported]
+    assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
+    assert _model._webgpu_device() is supported
+
+
+@pytest.mark.parametrize("metadata", [{}, {"LUID": "invalid"}])
+def test_windows_webgpu_missing_adapter_identity_uses_cpu(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any], metadata: dict[str, str]
+) -> None:
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    adapter = _webgpu_adapter()
+    adapter.device.metadata = metadata
+    fake_webgpu.append(adapter)
+    assert resolve_providers() == ["CPUExecutionProvider"]
+
+
+def test_windows_webgpu_probe_failure_uses_cpu(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any]
+) -> None:
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    def check(*, luid: int) -> bool:
+        raise OSError("Cannot load d3d12.dll")
+
+    monkeypatch.setattr(_model, "supports_d3d12", check)
+    fake_webgpu.append(_webgpu_adapter())
+    assert resolve_providers() == ["CPUExecutionProvider"]
+
+
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_non_windows_webgpu_does_not_probe_d3d12(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any], platform: str
+) -> None:
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    monkeypatch.setattr(sys, "platform", platform)
+
+    def check(*, luid: int) -> bool:
+        pytest.fail("Direct3D 12 is only checked on Windows")
+
+    monkeypatch.setattr(_model, "supports_d3d12", check)
+    fake_webgpu.append(_webgpu_adapter())
+    assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
+
+
+def test_windows_unsupported_hardware_can_be_explicitly_requested(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_webgpu: list[Any],
+    fake_sessions: list[tuple[str, Any]],
+) -> None:
+    from osam._models.sam3._models import Sam3
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(_model, "supports_d3d12", lambda *, luid: False)
+    fake_webgpu.append(_webgpu_adapter(description="VMware SVGA 3D"))
+    Sam3(device="webgpu")
+    assert [
+        p for p, providers in fake_sessions if providers == "fallback disabled"
+    ] == ["WebGpuExecutionProvider"] * len(Sam3._blobs)
+    monkeypatch.setenv("OSAM_ONNX_PROVIDERS", "WebGpuExecutionProvider")
+    assert resolve_providers() == ["WebGpuExecutionProvider"]
