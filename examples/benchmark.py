@@ -6,7 +6,8 @@
 
 Each cell is the median of --repeat runs after one warm-up run. Encode is
 segmenting a new image minus segmenting a cached one, both with the model's
-default prompt; the prompts reuse the cached embedding of one image.
+default prompt, and "-" for a model with no separate encoding; the prompts
+reuse the cached embedding of one image.
 """
 
 import argparse
@@ -52,6 +53,16 @@ def _new_image(*, image: np.ndarray, i: int) -> np.ndarray:
     return image
 
 
+def _encode_cell(*, new_ms: float, cached_ms: float) -> str:
+    # A model with no separate encoding, such as YOLO-World, caches nothing,
+    # so a cached image takes as long as a new one.
+    # ponytail: the half-time cutoff guesses from timing; a public "has an
+    # embedding" flag on the model would replace it.
+    if cached_ms > new_ms / 2:
+        return "-"
+    return f"{new_ms - cached_ms:.0f}"
+
+
 def _benchmark(
     *, client: osam.Client, model: str, device: str, image: np.ndarray, repeat: int
 ) -> list[str]:
@@ -68,7 +79,7 @@ def _benchmark(
     )
     cached_ms = _median_ms(fn=lambda i: client.segment(model, image), repeat=repeat)
 
-    row = [model, device, f"{new_ms - cached_ms:.0f}"]
+    row = [model, device, _encode_cell(new_ms=new_ms, cached_ms=cached_ms)]
     for prompt in PROMPTS.values():
         try:
             client.segment(model, image, **prompt)  # also the warm-up
