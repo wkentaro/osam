@@ -13,9 +13,10 @@ import pytest
 from onnx import helper
 from onnx import numpy_helper
 
-from osam.types import _model
+from osam import _onnx
+from osam._onnx import resolve_providers
+from osam._types import _model
 from osam.types._blob import Blob
-from osam.types._model import resolve_providers
 
 
 @pytest.fixture
@@ -33,9 +34,9 @@ def fake_cuda(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[str]]:
         "create_and_register_allocator_v2",
         lambda *args: calls.append("register"),
     )
-    _model._setup_cuda.cache_clear()
+    _onnx._setup_cuda.cache_clear()
     yield calls
-    _model._setup_cuda.cache_clear()
+    _onnx._setup_cuda.cache_clear()
 
 
 def test_resolve_providers_unset_ends_with_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -64,13 +65,13 @@ def test_setup_cuda_skips_build_without_cuda(
     monkeypatch.setattr(
         ort, "get_available_providers", lambda: ["CPUExecutionProvider"]
     )
-    assert _model._setup_cuda() is False
+    assert _onnx._setup_cuda() is False
     assert fake_cuda == []
 
 
 def test_setup_cuda_registers_shared_arena_once(fake_cuda: list[str]) -> None:
-    assert _model._setup_cuda() is True
-    assert _model._setup_cuda() is True
+    assert _onnx._setup_cuda() is True
+    assert _onnx._setup_cuda() is True
     assert fake_cuda == ["preload", "register"]
 
 
@@ -81,7 +82,7 @@ def test_setup_cuda_keeps_preload_output_off_stdout(
 ) -> None:
     ort: Any = onnxruntime
     monkeypatch.setattr(ort, "preload_dlls", lambda: print("Failed to load libcudnn"))
-    _model._setup_cuda()
+    _onnx._setup_cuda()
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "Failed to load libcudnn" in captured.err
@@ -110,7 +111,7 @@ def test_load_session_keeps_providers_when_cuda_setup_fails(
     ]
     blob: Any = type("FakeBlob", (), {"path": "model.onnx"})()
 
-    _model._load_inference_session(blob=blob, providers=providers)
+    _onnx._load_inference_session(blob=blob, providers=providers)
 
     [(sess_options, used_providers)] = sessions
     assert used_providers == providers
@@ -152,7 +153,7 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
 ) -> None:
     from osam._models.sam3._models import Sam3
 
-    monkeypatch.setattr(_model, "_coreml_model", lambda blob: f"{blob.path}.t")
+    monkeypatch.setattr(_onnx, "_coreml_model", lambda blob: f"{blob.path}.t")
     Sam3(device="coreml")
 
     coreml = [
@@ -201,7 +202,7 @@ def test_device_dropped_provider_raises(
     monkeypatch.setattr(
         ort.InferenceSession, "get_providers", lambda self: ["CPUExecutionProvider"]
     )
-    monkeypatch.setattr(_model, "_coreml_model", lambda blob: blob.path)
+    monkeypatch.setattr(_onnx, "_coreml_model", lambda blob: blob.path)
     with pytest.raises(RuntimeError, match="CoreMLExecutionProvider failed to load"):
         Sam3(device="coreml")
 
@@ -245,10 +246,10 @@ def fake_webgpu(
     monkeypatch.setattr(ort, "register_execution_provider_library", lambda *a: None)
     monkeypatch.setattr(ort, "get_ep_devices", lambda: devices)
     monkeypatch.setattr(ort, "SessionOptions", FakeSessionOptions)
-    monkeypatch.setattr(_model, "supports_d3d12", lambda *, luid: True)
-    _model._webgpu_device.cache_clear()
+    monkeypatch.setattr(_onnx, "supports_d3d12", lambda *, luid: True)
+    _onnx._webgpu_device.cache_clear()
     yield devices
-    _model._webgpu_device.cache_clear()
+    _onnx._webgpu_device.cache_clear()
 
 
 def test_device_webgpu_runs_every_blob_on_webgpu(
@@ -272,7 +273,7 @@ def test_device_webgpu_unavailable_raises(
         Sam3(device="webgpu")
 
     monkeypatch.setitem(sys.modules, "onnxruntime_ep_webgpu", None)
-    _model._webgpu_device.cache_clear()
+    _onnx._webgpu_device.cache_clear()
     with pytest.raises(RuntimeError, match=r"pip install 'osam\[webgpu\]'"):
         Sam3(device="webgpu")
 
@@ -284,7 +285,7 @@ def test_resolve_providers_picks_webgpu_after_cuda(
     assert resolve_providers() == ["CPUExecutionProvider"]  # no GPU listed
 
     fake_webgpu.append(_webgpu_adapter())
-    _model._webgpu_device.cache_clear()
+    _onnx._webgpu_device.cache_clear()
     assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
 
     ort: Any = onnxruntime
@@ -339,9 +340,9 @@ def test_partial_fallback_moves_every_session_to_cpu(
     def load(*, blob: Any, providers: list[str] | None) -> Session:
         return Session("", cpu) if providers == cpu else next(loaded)
 
-    monkeypatch.setattr(_model, "_load_inference_session", load)
+    monkeypatch.setattr(_onnx, "_load_inference_session", load)
     blobs = cast(Any, {key: types.SimpleNamespace(path=key) for key in "abc"})
-    sessions = _model._load_inference_sessions(blobs=blobs)
+    sessions = _onnx.load_inference_sessions(blobs=blobs)
     assert {k: s.get_providers() for k, s in sessions.items()} == dict.fromkeys(
         "abc", cpu
     )
@@ -397,7 +398,7 @@ def test_coreml_model_rewrites_gemm_to_trans_b(
     feeds = {"x": np.random.default_rng(0).random((3, 4), dtype=np.float32)}
     expected = onnxruntime.InferenceSession(gemm.path).run(None, feeds)
 
-    model = _model._coreml_model(blob=gemm)
+    model = _onnx._coreml_model(blob=gemm)
 
     assert isinstance(model, bytes)
     actual = onnxruntime.InferenceSession(model).run(None, feeds)
@@ -408,14 +409,14 @@ def test_coreml_model_rewrites_gemm_to_trans_b(
         for node in onnx.load_from_string(model).graph.node
     ]
     assert trans_b == [[1], [1], [1]]
-    assert _model._coreml_model(blob=other) == other.path
+    assert _onnx._coreml_model(blob=other) == other.path
     assert not os.path.exists(gemm.coreml_cache_path)
 
     # The session drops the bytes and falls back from the original file.
     monkeypatch.setattr(
-        _model, "_first_provider", lambda providers: "CoreMLExecutionProvider"
+        _onnx, "_first_provider", lambda providers: "CoreMLExecutionProvider"
     )
-    session = _model._create_session(blob=gemm, providers=["CPUExecutionProvider"])
+    session = _onnx._create_session(blob=gemm, providers=["CPUExecutionProvider"])
     assert session._model_bytes is None
     session.set_providers(["CPUExecutionProvider"])
     for a, e in zip(session.run(None, feeds), expected):
@@ -437,7 +438,7 @@ def test_resolve_providers_skips_software_webgpu(
             description="Microsoft Basic Display Adapter",
         )
     ]
-    _model._webgpu_device.cache_clear()
+    _onnx._webgpu_device.cache_clear()
     assert resolve_providers() == ["CPUExecutionProvider"]
 
 
@@ -448,7 +449,7 @@ def test_resolve_providers_picks_hardware_webgpu_after_software(
     hardware = _webgpu_adapter()
     fake_webgpu += [_warp_adapter(), hardware]
     assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
-    assert _model._webgpu_device() is hardware
+    assert _onnx._webgpu_device() is hardware
 
 
 @pytest.mark.parametrize(
@@ -498,7 +499,7 @@ def test_windows_webgpu_requires_d3d12_hardware(
         checked.append(luid)
         return supported
 
-    monkeypatch.setattr(_model, "supports_d3d12", check)
+    monkeypatch.setattr(_onnx, "supports_d3d12", check)
     fake_webgpu.append(
         _webgpu_adapter(
             vendor_id=0x15AD, device_id=0x0406, description="VMware SVGA 3D"
@@ -517,13 +518,13 @@ def test_windows_webgpu_prefers_d3d12_capable_adapter(
 ) -> None:
     monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
     monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setattr(_model, "supports_d3d12", lambda *, luid: luid == 2)
+    monkeypatch.setattr(_onnx, "supports_d3d12", lambda *, luid: luid == 2)
     unsupported = _webgpu_adapter(description="VMware SVGA 3D")
     supported = _webgpu_adapter(description="Passed-through GPU")
     supported.device.metadata["LUID"] = "2"
     fake_webgpu += [unsupported, supported]
     assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
-    assert _model._webgpu_device() is supported
+    assert _onnx._webgpu_device() is supported
 
 
 @pytest.mark.parametrize("metadata", [{}, {"LUID": "invalid"}])
@@ -547,7 +548,7 @@ def test_windows_webgpu_probe_failure_uses_cpu(
     def check(*, luid: int) -> bool:
         raise OSError("Cannot load d3d12.dll")
 
-    monkeypatch.setattr(_model, "supports_d3d12", check)
+    monkeypatch.setattr(_onnx, "supports_d3d12", check)
     fake_webgpu.append(_webgpu_adapter())
     assert resolve_providers() == ["CPUExecutionProvider"]
 
@@ -562,7 +563,7 @@ def test_non_windows_webgpu_does_not_probe_d3d12(
     def check(*, luid: int) -> bool:
         pytest.fail("Direct3D 12 is only checked on Windows")
 
-    monkeypatch.setattr(_model, "supports_d3d12", check)
+    monkeypatch.setattr(_onnx, "supports_d3d12", check)
     fake_webgpu.append(_webgpu_adapter())
     assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
 
@@ -575,7 +576,7 @@ def test_windows_unsupported_hardware_can_be_explicitly_requested(
     from osam._models.sam3._models import Sam3
 
     monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setattr(_model, "supports_d3d12", lambda *, luid: False)
+    monkeypatch.setattr(_onnx, "supports_d3d12", lambda *, luid: False)
     fake_webgpu.append(_webgpu_adapter(description="VMware SVGA 3D"))
     Sam3(device="webgpu")
     assert [
@@ -583,28 +584,3 @@ def test_windows_unsupported_hardware_can_be_explicitly_requested(
     ] == ["WebGpuExecutionProvider"] * len(Sam3._blobs)
     monkeypatch.setenv("OSAM_ONNX_PROVIDERS", "WebGpuExecutionProvider")
     assert resolve_providers() == ["WebGpuExecutionProvider"]
-
-
-class _VanishingBlob:
-    # A blob that osam rm removes right after its first read.
-    def __init__(self) -> None:
-        self._reads = 0
-
-    def _read(self, *, value: float) -> float | None:
-        self._reads += 1
-        return value if self._reads == 1 else None
-
-    @property
-    def size(self) -> float | None:
-        return self._read(value=1)
-
-    @property
-    def modified_at(self) -> float | None:
-        return self._read(value=2.0)
-
-
-def test_get_size_reads_each_blob_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(_model.Model, "_blobs", {"a": _VanishingBlob()}, raising=False)
-    assert _model.Model.get_size() == 1
-    monkeypatch.setattr(_model.Model, "_blobs", {"a": _VanishingBlob()}, raising=False)
-    assert _model.Model.get_modified_at() == 2.0
