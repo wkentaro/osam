@@ -131,7 +131,8 @@ Measured on `examples/_images/dogs.jpg` (2560x1600) with onnxruntime 1.23.2
 (onnxruntime-gpu 1.31.1 for CUDA; onnxruntime 1.30.0 and onnxruntime-ep-webgpu
 0.5.0 for WebGPU, on Vulkan and Metal).
 Run `python examples/benchmark.py --device cpu --device cuda` to measure on
-your machine.
+your machine. Its New image column is image encoding plus the model's default
+prompt.
 See [docs/benchmark.md](docs/benchmark.md) for SAM3 per prompt, load times
 and CPU/CoreML parity.
 

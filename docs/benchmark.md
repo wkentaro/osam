@@ -58,3 +58,6 @@ Reproduce with:
 ```bash
 python examples/benchmark.py --model sam3 --device cpu --device coreml --device webgpu
 ```
+
+The script prints New image in place of Encode: encoding plus SAM3's default
+prompt, the text `visual`.
