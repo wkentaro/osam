@@ -129,6 +129,7 @@ class Client:
         Lines look like {"status": "pulling encoder.onnx", "completed": 524288,
         "total": 24799761}. An exception raised from progress, such as on a
         cancel, stops the download on the server too.
+        A download that fails raises RuntimeError.
         """
         self._backend.pull(model=model, progress=progress)
 

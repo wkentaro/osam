@@ -286,6 +286,19 @@ def test_raising_from_progress_stops_the_pull(monkeypatch: pytest.MonkeyPatch) -
         assert cancelled.wait(timeout=5)
 
 
+def test_failed_pull_raises_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def pull(progress, cancel) -> None:
+        raise RuntimeError("Failed to download encoder.onnx")
+
+    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
+    monkeypatch.setattr(model_type, "pull", pull)
+
+    with _serving() as host, osam.Client(in_process=True) as in_process:
+        for client in [osam.Client(host=host), in_process]:
+            with pytest.raises(RuntimeError, match="Failed to download"):
+                client.pull("efficientsam:10m")
+
+
 def _listening(*, port: int) -> bool:
     try:
         socket.create_connection(("127.0.0.1", port), timeout=1).close()
