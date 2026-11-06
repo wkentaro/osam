@@ -1,7 +1,8 @@
 import importlib.util
 import pathlib
+from typing import Final
 
-_PATH = pathlib.Path(__file__).resolve().parents[2] / "examples" / "benchmark.py"
+_PATH: Final = pathlib.Path(__file__).resolve().parents[2] / "examples" / "benchmark.py"
 _spec = importlib.util.spec_from_file_location("benchmark", _PATH)
 assert _spec is not None and _spec.loader is not None
 benchmark = importlib.util.module_from_spec(_spec)
