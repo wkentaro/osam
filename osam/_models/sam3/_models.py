@@ -9,7 +9,7 @@ from typing_extensions import override
 
 from osam import _types as types
 
-from ..yoloworld.clip import tokenize
+from .._clip import tokenize
 
 
 class Sam3(types.Model):

@@ -8,7 +8,7 @@ from typing_extensions import override
 
 from ... import _nms
 from ... import _types as types
-from . import clip
+from .. import _clip as clip
 
 __all__ = [
     "YoloWorldXL",

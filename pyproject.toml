@@ -110,7 +110,7 @@ dev = [
 select = ["GR:baseline", "GR:opinionated"]
 # GR013 enforces the stricter form of GR001.
 ignore = ["GR001"]
-per-file-ignores = { "osam/_models/yoloworld/clip/**" = ["GR"] }
+per-file-ignores = { "osam/_models/_clip/**" = ["GR"] }
 
 [tool.hatch.metadata]
 allow-direct-references = true
