@@ -4,10 +4,10 @@
     python examples/benchmark.py --device cpu --device cuda
     python examples/benchmark.py --model sam3 --model efficientsam:10m
 
-Each cell is the median of --repeat runs after one warm-up run. Encode is
-segmenting a new image minus segmenting a cached one, both with the model's
-default prompt, and "-" for a model with no separate encoding; the prompts
-reuse the cached embedding of one image.
+Each cell is the median of --repeat runs after one warm-up run. New image
+segments an image the client hasn't seen with the model's default prompt, so
+it includes image encoding; the prompts reuse the cached embedding of one
+image.
 """
 
 import argparse
@@ -53,16 +53,6 @@ def _new_image(*, image: np.ndarray, i: int) -> np.ndarray:
     return image
 
 
-def _encode_cell(*, new_ms: float, cached_ms: float) -> str:
-    # A model with no separate encoding, such as YOLO-World, caches nothing,
-    # so a cached image takes as long as a new one.
-    # ponytail: the half-time cutoff guesses from timing; a public "has an
-    # embedding" flag on the model would replace it.
-    if cached_ms > new_ms / 2:
-        return "-"
-    return f"{new_ms - cached_ms:.0f}"
-
-
 def _benchmark(
     *, client: osam.Client, model: str, device: str, image: np.ndarray, repeat: int
 ) -> list[str]:
@@ -73,13 +63,12 @@ def _benchmark(
         return [model, device, "fails to load"] + [""] * len(PROMPTS)
 
     client.segment(model, image)  # warm-up; caches the embedding
-    new_ms = _median_ms(
+    new_image_ms = _median_ms(
         fn=lambda i: client.segment(model, _new_image(image=image, i=i)),
         repeat=repeat,
     )
-    cached_ms = _median_ms(fn=lambda i: client.segment(model, image), repeat=repeat)
 
-    row = [model, device, _encode_cell(new_ms=new_ms, cached_ms=cached_ms)]
+    row = [model, device, f"{new_image_ms:.0f}"]
     for prompt in PROMPTS.values():
         try:
             client.segment(model, image, **prompt)  # also the warm-up
@@ -113,7 +102,7 @@ def main() -> None:
 
     image = np.asarray(PIL.Image.open(IMAGE_PATH).convert("RGB"))
 
-    print(f"| Model | Device | Encode (ms) | {' | '.join(PROMPTS)} |")
+    print(f"| Model | Device | New image (ms) | {' | '.join(PROMPTS)} |")
     print("|" + " --- |" * (3 + len(PROMPTS)))
     for device in args.device or ["cpu"]:
         with osam.Client(
