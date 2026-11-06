@@ -293,11 +293,6 @@ class Sam3(types.Model):
         score_threshold: float,
         max_annotations: int | None,
     ) -> types.GenerateResponse:
-        if len(image_embedding.extra_features) < 6:
-            raise ValueError(
-                "point prompts need an image embedding from this osam version, "
-                "encode the image again"
-            )
         height: int = image_embedding.original_height
         width: int = image_embedding.original_width
         inputs: dict[str, NDArray] = {
