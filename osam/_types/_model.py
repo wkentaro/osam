@@ -4,8 +4,6 @@ import abc
 import hashlib
 import threading
 from collections.abc import Callable
-from typing import Dict
-from typing import Optional
 
 import numpy as np
 import onnxruntime
@@ -25,11 +23,11 @@ class Model(abc.ABC):
     name: str
     metadata: ModelMetadata
 
-    _blobs: Dict[str, Blob]
+    _blobs: dict[str, Blob]
     # Blobs that run on CoreML with device="coreml", all when None; the others
     # run on CPU.
-    _coreml_blobs: Optional[frozenset[str]] = None
-    _inference_sessions: Dict[str, onnxruntime.InferenceSession]
+    _coreml_blobs: frozenset[str] | None = None
+    _inference_sessions: dict[str, onnxruntime.InferenceSession]
 
     def __init__(self, device: Device | None = None):
         """Load the model.
@@ -94,21 +92,21 @@ class Model(abc.ABC):
         ).hexdigest()[:12]
 
     @classmethod
-    def get_size(cls) -> Optional[int]:
+    def get_size(cls) -> int | None:
         size = 0
         for blob in cls._blobs.values():
             # Read once: a concurrent remove can turn a second read into None.
-            blob_size: Optional[int] = blob.size
+            blob_size: int | None = blob.size
             if blob_size is None:
                 return None
             size += blob_size
         return size
 
     @classmethod
-    def get_modified_at(cls) -> Optional[float]:
+    def get_modified_at(cls) -> float | None:
         modified_at: float = 0
         for blob in cls._blobs.values():
-            blob_modified_at: Optional[float] = blob.modified_at
+            blob_modified_at: float | None = blob.modified_at
             if blob_modified_at is None:
                 return None
             modified_at = max(modified_at, blob_modified_at)

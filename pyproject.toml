@@ -153,8 +153,8 @@ line-length = 88
 indent-width = 4
 
 [tool.ruff.lint]
-# Enable Pyflakes (`F`), pycodestyle (`E`), isort (`I`).
-select = ["E", "F", "I"]
+# Enable Pyflakes (`F`), pycodestyle (`E`), isort (`I`), pyupgrade (`UP`).
+select = ["E", "F", "I", "UP"]
 ignore = []
 
 # Allow fix for all enabled rules (when `--fix`) is provided.

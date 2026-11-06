@@ -1,7 +1,4 @@
 from typing import Annotated
-from typing import Optional
-from typing import Type
-from typing import Union
 
 import numpy as np
 import pydantic
@@ -10,53 +7,46 @@ import pydantic
 class Prompt(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
-    points: Optional[
-        Annotated[
-            np.ndarray,
-            pydantic.WithJsonSchema(
-                {
+    points: Annotated[
+        np.ndarray,
+        pydantic.WithJsonSchema(
+            {
+                "type": "array",
+                "items": {
                     "type": "array",
-                    "items": {
-                        "type": "array",
-                        "items": {"type": "number"},
-                        "minItems": 2,
-                        "maxItems": 2,
-                    },
-                }
-            ),
-        ]
-    ] = pydantic.Field(default=None)
+                    "items": {"type": "number"},
+                    "minItems": 2,
+                    "maxItems": 2,
+                },
+            }
+        ),
+    ] | None = pydantic.Field(default=None)
     # point_labels: background=0, foreground=1, box_lt=2, box_rb=3,
     # negative_box_lt=4, negative_box_rb=5
-    point_labels: Optional[
-        Annotated[
-            np.ndarray,
-            pydantic.WithJsonSchema(
-                {
-                    "type": "array",
-                    "items": {"type": "integer", "enum": [0, 1, 2, 3, 4, 5]},
-                }
-            ),
-        ]
-    ] = pydantic.Field(default=None)
-    texts: Optional[list[str]] = pydantic.Field(default=None)
+    point_labels: Annotated[
+        np.ndarray,
+        pydantic.WithJsonSchema(
+            {"type": "array", "items": {"type": "integer", "enum": [0, 1, 2, 3, 4, 5]}}
+        ),
+    ] | None = pydantic.Field(default=None)
+    texts: list[str] | None = pydantic.Field(default=None)
 
-    iou_threshold: Optional[float] = pydantic.Field(default=0.5)
-    score_threshold: Optional[float] = pydantic.Field(default=0.1)
-    max_annotations: Optional[int] = pydantic.Field(default=100, ge=0)
+    iou_threshold: float | None = pydantic.Field(default=0.5)
+    score_threshold: float | None = pydantic.Field(default=0.1)
+    max_annotations: int | None = pydantic.Field(default=100, ge=0)
 
     @pydantic.field_serializer("points")
     def _serialize_points(
-        self: "Prompt", points: Optional[np.ndarray]
-    ) -> Optional[list[list[float]]]:
+        self: "Prompt", points: np.ndarray | None
+    ) -> list[list[float]] | None:
         if points is None:
             return None
         return points.tolist()
 
     @pydantic.field_serializer("point_labels")
     def _serialize_point_labels(
-        self: "Prompt", point_labels: Optional[np.ndarray]
-    ) -> Optional[list[int]]:
+        self: "Prompt", point_labels: np.ndarray | None
+    ) -> list[int] | None:
         if point_labels is None:
             return None
         return point_labels.tolist()
@@ -64,8 +54,8 @@ class Prompt(pydantic.BaseModel):
     @pydantic.field_validator("points", mode="before")
     @classmethod
     def _validate_points(
-        cls: Type, points: Optional[Union[list, np.ndarray]]
-    ) -> Optional[np.ndarray]:
+        cls: type, points: list | np.ndarray | None
+    ) -> np.ndarray | None:
         if points is None:
             return None
         if isinstance(points, list):
@@ -79,8 +69,8 @@ class Prompt(pydantic.BaseModel):
     @pydantic.field_validator("point_labels", mode="before")
     @classmethod
     def _validate_point_labels(
-        cls: Type, point_labels: Optional[Union[list, np.ndarray]]
-    ) -> Optional[np.ndarray]:
+        cls: type, point_labels: list | np.ndarray | None
+    ) -> np.ndarray | None:
         if point_labels is None:
             return None
         if isinstance(point_labels, list):

@@ -4,9 +4,9 @@ import contextlib
 import functools
 import os
 import sys
+from collections.abc import Sequence
 from typing import Any
 from typing import Final
-from typing import Sequence
 from typing import cast
 
 import onnxruntime

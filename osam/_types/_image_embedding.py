@@ -1,5 +1,4 @@
 import base64
-from typing import Union
 from typing import cast
 
 import numpy as np
@@ -17,7 +16,7 @@ class ImageEmbedding(pydantic.BaseModel):
 
     @pydantic.field_validator("embedding", mode="before")
     def validate_embedding(
-        cls, embedding: Union[npt.NDArray[np.float32], list[list[list[float]]]]
+        cls, embedding: npt.NDArray[np.float32] | list[list[list[float]]]
     ) -> npt.NDArray[np.float32]:
         if isinstance(embedding, list):
             embedding = np.array(embedding, dtype=np.float32)
@@ -37,7 +36,7 @@ class ImageEmbedding(pydantic.BaseModel):
 
     @pydantic.field_validator("extra_features", mode="before")
     def validate_extra_features(
-        cls, extra_features: list[Union[npt.NDArray[np.float32], dict]]
+        cls, extra_features: list[npt.NDArray[np.float32] | dict]
     ) -> list[npt.NDArray[np.float32]]:
         extra_features_ndarray: list[npt.NDArray[np.float32]] = []
         for i, high_res_feature in enumerate(extra_features):

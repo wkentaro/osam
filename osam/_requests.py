@@ -4,7 +4,6 @@ import typing
 from collections.abc import Sequence
 from typing import Any
 from typing import Final
-from typing import Optional
 
 import numpy as np
 import pydantic
@@ -66,37 +65,37 @@ class SegmentRequest(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     model: str
-    image: Optional[Base64Image] = pydantic.Field(
+    image: Base64Image | None = pydantic.Field(
         default=None,
         description="A base64-encoded image file, such as PNG or JPEG",
     )
-    image_hash: Optional[str] = pydantic.Field(
+    image_hash: str | None = pydantic.Field(
         default=None,
         description="In place of image, the hash of an image sent before, whose "
         "embedding the server may still have; 412 asks for the image itself",
     )
     # One object: points with at most one box.
-    points: Optional[list[tuple[float, float]]] = pydantic.Field(
+    points: list[tuple[float, float]] | None = pydantic.Field(
         default=None, description="x, y in pixels"
     )
-    point_labels: Optional[list[PointLabel]] = pydantic.Field(
+    point_labels: list[PointLabel] | None = pydantic.Field(
         default=None, description="1 for foreground, 0 for background"
     )
-    box: Optional[Box] = pydantic.Field(
+    box: Box | None = pydantic.Field(
         default=None, description="xmin, ymin, xmax, ymax in pixels"
     )
     # Every match: texts, example boxes, or both.
-    texts: Optional[list[str]] = None
-    example_boxes: Optional[list[Box]] = pydantic.Field(
+    texts: list[str] | None = None
+    example_boxes: list[Box] | None = pydantic.Field(
         default=None, description="xmin, ymin, xmax, ymax in pixels"
     )
-    example_box_labels: Optional[list[PointLabel]] = pydantic.Field(
+    example_box_labels: list[PointLabel] | None = pydantic.Field(
         default=None,
         description="1 for a positive example, 0 for a negative one; all 1 if unset",
     )
-    iou_threshold: Optional[float] = None
-    score_threshold: Optional[float] = None
-    max_annotations: Optional[int] = pydantic.Field(default=None, ge=0)
+    iou_threshold: float | None = None
+    score_threshold: float | None = None
+    max_annotations: int | None = pydantic.Field(default=None, ge=0)
     keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
 
     @pydantic.field_validator("image", mode="before")
@@ -131,7 +130,7 @@ class SegmentRequest(pydantic.BaseModel):
 
     def to_prompt(
         self, *, model_type: type[types.Model], height: int, width: int
-    ) -> Optional[types.Prompt]:
+    ) -> types.Prompt | None:
         # The one place that builds the models' point labels: 2 and 3 for a
         # box's corners, 4 and 5 for a negative box's.
         thresholds: dict[str, Any] = self.model_dump(
@@ -143,7 +142,7 @@ class SegmentRequest(pydantic.BaseModel):
         if self.box is not None:
             points += [self.box[:2], self.box[2:]]
             labels += [2, 3]
-        texts: Optional[list[str]] = self.texts
+        texts: list[str] | None = self.texts
         if self.example_boxes is not None:
             for example, label in zip(
                 self.example_boxes,

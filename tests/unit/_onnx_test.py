@@ -2,8 +2,8 @@ import os
 import pathlib
 import sys
 import types
+from collections.abc import Iterator
 from typing import Any
-from typing import Iterator
 from typing import cast
 
 import numpy as np

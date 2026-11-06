@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-from typing import Type
 
 import onnx
 from loguru import logger
@@ -37,7 +36,7 @@ def main():
     )
     args = parser.parse_args()
 
-    model_type: Type[osam._types.Model] = osam._registry.get_model_type_by_name(
+    model_type: type[osam._types.Model] = osam._registry.get_model_type_by_name(
         name=args.model
     )
     model_type.pull()

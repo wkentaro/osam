@@ -160,11 +160,11 @@ class Sam3(types.Model):
                 )
 
         # The decoder takes a fixed number of boxes, and masks out the unused ones.
-        (box_input,) = [
+        (box_input,) = (
             i
             for i in self._inference_sessions["decoder"].get_inputs()
             if i.name == "box_coords"
-        ]
+        )
         max_boxes: int = box_input.shape[0]
         box_coords: NDArray[np.float32] = np.zeros((max_boxes, 1, 4), np.float32)
         box_labels: NDArray[np.int64] = np.ones((max_boxes, 1), np.int64)
