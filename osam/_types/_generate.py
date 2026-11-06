@@ -5,8 +5,8 @@ import numpy as np
 import pydantic
 
 from .. import _json
-from ._annotation import Annotation
-from ._annotation import Base64Image
+from ..types import Annotation
+from ..types._annotation import Base64Image
 from ._image_embedding import ImageEmbedding
 from ._prompt import Prompt
 

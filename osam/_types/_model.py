@@ -11,7 +11,6 @@ from collections.abc import Callable
 from typing import Any
 from typing import Dict
 from typing import Final
-from typing import Literal
 from typing import Optional
 from typing import Sequence
 from typing import cast
@@ -20,15 +19,15 @@ import numpy as np
 import onnxruntime
 from loguru import logger
 
-from ._blob import Blob
+from ..types import Blob
+from ..types import Device
+from ..types import ModelMetadata
 from ._d3d12 import supports_d3d12
 from ._generate import GenerateRequest
 from ._generate import GenerateResponse
 from ._image_embedding import ImageEmbedding
-from ._model_metadata import ModelMetadata
 from ._prompt import Prompt
 
-Device = Literal["cpu", "cuda", "coreml", "webgpu"]
 _Providers = Sequence[str | tuple[str, dict[str, str]]]
 
 _DEVICE_PROVIDERS: Final[dict[str, str]] = {

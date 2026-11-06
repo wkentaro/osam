@@ -13,9 +13,9 @@ import pytest
 from onnx import helper
 from onnx import numpy_helper
 
-from osam.types import _model
+from osam._types import _model
+from osam._types._model import resolve_providers
 from osam.types._blob import Blob
-from osam.types._model import resolve_providers
 
 
 @pytest.fixture

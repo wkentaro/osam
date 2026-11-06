@@ -6,7 +6,7 @@ import numpy.typing as npt
 import pydantic
 import pytest
 
-from osam.types._image_embedding import ImageEmbedding
+from osam._types._image_embedding import ImageEmbedding
 
 
 def test_validate_embedding_rejects_wrong_ndim() -> None:

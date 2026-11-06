@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from osam.types import _d3d12
+from osam._types import _d3d12
 
 
 @pytest.mark.parametrize(
