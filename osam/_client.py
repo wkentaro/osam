@@ -66,6 +66,8 @@ class Client:
     timeout: seconds to wait for each response, such as 600, or None to wait
     forever. A request that times out raises TimeoutError, and a private
     server restarts, so a hung model stops.
+    A model name osam doesn't know raises LookupError; from a server, it is
+    also a ResponseError with status_code 404.
     """
 
     def __init__(
