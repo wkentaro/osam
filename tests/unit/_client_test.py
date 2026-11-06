@@ -16,7 +16,7 @@ import pytest
 import uvicorn
 
 import osam
-from osam import _client
+from osam import _http
 from osam import _server
 
 _IMAGE: Final = np.asarray(
@@ -26,13 +26,28 @@ _IMAGE: Final = np.asarray(
 )
 
 
+def _backend(client: osam.Client) -> _http.HttpBackend:
+    assert isinstance(client._backend, _http.HttpBackend)
+    return client._backend
+
+
 @pytest.fixture(scope="module")
 def client():
     with osam.Client() as client:
         yield client
 
 
-def test_private_server_segments(client: osam.Client) -> None:
+@pytest.fixture(scope="module", params=["private server", "in process"])
+def any_client(request: pytest.FixtureRequest, client: osam.Client):
+    if request.param == "private server":
+        yield client
+        return
+    with osam.Client(in_process=True) as in_process:
+        yield in_process
+
+
+def test_client_segments(any_client: osam.Client) -> None:
+    client = any_client
     assert client.version() == osam.__version__
     assert "efficientsam:10m" in {model.name for model in client.list()}
 
@@ -41,10 +56,11 @@ def test_private_server_segments(client: osam.Client) -> None:
     )
     assert annotation.mask is not None
     assert annotation.mask.any()
-    # The same as in this process.
-    (local,) = osam.segment(
-        "efficientsam:10m", _IMAGE, points=np.array([[1280, 800]]), point_labels=[1]
-    )
+    # The same on either backend.
+    with osam.Client(in_process=True) as in_process:
+        (local,) = in_process.segment(
+            "efficientsam:10m", _IMAGE, points=np.array([[1280, 800]]), point_labels=[1]
+        )
     assert local.bounding_box == annotation.bounding_box
     assert local.mask is not None
     assert (local.mask == annotation.mask).all()
@@ -62,31 +78,63 @@ def test_private_server_segments(client: osam.Client) -> None:
         with pytest.raises(ValueError):
             client.segment("efficientsam:10m", _IMAGE, **prompt)
 
-    with pytest.raises(osam.ResponseError) as e:
+    # A ResponseError with 404 from a server, a ValueError in this process.
+    with pytest.raises((osam.ResponseError, ValueError), match="not found") as e:
         client.segment("missing", _IMAGE)
-    assert e.value.status_code == 404
-    assert "not found" in str(e.value)
+    assert getattr(e.value, "status_code", 404) == 404
+
+
+def test_invalid_arguments_raise_before_a_request(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unexpected(**kwargs: Any) -> Any:
+        raise AssertionError("sent a request")
+
+    monkeypatch.setattr(_backend(client), "_request", unexpected)
+    with pytest.raises(ValueError, match="same length"):
+        client.segment("efficientsam:10m", _IMAGE, points=[[1, 2]], point_labels=[])
+    with pytest.raises(ValueError, match="duration"):
+        client.load("efficientsam:10m", keep_alive="soon")
+
+
+def test_in_process_takes_no_server_settings() -> None:
+    with pytest.raises(ValueError, match="host"):
+        osam.Client(host="127.0.0.1:11368", in_process=True)
+    with pytest.raises(ValueError, match="timeout"):
+        osam.Client(timeout=600, in_process=True)
+    with pytest.raises(ValueError, match="max_loaded_models"):
+        osam.Client(max_loaded_models=0, in_process=True)
+
+
+def test_in_process_close_unloads_its_models() -> None:
+    with osam.Client(in_process=True, device="cpu") as client:
+        client.load("efficientsam:10m", keep_alive=-1)
+        assert [(model.name, model.device) for model in client.ps()] == [
+            ("efficientsam:10m", "cpu")
+        ]
+    assert client.ps() == []
 
 
 def test_private_server_needs_its_token(client: osam.Client) -> None:
-    connection = _client.http.client.HTTPConnection(*client._endpoint[:2])
+    connection = _http.http.client.HTTPConnection(*_backend(client)._endpoint[:2])
     connection.request("GET", "/api/version")
     assert connection.getresponse().status == 401
 
 
 def test_private_server_restarts_after_a_crash(client: osam.Client) -> None:
-    assert client._process is not None
     for call in [client.version, lambda: client.pull("efficientsam:10m")]:
-        assert client._process is not None
-        client._process.kill()
-        _client._wait(process=client._process, timeout=None)
+        process = _backend(client)._process
+        assert process is not None
+        process.kill()
+        _http._wait(process=process, timeout=None)
         call()
 
 
 def test_concurrent_requests_survive_one_restart(client: osam.Client) -> None:
-    assert client._process is not None
-    client._process.kill()
-    _client._wait(process=client._process, timeout=None)
+    process = _backend(client)._process
+    assert process is not None
+    process.kill()
+    _http._wait(process=process, timeout=None)
     versions: list[str] = []
     threads = [
         threading.Thread(target=lambda: versions.append(client.version()))
@@ -104,7 +152,7 @@ def test_private_server_exits_with_its_parent(tmp_path: pathlib.Path) -> None:
     script = (
         "import os, osam\n"
         "client = osam.Client()\n"
-        "print(client._endpoint[1], flush=True)\n"
+        "print(client._backend._endpoint[1], flush=True)\n"
         "os._exit(0)\n"  # skips close(), as a crash would
     )
     (tmp_path / "parent.py").write_text(script)
@@ -160,11 +208,11 @@ def test_frozen_application_starts_through_multiprocessing(
 ) -> None:
     # Setting sys.frozen would also make multiprocessing run the child as a
     # frozen executable, which this interpreter is not.
-    monkeypatch.setattr(_client, "_start_subprocess", _client._start_frozen)
+    monkeypatch.setattr(_http, "_start_subprocess", _http._start_frozen)
     with osam.Client() as client:
-        assert isinstance(client._process, multiprocessing.process.BaseProcess)
+        process = _backend(client)._process
+        assert isinstance(process, multiprocessing.process.BaseProcess)
         assert client.version() == osam.__version__
-        process = client._process
     assert not process.is_alive()
 
 
@@ -190,7 +238,7 @@ def test_host_checks_the_version(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OSAM_HOST", host)
         assert osam.Client().version() == osam.__version__
 
-        monkeypatch.setattr(_client, "__version__", "0.0.1")
+        monkeypatch.setattr(_http, "__version__", "0.0.1")
         with pytest.raises(RuntimeError, match="versions differ"):
             osam.Client(host=host)
         with pytest.raises(ValueError, match="http or https"):
@@ -240,9 +288,9 @@ def test_segment_sends_a_repeated_image_by_hash(
     client: osam.Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     encoded: list[np.ndarray] = []
-    encode = _client._json.image_ndarray_to_b64data
+    encode = _http._json.image_ndarray_to_b64data
     sent: list[set[str]] = []
-    request = client._request
+    request = _backend(client)._request
 
     def counting(*, ndarray: np.ndarray) -> str:
         encoded.append(ndarray)
@@ -252,8 +300,8 @@ def test_segment_sends_a_repeated_image_by_hash(
         sent.append({"image", "image_hash"} & set(body or {}))
         return request(method=method, path=path, body=body)
 
-    monkeypatch.setattr(_client._json, "image_ndarray_to_b64data", counting)
-    monkeypatch.setattr(client, "_request", recording)
+    monkeypatch.setattr(_http._json, "image_ndarray_to_b64data", counting)
+    monkeypatch.setattr(_backend(client), "_request", recording)
     image = _IMAGE[::2, ::2].copy()  # not sent by an earlier test
     for _ in range(2):
         client.segment("efficientsam:10m", image)
@@ -274,37 +322,39 @@ def test_segment_sends_a_repeated_image_by_hash(
 def test_timeout_restarts_a_private_server(
     client: osam.Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    process = client._process
-    send = client._send
+    process = _backend(client)._process
+    send = _backend(client)._send
 
     def hang(**kwargs: Any) -> Any:
-        monkeypatch.setattr(client, "_send", send)
+        monkeypatch.setattr(_backend(client), "_send", send)
         raise TimeoutError("timed out")
 
-    monkeypatch.setattr(client, "_send", hang)
+    monkeypatch.setattr(_backend(client), "_send", hang)
     with pytest.raises(TimeoutError):
         client.version()
-    assert client._process is not process
+    assert _backend(client)._process is not process
     assert client.version() == osam.__version__
 
 
 def test_timeout_restarts_a_private_server_on_a_retry_or_a_stream(
     client: osam.Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    send = client._send
+    send = _backend(client)._send
     processes: list[Any] = []
 
     def crash_then_hang(**kwargs: Any) -> Any:
-        processes.append(client._process)
+        processes.append(_backend(client)._process)
         if len(processes) == 1:
             raise ConnectionResetError("crashed")
-        monkeypatch.setattr(client, "_send", send)
+        monkeypatch.setattr(_backend(client), "_send", send)
         raise TimeoutError("timed out")
 
-    monkeypatch.setattr(client, "_send", crash_then_hang)
+    monkeypatch.setattr(_backend(client), "_send", crash_then_hang)
     with pytest.raises(TimeoutError):
         client.version()
-    assert client._process not in processes  # the retry's server restarted too
+    assert (
+        _backend(client)._process not in processes
+    )  # the retry's server restarted too
 
     class Connection:
         def close(self) -> None:
@@ -314,13 +364,13 @@ def test_timeout_restarts_a_private_server_on_a_retry_or_a_stream(
         yield b'{"status": "pulling"}'
         raise TimeoutError("timed out")
 
-    process = client._process
+    process = _backend(client)._process
     monkeypatch.setattr(
-        client, "_open_stream", lambda **kwargs: (Connection(), stall())
+        _backend(client), "_open_stream", lambda **kwargs: (Connection(), stall())
     )
     with pytest.raises(TimeoutError):
         client.pull("efficientsam:10m")
-    assert client._process is not process
+    assert _backend(client)._process is not process
 
 
 def test_timeout_on_a_silent_host() -> None:

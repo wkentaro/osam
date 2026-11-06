@@ -4,6 +4,7 @@ import threading
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler
 from http.server import ThreadingHTTPServer
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -109,6 +110,29 @@ def test_pull_retries_transient_failure_then_succeeds(
         blob.pull()
 
     assert n_calls == 3
+
+
+def test_pull_raises_what_progress_raises_without_retrying(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OSAM_BLOB_ENDPOINT", raising=False)
+    blob = Blob(url="https://example.com/model.onnx", hash="sha256:abc")
+
+    class Stop(Exception):
+        pass
+
+    def stop(filename: str, completed: int, total: int | None) -> None:
+        raise Stop
+
+    def fake_cached_download(progress: Any, **kwargs: Any) -> None:
+        progress(1, 10)
+
+    with mock.patch(
+        "osam.types._blob.gdown.cached_download", side_effect=fake_cached_download
+    ) as download:
+        with pytest.raises(Stop):
+            blob.pull(progress=stop)
+    assert download.call_count == 1
 
 
 def test_pull_raises_after_exhausting_retries(

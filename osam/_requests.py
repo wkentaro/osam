@@ -57,6 +57,11 @@ Box = tuple[float, float, float, float]
 PointLabel = typing.Literal[0, 1]
 
 
+class LoadRequest(pydantic.BaseModel):
+    model: str
+    keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
+
+
 class SegmentRequest(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
@@ -169,3 +174,11 @@ def to_json_fields(*, fields: dict[str, Any]) -> dict[str, Any]:
         for name, value in fields.items()
         if value is not None
     }
+
+
+class SegmentResponse(pydantic.BaseModel):
+    annotations: list[types.Annotation]
+    image_hash: str = pydantic.Field(
+        description="Of the request's image, to send as image_hash with further "
+        "prompts on it",
+    )
