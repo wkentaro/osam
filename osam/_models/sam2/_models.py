@@ -50,26 +50,24 @@ class Sam2(SamBase):
             extra_features=[high_res_features1[0], high_res_features2[0]],
         )
 
+    @override
     def _generate_mask_from_image_embedding(
         self,
         *,
         image_embedding: types.ImageEmbedding,
-        prompt: types.Prompt,
+        points: npt.NDArray[np.float32],
+        point_labels: npt.NDArray[np.float32],
     ) -> npt.NDArray[np.bool_]:
         input_size: int = get_input_size(
             encoder_session=self._inference_sessions["encoder"]
         )
 
-        input_point: npt.NDArray[np.float32] = np.array(prompt.points, dtype=np.float32)
-        input_point = input_point / np.array(
+        input_point: npt.NDArray[np.float32] = points / np.array(
             [
                 image_embedding.original_width / input_size,
                 image_embedding.original_height / input_size,
             ],
             dtype=np.float32,
-        )
-        input_label: npt.NDArray[np.float32] = np.array(
-            prompt.point_labels, dtype=np.float32
         )
 
         decoder_inputs = {
@@ -77,7 +75,7 @@ class Sam2(SamBase):
             "high_res_features1": image_embedding.extra_features[0][None],
             "high_res_features2": image_embedding.extra_features[1][None],
             "point_coords": input_point[None],
-            "point_labels": input_label[None],
+            "point_labels": point_labels[None],
             "mask_input": np.zeros((1, 1, 256, 256), dtype=np.float32),
             "has_mask_input": np.array([0], dtype=np.float32),
             "orig_im_size": np.array(

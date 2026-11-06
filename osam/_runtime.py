@@ -158,19 +158,12 @@ class Runtime:
         )
         key: tuple[str, str] = (model_type.name, image_hash)
         embedding: types.ImageEmbedding | None = self._embeddings.get(key)
-        if request.image is None:
-            if embedding is None:
-                # Before loading the model, which a retry with the image would
-                # otherwise load a second time after keep_alive 0 unloads it.
-                raise UnknownImageError(
-                    f"no embedding for image {image_hash}; send the image"
-                )
-            height, width = embedding.original_height, embedding.original_width
-        else:
-            height, width = request.image.shape[:2]
-        prompt: types.Prompt | None = request.to_prompt(
-            model_type=model_type, height=height, width=width
-        )
+        if request.image is None and embedding is None:
+            # Before loading the model, which a retry with the image would
+            # otherwise load a second time after keep_alive 0 unloads it.
+            raise UnknownImageError(
+                f"no embedding for image {image_hash}; send the image"
+            )
         model: types.Model = self._load(model_name=model_type.name)
         if embedding is None:
             assert request.image is not None  # raised UnknownImageError otherwise
@@ -180,7 +173,7 @@ class Runtime:
         while len(self._embeddings) > EMBEDDING_CACHE_SIZE:
             self._embeddings.popitem(last=False)
         annotations: list[types.Annotation] = model.decode(
-            embedding=embedding, prompt=prompt
+            embedding=embedding, prompt=request
         )
         return SegmentResponse(annotations=annotations, image_hash=image_hash)
 

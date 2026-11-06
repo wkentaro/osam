@@ -22,6 +22,8 @@ class _YoloWorld(types.Model):
         license_spdx="GPL-3.0-only",
     )
 
+    prompt_kinds = frozenset({"texts"})
+
     _input_size: int
 
     @classmethod
@@ -43,11 +45,9 @@ class _YoloWorld(types.Model):
     def _decode(
         self, *, embedding: types.ImageEmbedding, prompt: types.Prompt
     ) -> list[types.Annotation]:
-        if prompt.texts is None:
-            raise ValueError(f"prompt.texts is required: prompt={prompt!r}")
-        if prompt.points is not None:
-            raise ValueError(f"{self.name} takes texts only, not points or boxes")
-        token = clip.tokenize(texts=prompt.texts + [" "])
+        texts: list[str] | None = prompt.texts
+        assert texts is not None  # decode checks prompt_kinds
+        token = clip.tokenize(texts=texts + [" "])
         outputs = self._inference_sessions["textual"].run(None, {"input": token})
         text_features: NDArray[np.float32] = cast(NDArray[np.float32], outputs[0])
         text_features = text_features / np.linalg.norm(
@@ -64,12 +64,12 @@ class _YoloWorld(types.Model):
         scores = cast(NDArray[np.float32], yolo_outputs[0])[0]
         bboxes = cast(NDArray[np.float32], yolo_outputs[1])[0]
         #
-        iou_threshold = 1.0 if prompt.iou_threshold is None else prompt.iou_threshold
+        iou_threshold = 0.5 if prompt.iou_threshold is None else prompt.iou_threshold
         score_threshold = (
-            0.0 if prompt.score_threshold is None else prompt.score_threshold
+            0.1 if prompt.score_threshold is None else prompt.score_threshold
         )
         max_annotations = (
-            len(bboxes) if prompt.max_annotations is None else prompt.max_annotations
+            100 if prompt.max_annotations is None else prompt.max_annotations
         )
         bboxes, scores, labels, _indices = _nms.non_maximum_suppression(
             boxes=bboxes,
@@ -88,7 +88,7 @@ class _YoloWorld(types.Model):
                 bounding_box=types.BoundingBox(
                     xmin=bbox[0], ymin=bbox[1], xmax=bbox[2], ymax=bbox[3]
                 ),
-                text=prompt.texts[label],
+                text=texts[label],
                 score=score,
             )
             for bbox, label, score in zip(bboxes, labels, scores)

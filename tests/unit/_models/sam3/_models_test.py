@@ -55,36 +55,18 @@ def test_decode_keeps_mask_of_box_past_image_edge(
 
 
 @pytest.mark.parametrize(
-    "point_labels",
-    [[2, 3, 2, 3], [2, 3, 4, 5], [4, 5], [3, 2], [2, 1, 3], [2]],
-)
-def test_decode_rejects_boxes_without_text_beyond_one_box(
-    point_labels: list[int],
-) -> None:
-    model = Sam3.__new__(Sam3)
-    embedding = types.ImageEmbedding(
-        original_height=100,
-        original_width=100,
-        embedding=np.zeros((1, 1, 1), np.float32),
-        extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
-    )
-
-    with pytest.raises(ValueError, match=r"texts=\['visual'\]"):
-        model.decode(
-            embedding=embedding,
-            prompt=types.Prompt(
-                points=np.zeros((len(point_labels), 2)),
-                point_labels=np.array(point_labels),
-            ),
-        )
-
-
-@pytest.mark.parametrize(
-    "point_labels",
-    [[1], [1, 0], [2, 3], [2, 3, 1], [1, 2, 3, 0]],
+    "point_labels, box, expected",
+    [
+        ([1], None, [1]),
+        ([1, 0], None, [1, 0]),
+        (None, (0, 0, 1, 1), [2, 3]),
+        ([1, 0], (0, 0, 1, 1), [1, 0, 2, 3]),
+    ],
 )
 def test_decode_segments_one_object_from_points_and_one_box(
-    point_labels: list[int],
+    point_labels: list[int] | None,
+    box: tuple[float, float, float, float] | None,
+    expected: list[int],
 ) -> None:
     model = Sam3.__new__(Sam3)
     calls: list[list[int]] = []
@@ -100,13 +82,18 @@ def test_decode_segments_one_object_from_points_and_one_box(
 
     model.decode(
         embedding=embedding,
-        prompt=types.Prompt(
-            points=np.zeros((len(point_labels), 2)),
-            point_labels=np.array(point_labels),
+        prompt=types.Prompt.model_validate(
+            {
+                "points": None
+                if point_labels is None
+                else [[0, 0]] * len(point_labels),
+                "point_labels": point_labels,
+                "box": box,
+            }
         ),
     )
 
-    assert calls == [point_labels]
+    assert calls == [expected]
 
 
 def test_decode_finds_objects_for_each_text() -> None:

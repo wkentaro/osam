@@ -14,9 +14,7 @@ import osam._types
 def benchmark(model: str, n_times: int):
     runner = osam._registry.get_model_type_by_name(name=model)()
     image = np.asarray(PIL.Image.open("../_images/dogs.jpg"))
-    prompt = osam._types.Prompt(
-        points=np.array([[1280, 800]]), point_labels=np.array([1])
-    )
+    prompt = osam._types.Prompt(points=[(1280, 800)], point_labels=[1])
 
     def segment() -> None:
         runner.decode(embedding=runner.encode_image(image=image), prompt=prompt)

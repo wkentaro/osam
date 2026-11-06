@@ -385,36 +385,6 @@ def test_cpu_fallback_next_to_a_gpu_model_retries(
     assert list(_server._runtime._loaded) == ["sam2:tiny"]
 
 
-def _to_prompt(**fields) -> typing.Any:
-    request = _requests.SegmentRequest(model="sam3", image_hash="0", **fields)
-    sam3 = _server._registry.get_model_type_by_name(name="sam3")
-    return request.to_prompt(model_type=sam3, height=10, width=20)
-
-
-def test_segment_request_builds_point_labels() -> None:
-    prompt = _to_prompt(points=[[1, 2]], point_labels=[0], box=[3, 4, 5, 6])
-    assert prompt.points.tolist() == [[1, 2], [3, 4], [5, 6]]
-    assert prompt.point_labels.tolist() == [0, 2, 3]
-    assert prompt.texts is None
-
-    prompt = _to_prompt(
-        texts=["dog"],
-        example_boxes=[[0, 0, 1, 1], [2, 2, 3, 3]],
-        example_box_labels=[1, 0],
-        score_threshold=0.01,
-    )
-    assert prompt.point_labels.tolist() == [2, 3, 4, 5]
-    assert (prompt.texts, prompt.score_threshold) == (["dog"], 0.01)
-
-    # Example boxes alone find every object like them.
-    prompt = _to_prompt(example_boxes=[[0, 0, 1, 1]])
-    assert (prompt.texts, prompt.point_labels.tolist()) == (["visual"], [2, 3])
-
-    assert _to_prompt() is None  # the model's default prompt
-    prompt = _to_prompt(max_annotations=1)  # the default prompt, with it
-    assert (prompt.texts, prompt.max_annotations) == (["visual"], 1)
-
-
 @pytest.mark.parametrize(
     "fields",
     [

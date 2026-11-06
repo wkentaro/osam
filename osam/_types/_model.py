@@ -18,12 +18,17 @@ from ..types import BoundingBox
 from ..types import Device
 from ..types import ModelMetadata
 from ._image_embedding import ImageEmbedding
+from ._prompt import THRESHOLDS
 from ._prompt import Prompt
+from ._prompt import PromptKind
 
 
 class Model(abc.ABC):
     name: str
     metadata: ModelMetadata
+
+    # The prompt kinds decode takes; others raise ValueError.
+    prompt_kinds: frozenset[PromptKind]
 
     _blobs: dict[str, Blob]
     # Blobs that run on CoreML with device="coreml", all when None; the others
@@ -125,14 +130,19 @@ class Model(abc.ABC):
         # The prompt used when a request gives none.
         pass
 
-    def decode(
-        self, *, embedding: ImageEmbedding, prompt: Prompt | None
-    ) -> list[Annotation]:
-        if prompt is None:
+    def decode(self, *, embedding: ImageEmbedding, prompt: Prompt) -> list[Annotation]:
+        if not prompt.kinds:
             prompt = self.default_prompt(
                 height=embedding.original_height, width=embedding.original_width
+            ).model_copy(
+                update=prompt.model_dump(include=set(THRESHOLDS), exclude_none=True)
             )
             logger.debug("Using the default prompt: {prompt!r}", prompt=prompt)
+        if unsupported := prompt.kinds - self.prompt_kinds:
+            raise ValueError(
+                f"{self.name} takes {', '.join(sorted(self.prompt_kinds))}, "
+                f"not {', '.join(sorted(unsupported))}"
+            )
         return self._decode(embedding=embedding, prompt=prompt)
 
     @abc.abstractmethod

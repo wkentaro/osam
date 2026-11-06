@@ -2,7 +2,6 @@ import pathlib
 import re
 
 import imgviz
-import numpy as np
 import pytest
 
 from osam import _registry
@@ -26,9 +25,7 @@ def _model(*, name: str) -> types.Model:
     return _loaded[0]
 
 
-def _segment(
-    *, model: str, prompt: types.Prompt | None = None
-) -> list[types.Annotation]:
+def _segment(*, model: str, prompt: types.Prompt) -> list[types.Annotation]:
     loaded = _model(name=model)
     embedding = loaded.encode_image(image=imgviz.io.imread(image_path))
     return loaded.decode(embedding=embedding, prompt=prompt)
@@ -61,7 +58,7 @@ def _sam3(
     ],
 )
 def test_generate_point_to_mask(model: str) -> None:
-    annotations = _segment(model=model)
+    annotations = _segment(model=model, prompt=types.Prompt())
 
     assert len(annotations) == 1
     annotation: types.Annotation = annotations[0]
@@ -114,8 +111,7 @@ def test_generate_box_to_mask_sam2(model: str) -> None:
     annotations = _segment(
         model=model,
         prompt=types.Prompt(
-            points=np.array([[1233, 376], [1649, 691]], dtype=np.float32),
-            point_labels=np.array([2, 3], dtype=np.int32),
+            box=(1233, 376, 1649, 691),
         ),
     )
 
@@ -133,23 +129,21 @@ def test_generate_box_to_mask_sam2(model: str) -> None:
 @pytest.mark.extra
 @pytest.mark.parametrize("model", ["sam3:latest"])
 @pytest.mark.parametrize(
-    "points",
+    "example_boxes",
     [
-        [[1233, 376], [1649, 691]],
+        [(1233, 376, 1649, 691)],
         # two example dogs
-        [[1706, 613], [2227, 1438], [450, 551], [1059, 1421]],
+        [(1706, 613, 2227, 1438), (450, 551, 1059, 1421)],
     ],
 )
 def test_generate_example_box_to_mask_sam3(
-    model: str, points: list[list[int]], sam3_embedding: types.ImageEmbedding
+    model: str,
+    example_boxes: list[tuple[float, float, float, float]],
+    sam3_embedding: types.ImageEmbedding,
 ) -> None:
     annotations = _sam3(
         embedding=sam3_embedding,
-        prompt=types.Prompt(
-            texts=["visual"],
-            points=np.array(points, dtype=np.float32),
-            point_labels=np.array([2, 3] * (len(points) // 2), dtype=np.int32),
-        ),
+        prompt=types.Prompt(example_boxes=example_boxes),
     )
 
     # SAM3 returns multiple mask candidates (unlike SAM2 which returns 1)
@@ -202,12 +196,8 @@ def test_generate_negative_box_sam3(
     annotations = _sam3(
         embedding=sam3_embedding,
         prompt=types.Prompt(
-            points=np.array(
-                [[1706, 613], [2227, 1438], [450, 551], [1059, 1421]],
-                dtype=np.float32,
-            ),
-            point_labels=np.array([2, 3, 4, 5], dtype=np.int32),
-            texts=["visual"],
+            example_boxes=[(1706, 613, 2227, 1438), (450, 551, 1059, 1421)],
+            example_box_labels=[1, 0],
         ),
     )
 
@@ -223,8 +213,7 @@ def test_generate_box_to_mask_sam3(
     annotations = _sam3(
         embedding=sam3_embedding,
         prompt=types.Prompt(
-            points=np.array([[1233, 376], [1649, 691]], dtype=np.float32),
-            point_labels=np.array([2, 3], dtype=np.int32),
+            box=(1233, 376, 1649, 691),
         ),
     )
 
@@ -249,26 +238,18 @@ def test_generate_max_annotations_sam3(
 
 
 def test_generate_negative_box_rejected_by_sam2() -> None:
-    with pytest.raises(ValueError, match="does not support negative boxes"):
+    with pytest.raises(ValueError, match="takes box, points, not example_boxes"):
         _segment(
             model="sam2:tiny",
             prompt=types.Prompt(
-                points=np.array([[450, 551], [1059, 1421]], dtype=np.float32),
-                point_labels=np.array([4, 5], dtype=np.int32),
+                example_boxes=[(450, 551, 1059, 1421)], example_box_labels=[0]
             ),
         )
 
 
 def test_generate_box_rejected_by_yoloworld() -> None:
-    with pytest.raises(ValueError, match="takes texts only"):
-        _segment(
-            model="yoloworld",
-            prompt=types.Prompt(
-                texts=["visual"],
-                points=np.array([[450, 551], [1059, 1421]]),
-                point_labels=np.array([2, 3]),
-            ),
-        )
+    with pytest.raises(ValueError, match="takes texts, not box"):
+        _segment(model="yoloworld", prompt=types.Prompt(box=(450, 551, 1059, 1421)))
 
 
 def test_generate_point_to_mask_sam3(
@@ -277,8 +258,8 @@ def test_generate_point_to_mask_sam3(
     annotations = _sam3(
         embedding=sam3_embedding,
         prompt=types.Prompt(
-            points=np.array([[1439, 504], [1439, 1289]], dtype=np.float32),
-            point_labels=np.array([1, 1], dtype=np.int32),
+            points=[(1439, 504), (1439, 1289)],
+            point_labels=[1, 1],
         ),
     )
 
@@ -301,24 +282,10 @@ def test_generate_point_filtered_by_sam3(
     annotations = _sam3(
         embedding=sam3_embedding,
         prompt=types.Prompt(
-            points=np.array([[1439, 504]], dtype=np.float32),
-            point_labels=np.array([1], dtype=np.int32),
+            points=[(1439, 504)],
+            point_labels=[1],
             **limits,
         ),
     )
 
     assert annotations == []
-
-
-def test_generate_point_with_text_rejected_by_sam3(
-    sam3_embedding: types.ImageEmbedding,
-) -> None:
-    with pytest.raises(ValueError, match="can't be combined with text"):
-        _sam3(
-            embedding=sam3_embedding,
-            prompt=types.Prompt(
-                texts=["dog"],
-                points=np.array([[1439, 504]], dtype=np.float32),
-                point_labels=np.array([1], dtype=np.int32),
-            ),
-        )
