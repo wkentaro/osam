@@ -1,164 +1,24 @@
 from __future__ import annotations
 
 import abc
-import contextlib
-import functools
 import hashlib
-import os
-import sys
 import threading
 from collections.abc import Callable
-from typing import Any
 from typing import Dict
-from typing import Final
 from typing import Optional
-from typing import Sequence
-from typing import cast
 
 import numpy as np
 import onnxruntime
 from loguru import logger
 
+from .. import _onnx
 from ..types import Blob
 from ..types import Device
 from ..types import ModelMetadata
-from ._d3d12 import supports_d3d12
 from ._generate import GenerateRequest
 from ._generate import GenerateResponse
 from ._image_embedding import ImageEmbedding
 from ._prompt import Prompt
-
-_Providers = Sequence[str | tuple[str, dict[str, str]]]
-
-_DEVICE_PROVIDERS: Final[dict[str, str]] = {
-    "cpu": "CPUExecutionProvider",
-    "cuda": "CUDAExecutionProvider",
-    "coreml": "CoreMLExecutionProvider",
-    "webgpu": "WebGpuExecutionProvider",
-}
-
-
-def resolve_providers() -> list[str]:
-    raw = os.environ.get("OSAM_ONNX_PROVIDERS", "")
-    providers = [entry.strip() for entry in raw.split(",") if entry.strip()]
-    if providers:
-        return providers
-    if "CUDAExecutionProvider" in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
-        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
-    try:
-        device: Any | None = _webgpu_device()
-        if device is not None and _can_use_webgpu(ep_device=device):
-            return ["WebGpuExecutionProvider", "CPUExecutionProvider"]
-    except Exception as e:  # plugin missing or failing to register
-        logger.debug("Skipping WebGpuExecutionProvider: {e}", e=e)
-    return ["CPUExecutionProvider"]
-
-
-@functools.cache
-def _setup_cuda() -> bool:
-    if "CUDAExecutionProvider" not in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
-        return False
-    ort = cast(Any, onnxruntime)  # ty cannot see these members
-    try:
-        # Load the CUDA libraries from the nvidia-* wheels of osam[gpu]. It
-        # prints failures to stdout, which would break `osam run --json`.
-        with contextlib.redirect_stdout(sys.stderr):
-            ort.preload_dlls()
-        # Share one CUDA arena across sessions. With an arena per session,
-        # SAM3's three sessions run out of memory on a 12 GB GPU.
-        ort.create_and_register_allocator_v2(
-            "CUDAExecutionProvider",
-            ort.OrtMemoryInfo(
-                "Cuda",
-                ort.OrtAllocatorType.ORT_ARENA_ALLOCATOR,
-                0,
-                ort.OrtMemType.DEFAULT,
-            ),
-            {},
-            ort.OrtArenaCfg({"arena_extend_strategy": 1}),  # kSameAsRequested
-        )
-    except Exception as e:
-        logger.warning("Failed to set up a shared CUDA arena: {e}", e=e)
-        return False
-    return True
-
-
-def _is_software_adapter(*, ep_device: Any) -> bool:
-    # Windows lists its CPU renderer, WARP, as a GPU: ~25x slower than CPU on SAM.
-    # A GPU without a driver runs on the Basic Display driver, which renders on
-    # WARP.
-    hardware = ep_device.device
-    if (hardware.vendor_id, hardware.device_id) == (0x1414, 0x008C):  # WARP
-        return True
-    description: str = hardware.metadata.get("Description", "")
-    return description.startswith(
-        ("Microsoft Basic Render Driver", "Microsoft Basic Display Adapter")
-    )
-
-
-def _describe_adapter(*, ep_device: Any) -> str:
-    hardware = ep_device.device
-    name: str = hardware.metadata.get("Description") or hardware.vendor or "unknown"
-    return f"{name} ({hardware.vendor_id:#06x}:{hardware.device_id:#06x})"
-
-
-def _can_use_webgpu(*, ep_device: Any) -> bool:
-    if _is_software_adapter(ep_device=ep_device):
-        return False
-    if sys.platform != "win32":
-        return True
-    try:
-        supported = supports_d3d12(luid=int(ep_device.device.metadata["LUID"]))
-    except (KeyError, ValueError, OSError) as error:
-        logger.warning(
-            "Cannot check Direct3D 12 support for {}: {}; using CPU automatically",
-            _describe_adapter(ep_device=ep_device),
-            error,
-        )
-        return False
-    if not supported:
-        logger.debug(
-            "Skipping {}: no Direct3D 12 support; WebGPU would use software rendering",
-            _describe_adapter(ep_device=ep_device),
-        )
-    return supported
-
-
-@functools.cache
-def _webgpu_device() -> Any | None:
-    # Prefer usable hardware; keep a fallback for explicit WebGPU requests.
-    try:
-        import onnxruntime_ep_webgpu as webgpu_ep  # type: ignore[unresolved-import]
-    except ImportError:
-        raise RuntimeError(
-            "WebGpuExecutionProvider needs onnxruntime-ep-webgpu: "
-            "pip install 'osam[webgpu]'"
-        ) from None
-    ort = cast(Any, onnxruntime)
-    ort.register_execution_provider_library("webgpu", webgpu_ep.get_library_path())
-    devices: list[Any] = [
-        d for d in ort.get_ep_devices() if d.ep_name == webgpu_ep.get_ep_name()
-    ]
-    logger.debug(
-        "WebGPU adapters: {adapters!r}",
-        adapters=[_describe_adapter(ep_device=d) for d in devices],
-    )
-    # The plugin accepts one device.
-    for device in devices:
-        if _can_use_webgpu(ep_device=device):
-            logger.debug(
-                "Picked WebGPU adapter {}", _describe_adapter(ep_device=device)
-            )
-            return device
-    if devices:
-        logger.warning(
-            "No usable hardware WebGPU adapters: {adapters!r}. "
-            "Automatic selection uses CPU; an explicit WebGPU request runs on {first}",
-            adapters=[_describe_adapter(ep_device=d) for d in devices],
-            first=_describe_adapter(ep_device=devices[0]),
-        )
-        return devices[0]
-    return None
 
 
 class Model(abc.ABC):
@@ -180,15 +40,15 @@ class Model(abc.ABC):
         """
         logger.debug("Initializing model {name}", name=self.name)
         if device is not None:
-            _device_providers(device=device)  # fail before downloading
+            _onnx.device_providers(device=device)  # fail before downloading
         self.pull()
         if device is None:
-            self._inference_sessions = _load_inference_sessions(blobs=self._blobs)
+            self._inference_sessions = _onnx.load_inference_sessions(blobs=self._blobs)
             return
         self._inference_sessions = {
-            key: _create_device_session(
+            key: _onnx.create_device_session(
                 blob=blob,
-                providers=_device_providers(
+                providers=_onnx.device_providers(
                     device=device,
                     coreml=self._coreml_blobs is None or key in self._coreml_blobs,
                     coreml_cache_path=blob.coreml_cache_path,
@@ -209,7 +69,7 @@ class Model(abc.ABC):
         # The device the model runs on, e.g. "webgpu", or "cpu" after a fallback.
         session = next(iter(self._inference_sessions.values()))
         provider: str = session.get_providers()[0]
-        return {v: k for k, v in _DEVICE_PROVIDERS.items()}.get(provider, provider)
+        return {v: k for k, v in _onnx.DEVICE_PROVIDERS.items()}.get(provider, provider)
 
     @classmethod
     def pull(
@@ -265,161 +125,3 @@ class Model(abc.ABC):
     @abc.abstractmethod
     def generate(self, *, request: GenerateRequest) -> GenerateResponse:
         pass
-
-
-def _load_inference_sessions(
-    *,
-    blobs: dict[str, Blob],
-) -> dict[str, onnxruntime.InferenceSession]:
-    providers: Sequence[str] | None = None
-    inference_sessions: dict[str, onnxruntime.InferenceSession] = {}
-    for key, blob in blobs.items():
-        inference_session: onnxruntime.InferenceSession = _load_inference_session(
-            blob=blob, providers=providers
-        )
-        actual = list(inference_session.get_providers())
-        if providers not in (None, actual):
-            # This one fell back to CPU, e.g. out of GPU memory. Move the others
-            # too, so the model runs on one device and Model.device reports it.
-            for k in list(inference_sessions):
-                del inference_sessions[k]  # free it before loading its copy
-                inference_sessions[k] = _load_inference_session(
-                    blob=blobs[k], providers=actual
-                )
-        providers = actual
-        inference_sessions[key] = inference_session
-    logger.info(
-        "Initialized inference sessions with providers {providers!r}",
-        providers=providers,
-    )
-    return inference_sessions
-
-
-def _device_providers(
-    *, device: str, coreml: bool = True, coreml_cache_path: str | None = None
-) -> _Providers:
-    if device not in _DEVICE_PROVIDERS:
-        raise ValueError(
-            f"device must be one of {', '.join(_DEVICE_PROVIDERS)}: {device!r}"
-        )
-    provider: str = _DEVICE_PROVIDERS[device]
-    if device == "webgpu":
-        if _webgpu_device() is None:
-            raise RuntimeError(f"{provider} found no GPU")
-    elif provider not in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
-        raise RuntimeError(f"{provider} is unavailable in the installed onnxruntime")
-    if device == "cpu" or (device == "coreml" and not coreml):
-        return ["CPUExecutionProvider"]
-    if device == "coreml":
-        # MLProgram supports more operators than the default NeuralNetwork, and
-        # leaving out the Neural Engine keeps the GPU's accuracy and speed.
-        options: dict[str, str] = {
-            "ModelFormat": "MLProgram",
-            "MLComputeUnits": "CPUAndGPU",
-        }
-        if coreml_cache_path is not None:
-            # Compiling takes seconds per model; reuse it on the next load.
-            # Models compiled by another onnxruntime version fail to run.
-            options["ModelCacheDirectory"] = os.path.join(
-                coreml_cache_path, onnxruntime.__version__
-            )
-        return [(provider, options), "CPUExecutionProvider"]
-    return [provider, "CPUExecutionProvider"]
-
-
-def _coreml_model(*, blob: Blob) -> str | bytes:
-    # Rewrites every Gemm to transB=1 in memory: the CoreML EP takes minutes to
-    # load Gemm(transB=0), as it writes the transposed weight into its model as
-    # text. A blob with nothing to rewrite is returned as its path.
-    try:
-        import onnx
-        from onnx import numpy_helper
-    except ImportError:
-        raise RuntimeError(
-            "CoreMLExecutionProvider needs onnx: pip install 'osam[cpu]'"
-        ) from None
-    model = onnx.load(blob.path, load_external_data=False)
-    initializers = {i.name: i for i in model.graph.initializer}
-    gemms = [
-        node
-        for node in model.graph.node
-        if node.op_type == "Gemm"
-        and node.input[1] in initializers
-        and not any(a.name == "transB" and a.i for a in node.attribute)
-    ]
-    if not gemms:
-        return blob.path
-    logger.debug("Rewriting {!r} for CoreML", blob.path)
-    onnx.load_external_data_for_model(model, os.path.dirname(blob.path))
-    for name in {node.input[1] for node in gemms}:
-        weight = initializers[name]
-        weight.CopyFrom(numpy_helper.from_array(numpy_helper.to_array(weight).T, name))
-    for node in gemms:
-        for attribute in [a for a in node.attribute if a.name == "transB"]:
-            node.attribute.remove(attribute)
-        node.attribute.append(onnx.helper.make_attribute("transB", 1))
-    return model.SerializeToString()
-
-
-def _first_provider(*, providers: _Providers) -> str:
-    return providers[0] if isinstance(providers[0], str) else providers[0][0]
-
-
-def _create_session(
-    *, blob: Blob, providers: _Providers
-) -> onnxruntime.InferenceSession:
-    sess_options = onnxruntime.SessionOptions()  # type: ignore[possibly-missing-attribute]
-    if "CUDAExecutionProvider" in providers and _setup_cuda():
-        sess_options.add_session_config_entry("session.use_env_allocators", "1")
-    provider: str = _first_provider(providers=providers)
-    if provider == "WebGpuExecutionProvider":
-        # A plugin provider is added by device; CPU stays as the fallback.
-        sess_options.add_provider_for_devices([_webgpu_device()], {})
-        return onnxruntime.InferenceSession(blob.path, sess_options)
-    model: str | bytes = (
-        _coreml_model(blob=blob) if provider == "CoreMLExecutionProvider" else blob.path
-    )
-    session = onnxruntime.InferenceSession(model, sess_options, providers=providers)
-    if isinstance(model, bytes):
-        # onnxruntime keeps a model given as bytes, gigabytes for SAM3, to
-        # recreate the session on CPU fallback; the original file serves that.
-        session._model_path = blob.path
-        session._model_bytes = None
-    return session
-
-
-def _create_device_session(
-    *, blob: Blob, providers: _Providers
-) -> onnxruntime.InferenceSession:
-    session: onnxruntime.InferenceSession = _create_session(
-        blob=blob, providers=providers
-    )
-    # onnxruntime silently drops a provider it can't use.
-    provider: str = _first_provider(providers=providers)
-    if provider not in session.get_providers():
-        raise RuntimeError(f"{provider} failed to load {blob.path}")
-    # Raise on a provider failure in run() too, instead of retrying on CPU.
-    session.disable_fallback()
-    return session
-
-
-def _load_inference_session(
-    *, blob: Blob, providers: list[str] | None
-) -> onnxruntime.InferenceSession:
-    try:
-        if providers is None:
-            providers = resolve_providers()
-        inference_session = _create_session(blob=blob, providers=providers)
-    except Exception as e:
-        # Even though there is fallback in onnxruntime, it won't always work.
-        # e.g., CUDA is installed and CUDA_PATH is set, but CUDA_VISIBLE_DEVICES
-        # is empty. We fallback to cpu in such cases.
-        logger.error(
-            "Failed to create inference session with providers {providers!r}. "
-            "Falling back to ['CPUExecutionProvider']: {e}",
-            providers=providers,
-            e=e,
-        )
-        providers = ["CPUExecutionProvider"]
-        inference_session = onnxruntime.InferenceSession(blob.path, providers=providers)
-    return inference_session
