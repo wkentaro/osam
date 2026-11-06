@@ -289,12 +289,14 @@ same minor version of osam. Errors from the server raise `osam.ResponseError`.
 `timeout=600` raises `TimeoutError` when a response takes longer, and restarts
 a private server, so a hung model stops.
 `client.pull(model, progress=...)` calls `progress` with each line; raising
-from it, such as when the user cancels, stops the download.
+from it, such as when the user cancels, stops the download. A download that
+fails raises `RuntimeError`.
 
 `osam.Client(in_process=True)` runs models in your own process instead, with
 no server, and takes the same calls. `device`, `max_loaded_models` and
 `keep_alive` work as they do with a private server, and `close()` unloads its
-models. An unknown model raises `ValueError` instead of `osam.ResponseError`.
+models. An unknown model raises `LookupError` on both; from a server, it is
+also an `osam.ResponseError` with status code 404.
 
 ### HTTP
 

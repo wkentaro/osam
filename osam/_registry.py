@@ -4,6 +4,12 @@ from typing import Type
 from . import _models
 from . import _types as types
 
+
+class UnknownModelError(LookupError):
+    # A model name osam doesn't know: a 404 from the server.
+    pass
+
+
 registered_model_types: list[Type[types.Model]] = [
     _models.EfficientSam10m,
     _models.EfficientSam30m,
@@ -30,7 +36,7 @@ def get_model_type_by_name(*, name: str) -> Type[types.Model]:
         if cls.name == model_name:
             break
     else:
-        raise ValueError(f"Model {name!r} not found.")
+        raise UnknownModelError(f"Model {name!r} not found.")
     return cls
 
 

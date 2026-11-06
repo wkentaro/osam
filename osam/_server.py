@@ -95,6 +95,10 @@ app.add_exception_handler(
     ),
 )
 app.add_exception_handler(
+    _registry.UnknownModelError,
+    lambda request, exc: _error(message=str(exc), status_code=404),
+)
+app.add_exception_handler(
     fastapi.exceptions.RequestValidationError,
     lambda request, exc: _error(
         message=_describe_validation_errors(errors=exc.errors()), status_code=422
@@ -141,7 +145,8 @@ def list_running_models() -> RunningModelList:
 # Streams NDJSON progress lines, as Ollama does, ending in success or error.
 @app.post("/api/pull", response_class=fastapi.responses.StreamingResponse)
 async def pull(request: PullRequest) -> fastapi.responses.StreamingResponse:
-    model_type: type[types.Model] = _get_model_type(name=request.model)
+    # Looked up before streaming, so an unknown model is a 404.
+    model_type: type[types.Model] = _registry.get_model_type_by_name(name=request.model)
     loop = asyncio.get_running_loop()
     lines: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
     cancel = threading.Event()
@@ -176,13 +181,11 @@ async def pull(request: PullRequest) -> fastapi.responses.StreamingResponse:
 
 @app.delete("/api/models/{name}")
 async def remove(name: str) -> None:
-    model_type: type[types.Model] = _get_model_type(name=name)
-    await _run(call=functools.partial(_runtime.remove, model=model_type.name))
+    await _run(call=functools.partial(_runtime.remove, model=name))
 
 
 @app.post("/api/segment", response_model=SegmentResponse)
 async def segment(request: SegmentRequest) -> SegmentResponse:
-    _get_model_type(name=request.model)
     try:
         return await _run(call=functools.partial(_runtime.segment, request=request))
     except _runtime_module.UnknownImageError as e:
@@ -193,19 +196,11 @@ async def segment(request: SegmentRequest) -> SegmentResponse:
 
 @app.post("/api/load")
 async def load(request: LoadRequest) -> None:
-    _get_model_type(name=request.model)
     await _run(call=functools.partial(_runtime.load, request=request))
 
 
 async def _run(*, call: Callable[[], Any]) -> Any:
     return await asyncio.get_running_loop().run_in_executor(_worker, call)
-
-
-def _get_model_type(*, name: str) -> type[types.Model]:
-    try:
-        return _registry.get_model_type_by_name(name=name)
-    except ValueError as e:
-        raise fastapi.HTTPException(404, str(e))
 
 
 def run_private(

@@ -21,7 +21,6 @@ from numpy.typing import NDArray
 from . import __version__
 from . import _humanize
 from . import _json
-from . import _registry
 from . import _tabulate
 from . import types
 from ._client import Client
@@ -172,6 +171,15 @@ def _client(*, device: types.Device | None = None) -> Iterator[Client]:
         raise click.ClickException(str(e))
 
 
+def _full_name(*, client: Client, name: str) -> str:
+    # The server's name for it, such as "sam3:latest" for "sam3".
+    names: set[str] = {model.name for model in client.list()}
+    for full_name in (name, f"{name}:latest"):
+        if full_name in names:
+            return full_name
+    return name
+
+
 def _floats_callback(*, lengths: tuple[int, ...]) -> typing.Callable:
     def callback(ctx, param, value: tuple[str, ...]) -> list[list[float]]:
         parsed = []
@@ -320,6 +328,8 @@ def run(
             annotations: list[types.Annotation] = client.segment(
                 model_name, image, **(prompt_flags | thresholds)
             )
+            if json:
+                model_name = _full_name(client=client, name=model_name)
     except click.ClickException:
         raise
     except Exception:
@@ -329,7 +339,7 @@ def run(
     if json:
         click.echo(
             _RunOutput(
-                model=_registry.get_model_type_by_name(name=model_name).name,
+                model=model_name,
                 annotations=annotations,
             ).model_dump_json()
         )

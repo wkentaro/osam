@@ -43,6 +43,16 @@ class _InvalidRequestError(ResponseError, ValueError):
     pass
 
 
+class _NotFoundError(ResponseError, LookupError):
+    # A 404, such as an unknown model: a LookupError, as in a local call.
+    pass
+
+
+class _PullError(ResponseError, RuntimeError):
+    # A pull that failed on the server: a RuntimeError, as in a local call.
+    pass
+
+
 # HttpBackend.list shadows list inside the class, hence builtins.list there.
 class HttpBackend:
     # Client's backend for a server: a private one it starts, which exits with
@@ -141,7 +151,7 @@ class HttpBackend:
     ) -> None:
         for line in self._stream(path="/api/pull", body={"model": model}):
             if "error" in line:
-                raise ResponseError(line["error"], status_code=200)
+                raise _PullError(line["error"], status_code=200)
             if progress is not None:
                 progress(line)
 
@@ -397,6 +407,8 @@ def _response_error(*, status_code: int, data: bytes) -> ResponseError:
         message = data.decode(errors="replace")
     if status_code in (400, 422):
         return _InvalidRequestError(message, status_code=status_code)
+    if status_code == 404:
+        return _NotFoundError(message, status_code=status_code)
     return ResponseError(message, status_code=status_code)
 
 

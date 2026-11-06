@@ -66,6 +66,8 @@ class Client:
     timeout: seconds to wait for each response, such as 600, or None to wait
     forever. A request that times out raises TimeoutError, and a private
     server restarts, so a hung model stops.
+    A model name osam doesn't know raises LookupError; from a server, it is
+    also a ResponseError with status_code 404.
     """
 
     def __init__(
@@ -127,6 +129,7 @@ class Client:
         Lines look like {"status": "pulling encoder.onnx", "completed": 524288,
         "total": 24799761}. An exception raised from progress, such as on a
         cancel, stops the download on the server too.
+        A download that fails raises RuntimeError.
         """
         self._backend.pull(model=model, progress=progress)
 

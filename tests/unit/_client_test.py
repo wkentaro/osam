@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from typing import Any
 from typing import Final
 from typing import Iterator
@@ -78,10 +79,19 @@ def test_client_segments(any_client: osam.Client) -> None:
         with pytest.raises(ValueError):
             client.segment("efficientsam:10m", _IMAGE, **prompt)
 
-    # A ResponseError with 404 from a server, a ValueError in this process.
-    with pytest.raises((osam.ResponseError, ValueError), match="not found") as e:
-        client.segment("missing", _IMAGE)
-    assert getattr(e.value, "status_code", 404) == 404
+
+def test_unknown_model_raises_lookup_error(any_client: osam.Client) -> None:
+    calls: list[Callable[[], object]] = [
+        lambda: any_client.segment("missing", _IMAGE),
+        lambda: any_client.load("missing"),
+        lambda: any_client.pull("missing"),
+        lambda: any_client.remove("missing"),
+    ]
+    for call in calls:
+        with pytest.raises(LookupError, match="not found") as e:
+            call()
+        if isinstance(e.value, osam.ResponseError):
+            assert e.value.status_code == 404
 
 
 def test_invalid_arguments_raise_before_a_request(
@@ -260,7 +270,7 @@ def test_raising_from_progress_stops_the_pull(monkeypatch: pytest.MonkeyPatch) -
             progress("encoder.onnx", completed, 1000)
             time.sleep(0.01)
 
-    model_type = _server._get_model_type(name="efficientsam:10m")
+    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(model_type, "pull", pull)
 
     class Stop(Exception):
@@ -274,6 +284,19 @@ def test_raising_from_progress_stops_the_pull(monkeypatch: pytest.MonkeyPatch) -
         with pytest.raises(Stop):
             osam.Client(host=host).pull("efficientsam:10m", progress=progress)
         assert cancelled.wait(timeout=5)
+
+
+def test_failed_pull_raises_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def pull(progress, cancel) -> None:
+        raise RuntimeError("Failed to download encoder.onnx")
+
+    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
+    monkeypatch.setattr(model_type, "pull", pull)
+
+    with _serving() as host, osam.Client(in_process=True) as in_process:
+        for client in [osam.Client(host=host), in_process]:
+            with pytest.raises(RuntimeError, match="Failed to download"):
+                client.pull("efficientsam:10m")
 
 
 def _listening(*, port: int) -> bool:
