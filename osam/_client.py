@@ -165,7 +165,8 @@ class Client:
         max_annotations: int | None = None,
         keep_alive: float | str | None = None,
     ) -> builtins.list[types.Annotation]:
-        """Segment image, an HxWx3 uint8 array, with model.
+        """Segment image, an HxWx3 uint8 RGB array, with model; uint8 grayscale
+        (HxW) and RGBA (HxWx4) arrays are converted to RGB.
 
         Give one object, or ask for every match:
 

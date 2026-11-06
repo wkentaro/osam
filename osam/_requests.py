@@ -6,6 +6,7 @@ from typing import Any
 from typing import Final
 
 import numpy as np
+import PIL.Image
 import pydantic
 
 from . import _json
@@ -101,8 +102,16 @@ class SegmentRequest(pydantic.BaseModel):
     @pydantic.field_validator("image", mode="before")
     @classmethod
     def _decode_image(cls, image: object) -> object:
+        # Every model takes RGB, so grayscale, RGBA and palette images become
+        # RGB here, before the image is hashed.
         if isinstance(image, str):
-            return _json.image_b64data_to_ndarray(b64data=image)
+            return _json.image_b64data_to_ndarray(b64data=image, mode="RGB")
+        if (
+            isinstance(image, np.ndarray)
+            and image.dtype == np.uint8
+            and (image.ndim == 2 or (image.ndim == 3 and image.shape[2] == 4))
+        ):
+            return np.asarray(PIL.Image.fromarray(image).convert("RGB"))
         return image
 
     @pydantic.model_validator(mode="after")
