@@ -1,6 +1,5 @@
 from typing import cast
 
-import imgviz
 import numpy as np
 import PIL.Image
 from loguru import logger
@@ -96,31 +95,16 @@ class Sam3(types.Model):
         return types.Prompt(texts=["visual"])
 
     @override
-    def generate(self, *, request: types.GenerateRequest) -> types.GenerateResponse:
-        image_embedding: types.ImageEmbedding
-        if request.image_embedding is not None:
-            image_embedding = request.image_embedding
-        elif request.image is not None:
-            image_embedding = self.encode_image(image=request.image)
-        else:
-            raise ValueError("either image or image_embedding is required for Sam3")
+    def _decode(
+        self, *, embedding: types.ImageEmbedding, prompt: types.Prompt
+    ) -> list[types.Annotation]:
+        original_height: int = embedding.original_height
+        original_width: int = embedding.original_width
 
-        original_height: int = image_embedding.original_height
-        original_width: int = image_embedding.original_width
-
-        backbone_fpn_0: NDArray[np.float32] = image_embedding.embedding[None]
-        backbone_fpn_1: NDArray[np.float32] = image_embedding.extra_features[0][None]
-        backbone_fpn_2: NDArray[np.float32] = image_embedding.extra_features[1][None]
-        vision_pos_enc_2: NDArray[np.float32] = image_embedding.extra_features[2][None]
-
-        prompt: types.Prompt
-        if request.prompt is None:
-            prompt = self.default_prompt(height=original_height, width=original_width)
-            logger.warning(
-                "Prompt is not given, so using 'visual' as prompt: {!r}", prompt
-            )
-        else:
-            prompt = request.prompt
+        backbone_fpn_0: NDArray[np.float32] = embedding.embedding[None]
+        backbone_fpn_1: NDArray[np.float32] = embedding.extra_features[0][None]
+        backbone_fpn_2: NDArray[np.float32] = embedding.extra_features[1][None]
+        vision_pos_enc_2: NDArray[np.float32] = embedding.extra_features[2][None]
 
         score_threshold: float = (
             0 if prompt.score_threshold is None else prompt.score_threshold
@@ -152,7 +136,7 @@ class Sam3(types.Model):
                         f"{prompt.point_labels=}"
                     )
                 return self._generate_from_points(
-                    image_embedding=image_embedding,
+                    image_embedding=embedding,
                     points=prompt.points,
                     point_labels=prompt.point_labels,
                     score_threshold=score_threshold,
@@ -278,11 +262,7 @@ class Sam3(types.Model):
                 )
             )
 
-        return types.GenerateResponse(
-            model=self.name,
-            image_embedding=image_embedding,
-            annotations=annotations,
-        )
+        return annotations
 
     def _generate_from_points(
         self,
@@ -292,7 +272,7 @@ class Sam3(types.Model):
         point_labels: NDArray[np.integer],
         score_threshold: float,
         max_annotations: int | None,
-    ) -> types.GenerateResponse:
+    ) -> list[types.Annotation]:
         height: int = image_embedding.original_height
         width: int = image_embedding.original_width
         inputs: dict[str, NDArray] = {
@@ -327,20 +307,6 @@ class Sam3(types.Model):
             > 0
         )
         score = float(iou_predictions[0, best])
-        annotations: list[types.Annotation] = []
-        if mask.any() and score >= score_threshold and max_annotations != 0:
-            ymin, xmin, ymax, xmax = imgviz.masks_to_bboxes(masks=[mask])[0].astype(int)
-            annotations.append(
-                types.Annotation(
-                    mask=mask[ymin : ymax + 1, xmin : xmax + 1],
-                    bounding_box=types.BoundingBox(
-                        xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax
-                    ),
-                    score=score,
-                )
-            )
-        return types.GenerateResponse(
-            model=self.name,
-            image_embedding=image_embedding,
-            annotations=annotations,
-        )
+        if score < score_threshold or max_annotations == 0:
+            return []
+        return types.annotations_from_mask(mask=mask, score=score)

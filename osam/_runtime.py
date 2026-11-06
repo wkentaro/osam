@@ -171,22 +171,18 @@ class Runtime:
         prompt: types.Prompt | None = request.to_prompt(
             model_type=model_type, height=height, width=width
         )
-        # Models use the embedding when given one, and return the one they used.
         model: types.Model = self._load(model_name=model_type.name)
-        response: types.GenerateResponse = model.generate(
-            request=types.GenerateRequest(
-                model=model.name,
-                image=request.image,
-                image_embedding=embedding,
-                prompt=prompt,
-            )
+        if embedding is None:
+            assert request.image is not None  # raised UnknownImageError otherwise
+            embedding = model.encode_image(image=request.image)
+        self._embeddings[key] = embedding
+        self._embeddings.move_to_end(key)
+        while len(self._embeddings) > EMBEDDING_CACHE_SIZE:
+            self._embeddings.popitem(last=False)
+        annotations: list[types.Annotation] = model.decode(
+            embedding=embedding, prompt=prompt
         )
-        if response.image_embedding is not None:
-            self._embeddings[key] = response.image_embedding
-            self._embeddings.move_to_end(key)
-            while len(self._embeddings) > EMBEDDING_CACHE_SIZE:
-                self._embeddings.popitem(last=False)
-        return SegmentResponse(annotations=response.annotations, image_hash=image_hash)
+        return SegmentResponse(annotations=annotations, image_hash=image_hash)
 
     def _load(self, *, model_name: str) -> types.Model:
         # Under _lock. When full, the least recently used model unloads first;

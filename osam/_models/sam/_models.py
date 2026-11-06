@@ -1,12 +1,10 @@
 import abc
 from typing import cast
 
-import imgviz
 import numpy as np
 import numpy.typing as npt
 import onnxruntime
 import PIL.Image
-from loguru import logger
 from typing_extensions import override
 
 from osam import _types as types
@@ -19,18 +17,6 @@ class SamBase(types.Model):
         source_url="https://github.com/wkentaro/segment-anything/tree/13b8480edd05cde9bcf29f9c8a6040b2abe8db56",
         license_spdx="Apache-2.0",
     )
-
-    @override
-    def encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
-        if image.ndim == 2:
-            raise ValueError("Grayscale images are not supported")
-        if image.ndim == 3 and image.shape[2] == 4:
-            raise ValueError("RGBA images are not supported")
-        return self._encode_image(image=image)
-
-    @abc.abstractmethod
-    def _encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
-        pass
 
     @abc.abstractmethod
     def _generate_mask_from_image_embedding(
@@ -47,52 +33,19 @@ class SamBase(types.Model):
         )
 
     @override
-    def generate(self, *, request: types.GenerateRequest) -> types.GenerateResponse:
-        image_embedding: types.ImageEmbedding
-        if request.image_embedding is None:
-            if request.image is None:
-                raise ValueError("request.image or request.image_embedding is required")
-            image_embedding = self.encode_image(image=request.image)
-        else:
-            image_embedding = request.image_embedding
-
-        prompt: types.Prompt
-        if request.prompt is None:
-            prompt = self.default_prompt(
-                height=image_embedding.original_height,
-                width=image_embedding.original_width,
-            )
-            logger.warning(
-                "Prompt is not given, so using the center point as prompt: {prompt!r}",
-                prompt=prompt,
-            )
-        else:
-            prompt = request.prompt
-        del request
-
+    def _decode(
+        self, *, embedding: types.ImageEmbedding, prompt: types.Prompt
+    ) -> list[types.Annotation]:
         if prompt.texts is not None:
             raise ValueError(f"{self.name} takes points and a box, not texts")
         if prompt.points is None or prompt.point_labels is None:
             raise ValueError(f"Prompt must contain points and point_labels: {prompt!r}")
         if np.isin(prompt.point_labels, [4, 5]).any():
             raise ValueError(f"{self.name} does not support negative boxes (4, 5)")
-
-        mask: npt.NDArray[np.bool_] = self._generate_mask_from_image_embedding(
-            image_embedding=image_embedding, prompt=prompt
-        )
-
-        bbox = imgviz.masks_to_bboxes(masks=[mask])[0].astype(int)
-        bounding_box: types.BoundingBox = types.BoundingBox(
-            ymin=bbox[0], xmin=bbox[1], ymax=bbox[2], xmax=bbox[3]
-        )
-        cropped_mask = mask[bbox[0] : bbox[2] + 1, bbox[1] : bbox[3] + 1]
-
-        return types.GenerateResponse(
-            model=self.name,
-            image_embedding=image_embedding,
-            annotations=[
-                types.Annotation(mask=cropped_mask, bounding_box=bounding_box)
-            ],
+        return types.annotations_from_mask(
+            mask=self._generate_mask_from_image_embedding(
+                image_embedding=embedding, prompt=prompt
+            )
         )
 
 
@@ -114,7 +67,8 @@ def _compute_resized_hw(
 
 
 class Sam(SamBase):
-    def _encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
+    @override
+    def encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         encoder_session = self._inference_sessions["encoder"]
         input_size: int = get_input_size(encoder_session=encoder_session)
 

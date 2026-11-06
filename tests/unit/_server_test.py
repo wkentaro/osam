@@ -42,10 +42,10 @@ def _no_model_loaded(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     _server._runtime.close()
 
 
-def _patch_generate(*, monkeypatch: pytest.MonkeyPatch, generate) -> None:
-    # Replaces efficientsam:10m's generate.
+def _patch_encode_image(*, monkeypatch: pytest.MonkeyPatch, encode_image) -> None:
+    # Replaces efficientsam:10m's encode_image.
     model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
-    monkeypatch.setattr(model_type, "generate", generate)
+    monkeypatch.setattr(model_type, "encode_image", encode_image)
 
 
 def test_openapi_documents_every_route() -> None:
@@ -115,12 +115,12 @@ def test_segment_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
         assert response.status_code == 422, body
         assert "not an image file" in response.json()["error"]
 
-    def fail(self, request):
+    def fail(self, *, image):
         assert self.device == "cpu"
         raise RuntimeError("out of GPU memory")
 
     monkeypatch.setattr(_server, "_runtime", _runtime.Runtime(device="cpu"))
-    _patch_generate(monkeypatch=monkeypatch, generate=fail)
+    _patch_encode_image(monkeypatch=monkeypatch, encode_image=fail)
     response = TestClient(_server.app, raise_server_exceptions=False).post(
         "/api/segment", json={"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
     )
@@ -131,7 +131,7 @@ def test_segment_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_queued_segments_leave_the_thread_pool_free(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def blocked(self, request):
+    def blocked(self, *, image):
         release.wait()
         raise ValueError("released")
 
@@ -156,7 +156,7 @@ def test_queued_segments_leave_the_thread_pool_free(
             responses = await asyncio.gather(*tasks)
         assert {response.status_code for response in responses} == {400}
 
-    _patch_generate(monkeypatch=monkeypatch, generate=blocked)
+    _patch_encode_image(monkeypatch=monkeypatch, encode_image=blocked)
     # Twice, on two event loops, as separate app lifecycles would.
     for _ in range(2):
         release = threading.Event()
@@ -171,12 +171,11 @@ def test_segment_keeps_image_embedding_inside(
         original_width=1,
         embedding=np.zeros((1, 1, 1), dtype=np.float32),
     )
-    _patch_generate(
-        monkeypatch=monkeypatch,
-        generate=lambda self, request: types.GenerateResponse(
-            model=request.model, image_embedding=embedding, annotations=[]
-        ),
+    _patch_encode_image(
+        monkeypatch=monkeypatch, encode_image=lambda self, *, image: embedding
     )
+    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
+    monkeypatch.setattr(model_type, "decode", lambda self, *, embedding, prompt: [])
     client = TestClient(_server.app)
 
     response = client.post(

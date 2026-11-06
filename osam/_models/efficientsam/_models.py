@@ -2,6 +2,7 @@ from typing import cast
 
 import numpy as np
 import numpy.typing as npt
+from typing_extensions import override
 
 from osam import _types as types
 from osam._models.sam import SamBase
@@ -15,7 +16,8 @@ class EfficientSam(SamBase):
         license_spdx="Apache-2.0",
     )
 
-    def _encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
+    @override
+    def encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         batched_images: npt.NDArray[np.float32] = (
             image.transpose(2, 0, 1)[None].astype(np.float32) / 255
         )

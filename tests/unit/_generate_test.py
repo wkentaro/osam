@@ -18,26 +18,32 @@ image_path = (
 _loaded: list[types.Model] = []
 
 
-def _generate(*, request: types.GenerateRequest) -> types.GenerateResponse:
-    model_type = _registry.get_model_type_by_name(name=request.model)
+def _model(*, name: str) -> types.Model:
+    model_type = _registry.get_model_type_by_name(name=name)
     if not _loaded or _loaded[0].name != model_type.name:
         _loaded.clear()
         _loaded.append(model_type())
-    return _loaded[0].generate(request=request)
+    return _loaded[0]
+
+
+def _segment(
+    *, model: str, prompt: types.Prompt | None = None
+) -> list[types.Annotation]:
+    loaded = _model(name=model)
+    embedding = loaded.encode_image(image=imgviz.io.imread(image_path))
+    return loaded.decode(embedding=embedding, prompt=prompt)
 
 
 @pytest.fixture(scope="module")
-def sam3_text_response() -> types.GenerateResponse:
+def sam3_embedding() -> types.ImageEmbedding:
     # All SAM3 prompts use the same image, so encode it once.
-    response = _generate(
-        request=types.GenerateRequest(
-            model="sam3:latest",
-            image=imgviz.io.imread(image_path),
-            prompt=types.Prompt(texts=["dog"]),
-        )
-    )
-    assert response.image_embedding is not None
-    return response
+    return _model(name="sam3:latest").encode_image(image=imgviz.io.imread(image_path))
+
+
+def _sam3(
+    *, embedding: types.ImageEmbedding, prompt: types.Prompt
+) -> list[types.Annotation]:
+    return _model(name="sam3:latest").decode(embedding=embedding, prompt=prompt)
 
 
 @pytest.mark.parametrize(
@@ -55,14 +61,10 @@ def sam3_text_response() -> types.GenerateResponse:
     ],
 )
 def test_generate_point_to_mask(model: str) -> None:
-    image = imgviz.io.imread(image_path)
-    request: types.GenerateRequest = types.GenerateRequest(model=model, image=image)
-    response: types.GenerateResponse = _generate(request=request)
+    annotations = _segment(model=model)
 
-    assert response.model == model
-
-    assert len(response.annotations) == 1
-    annotation: types.Annotation = response.annotations[0]
+    assert len(annotations) == 1
+    annotation: types.Annotation = annotations[0]
     assert annotation.text is None
     assert annotation.score is None
     assert annotation.mask is not None
@@ -82,21 +84,16 @@ def test_generate_point_to_mask(model: str) -> None:
 def test_generate_text_to_bounding_box(
     model: str, has_mask: bool, request: pytest.FixtureRequest
 ) -> None:
+    prompt = types.Prompt(texts=["dog"])
     if model == "sam3:latest":
-        response = request.getfixturevalue("sam3_text_response")
-    else:
-        response = _generate(
-            request=types.GenerateRequest(
-                model=model,
-                image=imgviz.io.imread(image_path),
-                prompt=types.Prompt(texts=["dog"]),
-            )
+        annotations = _sam3(
+            embedding=request.getfixturevalue("sam3_embedding"), prompt=prompt
         )
+    else:
+        annotations = _segment(model=model, prompt=prompt)
 
-    assert response.model == model
-
-    assert len(response.annotations) == 3
-    for annotation in response.annotations:
+    assert len(annotations) == 3
+    for annotation in annotations:
         assert annotation.bounding_box is not None
         assert annotation.text == "dog"
         assert isinstance(annotation.score, float)
@@ -114,21 +111,16 @@ def test_generate_text_to_bounding_box(
 
 @pytest.mark.parametrize("model", ["sam2:tiny"])
 def test_generate_box_to_mask_sam2(model: str) -> None:
-    image = imgviz.io.imread(image_path)
-    request: types.GenerateRequest = types.GenerateRequest(
+    annotations = _segment(
         model=model,
-        image=image,
         prompt=types.Prompt(
             points=np.array([[1233, 376], [1649, 691]], dtype=np.float32),
             point_labels=np.array([2, 3], dtype=np.int32),
         ),
     )
-    response: types.GenerateResponse = _generate(request=request)
 
-    assert response.model == model
-
-    assert len(response.annotations) == 1
-    for annotation in response.annotations:
+    assert len(annotations) == 1
+    for annotation in annotations:
         assert annotation.text is None
         assert annotation.score is None
         assert annotation.mask is not None
@@ -149,24 +141,20 @@ def test_generate_box_to_mask_sam2(model: str) -> None:
     ],
 )
 def test_generate_example_box_to_mask_sam3(
-    model: str, points: list[list[int]], sam3_text_response: types.GenerateResponse
+    model: str, points: list[list[int]], sam3_embedding: types.ImageEmbedding
 ) -> None:
-    request: types.GenerateRequest = types.GenerateRequest(
-        model=model,
-        image_embedding=sam3_text_response.image_embedding,
+    annotations = _sam3(
+        embedding=sam3_embedding,
         prompt=types.Prompt(
             texts=["visual"],
             points=np.array(points, dtype=np.float32),
             point_labels=np.array([2, 3] * (len(points) // 2), dtype=np.int32),
         ),
     )
-    response: types.GenerateResponse = _generate(request=request)
-
-    assert response.model == model
 
     # SAM3 returns multiple mask candidates (unlike SAM2 which returns 1)
-    assert len(response.annotations) == 3
-    for annotation in response.annotations:
+    assert len(annotations) == 3
+    for annotation in annotations:
         assert annotation.text == "visual"
         assert annotation.score is not None
         assert annotation.mask is not None
@@ -208,12 +196,11 @@ def test_yoloworld_metadata_points_to_artifact_provenance() -> None:
 
 @pytest.mark.extra
 def test_generate_negative_box_sam3(
-    sam3_text_response: types.GenerateResponse,
+    sam3_embedding: types.ImageEmbedding,
 ) -> None:
     # A positive box on one dog and a negative box on another
-    request: types.GenerateRequest = types.GenerateRequest(
-        model="sam3:latest",
-        image_embedding=sam3_text_response.image_embedding,
+    annotations = _sam3(
+        embedding=sam3_embedding,
         prompt=types.Prompt(
             points=np.array(
                 [[1706, 613], [2227, 1438], [450, 551], [1059, 1421]],
@@ -223,28 +210,25 @@ def test_generate_negative_box_sam3(
             texts=["visual"],
         ),
     )
-    response: types.GenerateResponse = _generate(request=request)
 
-    [annotation] = response.annotations
+    [annotation] = annotations
     assert annotation.bounding_box is not None
     assert annotation.bounding_box.xmin > 1059
 
 
 def test_generate_box_to_mask_sam3(
-    sam3_text_response: types.GenerateResponse,
+    sam3_embedding: types.ImageEmbedding,
 ) -> None:
     # Without text, a box is one object, as in SAM2.
-    request: types.GenerateRequest = types.GenerateRequest(
-        model="sam3:latest",
-        image_embedding=sam3_text_response.image_embedding,
+    annotations = _sam3(
+        embedding=sam3_embedding,
         prompt=types.Prompt(
             points=np.array([[1233, 376], [1649, 691]], dtype=np.float32),
             point_labels=np.array([2, 3], dtype=np.int32),
         ),
     )
-    response: types.GenerateResponse = _generate(request=request)
 
-    [annotation] = response.annotations
+    [annotation] = annotations
     assert annotation.text is None
     assert annotation.score is not None and annotation.score > 0.9
     bb = annotation.bounding_box
@@ -253,61 +237,52 @@ def test_generate_box_to_mask_sam3(
 
 
 def test_generate_max_annotations_sam3(
-    sam3_text_response: types.GenerateResponse,
+    sam3_embedding: types.ImageEmbedding,
 ) -> None:
-    request: types.GenerateRequest = types.GenerateRequest(
-        model="sam3:latest",
-        image_embedding=sam3_text_response.image_embedding,
+    annotations = _sam3(
+        embedding=sam3_embedding,
         prompt=types.Prompt(texts=["dog"], max_annotations=1),
     )
-    response: types.GenerateResponse = _generate(request=request)
 
-    [annotation] = response.annotations
+    [annotation] = annotations
     assert annotation.score is not None and annotation.score > 0.95
 
 
 def test_generate_negative_box_rejected_by_sam2() -> None:
-    image = imgviz.io.imread(image_path)
-    request: types.GenerateRequest = types.GenerateRequest(
-        model="sam2:tiny",
-        image=image,
-        prompt=types.Prompt(
-            points=np.array([[450, 551], [1059, 1421]], dtype=np.float32),
-            point_labels=np.array([4, 5], dtype=np.int32),
-        ),
-    )
     with pytest.raises(ValueError, match="does not support negative boxes"):
-        _generate(request=request)
+        _segment(
+            model="sam2:tiny",
+            prompt=types.Prompt(
+                points=np.array([[450, 551], [1059, 1421]], dtype=np.float32),
+                point_labels=np.array([4, 5], dtype=np.int32),
+            ),
+        )
 
 
 def test_generate_box_rejected_by_yoloworld() -> None:
-    request: types.GenerateRequest = types.GenerateRequest(
-        model="yoloworld",
-        image=imgviz.io.imread(image_path),
-        prompt=types.Prompt(
-            texts=["visual"],
-            points=np.array([[450, 551], [1059, 1421]]),
-            point_labels=np.array([2, 3]),
-        ),
-    )
     with pytest.raises(ValueError, match="takes texts only"):
-        _generate(request=request)
+        _segment(
+            model="yoloworld",
+            prompt=types.Prompt(
+                texts=["visual"],
+                points=np.array([[450, 551], [1059, 1421]]),
+                point_labels=np.array([2, 3]),
+            ),
+        )
 
 
 def test_generate_point_to_mask_sam3(
-    sam3_text_response: types.GenerateResponse,
+    sam3_embedding: types.ImageEmbedding,
 ) -> None:
-    request: types.GenerateRequest = types.GenerateRequest(
-        model="sam3:latest",
-        image_embedding=sam3_text_response.image_embedding,
+    annotations = _sam3(
+        embedding=sam3_embedding,
         prompt=types.Prompt(
             points=np.array([[1439, 504], [1439, 1289]], dtype=np.float32),
             point_labels=np.array([1, 1], dtype=np.int32),
         ),
     )
-    response: types.GenerateResponse = _generate(request=request)
 
-    [annotation] = response.annotations
+    [annotation] = annotations
     assert annotation.text is None
     assert annotation.score is not None and annotation.score > 0.5
     assert annotation.mask is not None
@@ -321,33 +296,29 @@ def test_generate_point_to_mask_sam3(
     "limits", [{"score_threshold": 0.99999}, {"max_annotations": 0}]
 )
 def test_generate_point_filtered_by_sam3(
-    limits: dict, sam3_text_response: types.GenerateResponse
+    limits: dict, sam3_embedding: types.ImageEmbedding
 ) -> None:
-    request: types.GenerateRequest = types.GenerateRequest(
-        model="sam3:latest",
-        image_embedding=sam3_text_response.image_embedding,
+    annotations = _sam3(
+        embedding=sam3_embedding,
         prompt=types.Prompt(
             points=np.array([[1439, 504]], dtype=np.float32),
             point_labels=np.array([1], dtype=np.int32),
             **limits,
         ),
     )
-    response: types.GenerateResponse = _generate(request=request)
 
-    assert response.annotations == []
+    assert annotations == []
 
 
 def test_generate_point_with_text_rejected_by_sam3(
-    sam3_text_response: types.GenerateResponse,
+    sam3_embedding: types.ImageEmbedding,
 ) -> None:
-    request: types.GenerateRequest = types.GenerateRequest(
-        model="sam3:latest",
-        image_embedding=sam3_text_response.image_embedding,
-        prompt=types.Prompt(
-            texts=["dog"],
-            points=np.array([[1439, 504]], dtype=np.float32),
-            point_labels=np.array([1], dtype=np.int32),
-        ),
-    )
     with pytest.raises(ValueError, match="can't be combined with text"):
-        _generate(request=request)
+        _sam3(
+            embedding=sam3_embedding,
+            prompt=types.Prompt(
+                texts=["dog"],
+                points=np.array([[1439, 504]], dtype=np.float32),
+                point_labels=np.array([1], dtype=np.int32),
+            ),
+        )

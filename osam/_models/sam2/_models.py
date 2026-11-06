@@ -3,6 +3,7 @@ from typing import cast
 import imgviz
 import numpy as np
 import numpy.typing as npt
+from typing_extensions import override
 
 from osam import _types as types
 from osam._models.sam import SamBase
@@ -17,7 +18,8 @@ class Sam2(SamBase):
         license_spdx="Apache-2.0",
     )
 
-    def _encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
+    @override
+    def encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         encoder_session = self._inference_sessions["encoder"]
 
         input_height: int
