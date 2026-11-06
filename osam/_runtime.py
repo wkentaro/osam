@@ -10,7 +10,6 @@ import typing
 from collections.abc import Callable
 from typing import Any
 from typing import Final
-from typing import Optional
 
 from loguru import logger
 
@@ -32,8 +31,8 @@ class UnknownImageError(LookupError):
 class _Loaded:
     model: types.Model
     # When it unloads, as time.time(); None keeps it loaded.
-    expires_at: Optional[float] = None
-    timer: Optional[threading.Timer] = None
+    expires_at: float | None = None
+    timer: threading.Timer | None = None
 
 
 # Runtime.list shadows list inside the class, hence builtins.list there.
@@ -44,7 +43,7 @@ class Runtime:
     # max_loaded_models: when full, the least recently used model unloads first.
 
     def __init__(
-        self, *, device: Optional[types.Device] = None, max_loaded_models: int = 1
+        self, *, device: types.Device | None = None, max_loaded_models: int = 1
     ):
         if device not in (None, *typing.get_args(types.Device)):
             raise ValueError(f"unknown device {device!r}")
@@ -97,14 +96,14 @@ class Runtime:
         self,
         *,
         model: str,
-        progress: Optional[Callable[[dict[str, Any]], None]] = None,
-        cancel: Optional[threading.Event] = None,
+        progress: Callable[[dict[str, Any]], None] | None = None,
+        cancel: threading.Event | None = None,
     ) -> None:
         # progress gets a line for each chunk, as /api/pull streams them; cancel
         # stops the download.
         model_type: type[types.Model] = _registry.get_model_type_by_name(name=model)
 
-        def report(filename: str, completed: int, total: Optional[int]) -> None:
+        def report(filename: str, completed: int, total: int | None) -> None:
             line = {"status": f"pulling {filename}", "completed": completed}
             typing.cast(Callable, progress)(line | {"total": total})
 
@@ -158,7 +157,7 @@ class Runtime:
             else _json.hash_image(image=request.image)
         )
         key: tuple[str, str] = (model_type.name, image_hash)
-        embedding: Optional[types.ImageEmbedding] = self._embeddings.get(key)
+        embedding: types.ImageEmbedding | None = self._embeddings.get(key)
         if request.image is None:
             if embedding is None:
                 # Before loading the model, which a retry with the image would
@@ -169,7 +168,7 @@ class Runtime:
             height, width = embedding.original_height, embedding.original_width
         else:
             height, width = request.image.shape[:2]
-        prompt: Optional[types.Prompt] = request.to_prompt(
+        prompt: types.Prompt | None = request.to_prompt(
             model_type=model_type, height=height, width=width
         )
         # Models use the embedding when given one, and return the one they used.
@@ -203,7 +202,7 @@ class Runtime:
         model_type.pull()
         while len(self._loaded) >= self._max_loaded_models:
             self._unload(model_name=next(iter(self._loaded)))
-        model: Optional[types.Model] = None
+        model: types.Model | None = None
         try:
             model = model_type(device=self._device)
         except Exception:
@@ -237,7 +236,7 @@ class Runtime:
 
     def _keep_alive(self, *, model_name: str, seconds: float) -> None:
         # Under _lock. A timer unloads the model, unless a later call replaced it.
-        loaded: Optional[_Loaded] = self._loaded.get(model_name)
+        loaded: _Loaded | None = self._loaded.get(model_name)
         if loaded is None:  # it failed to load, or it isn't loaded
             return
         if loaded.timer is not None:

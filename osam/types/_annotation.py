@@ -1,5 +1,4 @@
 from typing import Annotated
-from typing import Optional
 
 import numpy as np
 import pydantic
@@ -17,11 +16,11 @@ Base64Image = Annotated[
 class Annotation(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
-    bounding_box: Optional[BoundingBox] = pydantic.Field(default=None)
-    text: Optional[str] = pydantic.Field(default=None)
-    score: Optional[float] = pydantic.Field(default=None)
+    bounding_box: BoundingBox | None = pydantic.Field(default=None)
+    text: str | None = pydantic.Field(default=None)
+    score: float | None = pydantic.Field(default=None)
     # Serialized as a base64 PNG cropped to bounding_box.
-    mask: Optional[Base64Image] = pydantic.Field(default=None)
+    mask: Base64Image | None = pydantic.Field(default=None)
 
     @pydantic.field_validator("mask", mode="before")
     @classmethod
@@ -32,7 +31,7 @@ class Annotation(pydantic.BaseModel):
         return mask
 
     @pydantic.field_validator("mask")
-    def validate_mask(cls, mask: Optional[np.ndarray]) -> Optional[np.ndarray]:
+    def validate_mask(cls, mask: np.ndarray | None) -> np.ndarray | None:
         if mask is None:
             return None
         if mask.dtype != bool:
@@ -53,7 +52,7 @@ class Annotation(pydantic.BaseModel):
         return self
 
     @pydantic.field_serializer("mask")
-    def serialize_mask(self, mask: Optional[np.ndarray]) -> Optional[str]:
+    def serialize_mask(self, mask: np.ndarray | None) -> str | None:
         if mask is None:
             return None
         return _json.image_ndarray_to_b64data(ndarray=mask.view(np.uint8) * 255)

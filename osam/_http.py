@@ -16,7 +16,6 @@ from typing import IO
 from typing import Any
 from typing import Final
 from typing import Optional
-from typing import Union
 
 import numpy as np
 from loguru import logger
@@ -61,13 +60,13 @@ class HttpBackend:
 
     def __init__(
         self,
-        host: Optional[str] = None,
+        host: str | None = None,
         *,
-        device: Optional[types.Device] = None,
-        max_loaded_models: Optional[int] = None,
-        timeout: Optional[float] = None,
+        device: types.Device | None = None,
+        max_loaded_models: int | None = None,
+        timeout: float | None = None,
     ):
-        self._timeout: Optional[float] = timeout
+        self._timeout: float | None = timeout
         host = host or os.environ.get("OSAM_HOST") or None
         if host is not None and (device, max_loaded_models) != (None, None):
             raise ValueError(
@@ -88,13 +87,11 @@ class HttpBackend:
         self._lock = threading.Lock()
         # host, port and token of the server, swapped whole on a restart, so a
         # request never sends one server's token to another's port.
-        self._endpoint: tuple[str, int, Optional[str]] = ("127.0.0.1", 0, None)
+        self._endpoint: tuple[str, int, str | None] = ("127.0.0.1", 0, None)
         self._https: bool = False
-        self._process: Optional[_Process] = None
+        self._process: _Process | None = None
         # Closing it tells the private server to exit.
-        self._pipe: Optional[
-            Union[IO[bytes], multiprocessing.connection.Connection]
-        ] = None
+        self._pipe: IO[bytes] | multiprocessing.connection.Connection | None = None
         # The last image sent: its local hash, its encoding, and the hash the
         # server returned for it, as a client often sends one image with
         # several prompts.
@@ -147,7 +144,7 @@ class HttpBackend:
         self,
         *,
         model: str,
-        progress: Optional[Callable[[dict[str, Any]], None]] = None,
+        progress: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         for line in self._stream(path="/api/pull", body={"model": model}):
             if "error" in line:
@@ -196,7 +193,7 @@ class HttpBackend:
         return post(image=encoded)
 
     def _request(
-        self, *, method: str, path: str, body: Optional[dict[str, Any]] = None
+        self, *, method: str, path: str, body: dict[str, Any] | None = None
     ) -> Any:
         return self._restarting(
             call=lambda: self._send(method=method, path=path, body=body)
@@ -245,7 +242,7 @@ class HttpBackend:
                 self._stop()
                 self._start()
 
-    def _send(self, *, method: str, path: str, body: Optional[dict[str, Any]]) -> Any:
+    def _send(self, *, method: str, path: str, body: dict[str, Any] | None) -> Any:
         connection = self._connect(method=method, path=path, body=body)
         try:
             response = connection.getresponse()
@@ -284,7 +281,7 @@ class HttpBackend:
         return connection, response
 
     def _connect(
-        self, *, method: str, path: str, body: Optional[dict[str, Any]]
+        self, *, method: str, path: str, body: dict[str, Any] | None
     ) -> http.client.HTTPConnection:
         host, port, token = self._endpoint
         headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -323,7 +320,7 @@ class HttpBackend:
         self._process = self._pipe = None
 
 
-_Process = Union[subprocess.Popen, multiprocessing.process.BaseProcess]
+_Process = subprocess.Popen | multiprocessing.process.BaseProcess
 
 
 def _start_subprocess(
@@ -388,7 +385,7 @@ def _start_frozen(
     return process, conn, port
 
 
-def _wait(*, process: _Process, timeout: Optional[float]) -> bool:
+def _wait(*, process: _Process, timeout: float | None) -> bool:
     # True once the process exited.
     if isinstance(process, subprocess.Popen):
         try:

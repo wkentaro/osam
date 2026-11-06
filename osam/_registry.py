@@ -1,5 +1,4 @@
 # Every model osam knows, by name.
-from typing import Type
 
 from . import _models
 from . import _types as types
@@ -10,7 +9,7 @@ class UnknownModelError(LookupError):
     pass
 
 
-registered_model_types: list[Type[types.Model]] = [
+registered_model_types: list[type[types.Model]] = [
     _models.EfficientSam10m,
     _models.EfficientSam30m,
     _models.Sam100m,
@@ -25,7 +24,7 @@ registered_model_types: list[Type[types.Model]] = [
 ]
 
 
-def get_model_type_by_name(*, name: str) -> Type[types.Model]:
+def get_model_type_by_name(*, name: str) -> type[types.Model]:
     model_name: str
     if ":" in name:
         model_name = name

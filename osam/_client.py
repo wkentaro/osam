@@ -1,7 +1,6 @@
 import builtins
 from collections.abc import Callable
 from typing import Any
-from typing import Optional
 from typing import Protocol
 
 import numpy as np
@@ -35,7 +34,7 @@ class _Backend(Protocol):
         self,
         *,
         model: str,
-        progress: Optional[Callable[[dict[str, Any]], None]] = None,
+        progress: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         ...
 
@@ -72,11 +71,11 @@ class Client:
 
     def __init__(
         self,
-        host: Optional[str] = None,
+        host: str | None = None,
         *,
-        device: Optional[types.Device] = None,
-        max_loaded_models: Optional[int] = None,
-        timeout: Optional[float] = None,
+        device: types.Device | None = None,
+        max_loaded_models: int | None = None,
+        timeout: float | None = None,
         in_process: bool = False,
     ):
         self._backend: _Backend
@@ -122,7 +121,7 @@ class Client:
         self,
         model: str,
         *,
-        progress: Optional[Callable[[dict[str, Any]], None]] = None,
+        progress: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         """Download a model, calling progress with each line the server sends.
 
@@ -136,7 +135,7 @@ class Client:
     def remove(self, model: str) -> None:
         self._backend.remove(model=model)
 
-    def load(self, model: str, *, keep_alive: Optional[float | str] = None) -> None:
+    def load(self, model: str, *, keep_alive: float | str | None = None) -> None:
         """Load model, pulling it if needed, and keep it loaded for keep_alive.
 
         keep_alive: in seconds or as "5m"; -1 keeps it loaded, 0 unloads it
@@ -155,16 +154,16 @@ class Client:
         model: str,
         image: np.ndarray,
         *,
-        points: Optional[ArrayLike] = None,
-        point_labels: Optional[ArrayLike] = None,
-        box: Optional[ArrayLike] = None,
-        texts: Optional[builtins.list[str]] = None,
-        example_boxes: Optional[ArrayLike] = None,
-        example_box_labels: Optional[ArrayLike] = None,
-        iou_threshold: Optional[float] = None,
-        score_threshold: Optional[float] = None,
-        max_annotations: Optional[int] = None,
-        keep_alive: Optional[float | str] = None,
+        points: ArrayLike | None = None,
+        point_labels: ArrayLike | None = None,
+        box: ArrayLike | None = None,
+        texts: builtins.list[str] | None = None,
+        example_boxes: ArrayLike | None = None,
+        example_box_labels: ArrayLike | None = None,
+        iou_threshold: float | None = None,
+        score_threshold: float | None = None,
+        max_annotations: int | None = None,
+        keep_alive: float | str | None = None,
     ) -> builtins.list[types.Annotation]:
         """Segment image, an HxWx3 uint8 array, with model.
 

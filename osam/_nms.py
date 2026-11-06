@@ -1,6 +1,5 @@
 import pathlib
 from typing import Final
-from typing import Optional
 from typing import cast
 
 import numpy as np
@@ -13,9 +12,7 @@ _NON_MAXIMUM_SUPPRESSION_ONNX: Final = (
     pathlib.Path(__file__).parent / "_data" / "non_maximum_suppression.onnx"
 )
 
-_non_maximum_suppression_inference_session: Optional[
-    onnxruntime.InferenceSession
-] = None
+_non_maximum_suppression_inference_session: onnxruntime.InferenceSession | None = None
 
 
 def non_maximum_suppression(

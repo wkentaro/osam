@@ -7,9 +7,9 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from collections.abc import Iterator
 from typing import Any
 from typing import Final
-from typing import Iterator
 
 import numpy as np
 import PIL.Image

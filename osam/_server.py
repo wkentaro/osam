@@ -14,7 +14,6 @@ from collections.abc import Callable
 from collections.abc import Sequence
 from typing import Any
 from typing import Final
-from typing import Optional
 
 import fastapi
 import pydantic
@@ -40,7 +39,7 @@ _worker = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 try:
     _runtime = _runtime_module.Runtime(
         device=typing.cast(
-            Optional[types.Device], os.environ.get("OSAM_SERVE_DEVICE") or None
+            types.Device | None, os.environ.get("OSAM_SERVE_DEVICE") or None
         ),
         max_loaded_models=int(os.environ.get("OSAM_MAX_LOADED_MODELS") or 1),
     )
@@ -67,7 +66,7 @@ app: fastapi.FastAPI = fastapi.FastAPI(
 
 # Errors are {"error": message}, as in Ollama.
 def _error(
-    *, message: str, status_code: int, headers: Optional[dict[str, str]] = None
+    *, message: str, status_code: int, headers: dict[str, str] | None = None
 ) -> fastapi.responses.JSONResponse:
     return fastapi.responses.JSONResponse(
         {"error": message}, status_code=status_code, headers=headers
