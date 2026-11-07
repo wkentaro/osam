@@ -191,6 +191,8 @@ class Runtime:
         annotations: list[types.Annotation] = model.decode(
             embedding=embedding, prompt=request
         )
+        if not request.include_masks:
+            annotations = [a.model_copy(update={"mask": None}) for a in annotations]
         return SegmentResponse(annotations=annotations, image=image_ref)
 
     def _load(self, *, model_name: str) -> types.Model:
