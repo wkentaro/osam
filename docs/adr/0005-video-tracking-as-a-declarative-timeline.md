@@ -47,38 +47,35 @@ longer has it.
 - osam takes a list of images, not a video file, so it needs no video
   decoder. A labelme folder, frames a user extracted with ffmpeg, and frames
   from a camera are all lists of images.
-- An action is `{"type": "prompt", "frame", "object_id", ...}` with the fields
-  of `Prompt`, or `{"type": "remove", "object_id"}`. Coordinates are pixels,
-  as in `/api/segment`.
+- Actions name objects by where the user clicked, never by id:
+  - `{"type": "prompt", "frame", ...}` with the fields of `Prompt` is the
+    first action, and only the first. With `points` or `box` it tracks one
+    object. With `texts` it finds every match. `example_boxes` without
+    `texts` is an error.
+  - `{"type": "add", "frame", "points", "point_labels", "box"}` adds an
+    object.
+  - `{"type": "refine", "frame", "points", "point_labels"}` refines the
+    object whose mask on that frame contains the first positive point.
+  - `{"type": "remove", "frame", "point"}` removes the object whose mask on
+    that frame contains the point.
+
+  When several masks contain the point, the target is the one listed first in
+  that frame's annotations. When none does, the server answers 409 with
+  `"code": "no_object_at_point"`. Coordinates are pixels, as in
+  `/api/segment`.
 - Action k applies to the result of actions 0 to k-1 propagated over every
   frame, in both directions from the first prompt frame. The server works out
-  what it must recompute. A first action with `points` or `box` tracks one
-  object per `object_id`. A first action with `texts` finds every match, and
-  later points refine an object or add one. `texts` after the first action,
-  and `example_boxes` without `texts`, are errors.
+  what it must recompute.
 - The response is NDJSON with one line per frame,
   `{"frame", "annotations"}`, then a last line with `"done": true`, each
   object's first and last frame, and whether the request hit the cache.
   `first_frame` and `last_frame` limit the frames returned, and
   `include_masks: false` leaves out the masks.
-- A `texts` prompt assigns object ids, including to objects that the
-  detector first finds on later frames, and later actions refer to them. The
-  `done` line lists those `detections`, each id with its anchor: the first
-  frame it appears on and its box there. A request whose later actions use
-  those ids sends them back as `detections`.
-- The server keeps its own ids for the result of the first action, and maps
-  the client's ids to them before it looks up any later prefix, on a cache
-  hit as well as a miss. Each sent detection maps to the server object with
-  the highest box IoU on the anchor frame. When a sent id has no match, the
-  server answers 409 with `"code": "detections_changed"` and its own
-  detections, instead of applying an edit to the wrong object. So two
-  requests with the same actions but different `detections` never share a
-  cached result for the later actions.
 - The server caches tracker state by model, device, frames, and action
-  prefix, with the actions in its own ids, and image features by model and
-  image reference. Both caches are bounded in bytes. `/api/segment` uses the
-  same feature cache.
-- `Annotation` gains `object_id`, errors gain a stable `code`, and
+  prefix, and image features by model and image reference. Both caches are
+  bounded in bytes. `/api/segment` uses the same feature cache.
+- `Annotation` gains `object_id`, numbered in the order objects appear. Ids
+  label objects in responses only. Errors gain a stable `code`, and
   `/api/models` lists each model's `capabilities` and `prompt_kinds`.
 - `osam run --video DIR` takes a directory of images.
 
@@ -92,8 +89,13 @@ longer has it.
   The `done` line reports a miss so a client can explain the wait.
 - The server derives the propagation mode from the list. That logic moves
   from the client-facing API into the runtime, where upstream keeps it too.
-- Object ids depend on the computation. A replay on another device can order
-  near-equal detections differently, so a client that edits detected objects
-  has to keep the `detections` it received and handle 409.
+- A request means the same thing on any device, since no action depends on
+  how the server numbered objects. A replay on another device can still
+  order near-equal detections differently, which changes the ids in the
+  response, or leave no object under a click, which fails with 409 instead
+  of editing another object.
+- Ids in responses stay the same while the server replays on one device,
+  and can change on another. A client that attaches its own names to objects,
+  such as labels in labelme, has to match them again after that.
 - Requests grow with the number of frames and actions, by about 70 bytes per
   frame reference.
