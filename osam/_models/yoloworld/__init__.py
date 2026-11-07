@@ -2,7 +2,6 @@ from typing import cast
 
 import imgviz
 import numpy as np
-from loguru import logger
 from numpy.typing import NDArray
 from typing_extensions import override
 
@@ -23,6 +22,8 @@ class _YoloWorld(types.Model):
         license_spdx="GPL-3.0-only",
     )
 
+    prompt_kinds = frozenset({"texts"})
+
     _input_size: int
 
     @classmethod
@@ -31,49 +32,44 @@ class _YoloWorld(types.Model):
         return types.Prompt(texts=["anything"])
 
     @override
-    def generate(self, *, request: types.GenerateRequest) -> types.GenerateResponse:
-        if request.image is None:
-            raise ValueError(f"request.image is required: request={request!r}")
-        if request.prompt is None:
-            height, width = request.image.shape[:2]
-            prompt = self.default_prompt(height=height, width=width)
-            logger.warning(
-                "Prompt is not given, so using 'anything' as prompt: {prompt!r}",
-                prompt=prompt,
-            )
-        else:
-            prompt = request.prompt
+    def encode_image(self, *, image: NDArray[np.uint8]) -> types.ImageEmbedding:
+        # The network runs on the image and the texts together, so the
+        # embedding is the image resized and padded to the input size.
+        return types.ImageEmbedding(
+            original_height=image.shape[0],
+            original_width=image.shape[1],
+            embedding=_transform_image(image=image, input_size=self._input_size),
+        )
 
-        if prompt.texts is None:
-            raise ValueError(f"prompt.texts is required: prompt={prompt!r}")
-        if prompt.points is not None:
-            raise ValueError(f"{self.name} takes texts only, not points or boxes")
-        token = clip.tokenize(texts=prompt.texts + [" "])
+    @override
+    def _decode(
+        self, *, embedding: types.ImageEmbedding, prompt: types.Prompt
+    ) -> list[types.Annotation]:
+        texts: list[str] | None = prompt.texts
+        assert texts is not None  # decode checks prompt_kinds
+        token = clip.tokenize(texts=texts + [" "])
         outputs = self._inference_sessions["textual"].run(None, {"input": token})
         text_features: NDArray[np.float32] = cast(NDArray[np.float32], outputs[0])
         text_features = text_features / np.linalg.norm(
             text_features, ord=2, axis=1, keepdims=True
         )
         #
-        transformed_image, original_image_hw, padding_hw = _transform_image(
-            image=request.image, input_size=self._input_size
-        )
         yolo_outputs = self._inference_sessions["yolo"].run(
             output_names=["scores", "boxes"],
             input_feed={
-                "images": transformed_image[None],
+                "images": embedding.embedding[None],
                 "text_features": text_features[None],
             },
         )
         scores = cast(NDArray[np.float32], yolo_outputs[0])[0]
         bboxes = cast(NDArray[np.float32], yolo_outputs[1])[0]
         #
-        iou_threshold = 1.0 if prompt.iou_threshold is None else prompt.iou_threshold
+        iou_threshold = 0.5 if prompt.iou_threshold is None else prompt.iou_threshold
         score_threshold = (
-            0.0 if prompt.score_threshold is None else prompt.score_threshold
+            0.1 if prompt.score_threshold is None else prompt.score_threshold
         )
         max_annotations = (
-            len(bboxes) if prompt.max_annotations is None else prompt.max_annotations
+            100 if prompt.max_annotations is None else prompt.max_annotations
         )
         bboxes, scores, labels, _indices = _nms.non_maximum_suppression(
             boxes=bboxes,
@@ -85,24 +81,18 @@ class _YoloWorld(types.Model):
         bboxes = _untransform_bboxes(
             bboxes=bboxes,
             input_size=self._input_size,
-            original_image_hw=original_image_hw,
-            padding_hw=padding_hw,
+            original_image_hw=(embedding.original_height, embedding.original_width),
         )
-        annotations = [
+        return [
             types.Annotation(
                 bounding_box=types.BoundingBox(
                     xmin=bbox[0], ymin=bbox[1], xmax=bbox[2], ymax=bbox[3]
                 ),
-                text=prompt.texts[label],
+                text=texts[label],
                 score=score,
             )
             for bbox, label, score in zip(bboxes, labels, scores)
         ]
-        return types.GenerateResponse(
-            model=self.name,
-            image_embedding=None,
-            annotations=annotations,
-        )
 
 
 class YoloWorldXL(_YoloWorld):
@@ -121,20 +111,25 @@ class YoloWorldXL(_YoloWorld):
     }
 
 
-def _transform_image(
-    *, image: np.ndarray, input_size: int
-) -> tuple[np.ndarray, tuple[int, int], tuple[int, int]]:
-    height, width = image.shape[:2]
-
+def _padding_hw(
+    *, original_image_hw: tuple[int, int], input_size: int
+) -> tuple[int, int]:
+    # The image scales so its longer side fits input_size; the rest is padding.
+    height, width = original_image_hw
     scale = input_size / max(height, width)
+    return input_size - int(height * scale), input_size - int(width * scale)
+
+
+def _transform_image(*, image: np.ndarray, input_size: int) -> NDArray[np.float32]:
+    pad_height, pad_width = _padding_hw(
+        original_image_hw=image.shape[:2], input_size=input_size
+    )
     image_resized = imgviz.resize(
         image,
-        height=int(height * scale),
-        width=int(width * scale),
+        height=input_size - pad_height,
+        width=input_size - pad_width,
         interpolation="linear",
     )
-    pad_height = input_size - image_resized.shape[0]
-    pad_width = input_size - image_resized.shape[1]
     image_resized = np.pad(
         image_resized,
         (
@@ -145,8 +140,7 @@ def _transform_image(
         mode="constant",
         constant_values=114,
     )
-    input_image = image_resized.transpose(2, 0, 1).astype(np.float32) / 255.0
-    return input_image, (height, width), (pad_height, pad_width)
+    return image_resized.transpose(2, 0, 1).astype(np.float32) / 255.0
 
 
 def _untransform_bboxes(
@@ -154,9 +148,11 @@ def _untransform_bboxes(
     bboxes: np.ndarray,
     input_size: int,
     original_image_hw: tuple[int, int],
-    padding_hw: tuple[int, int],
 ) -> np.ndarray:
-    bboxes -= np.array([padding_hw[1] // 2, padding_hw[0] // 2] * 2)
+    pad_height, pad_width = _padding_hw(
+        original_image_hw=original_image_hw, input_size=input_size
+    )
+    bboxes -= np.array([pad_width // 2, pad_height // 2] * 2)
     bboxes /= input_size / max(original_image_hw)
     bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, original_image_hw[1] - 1)
     bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, original_image_hw[0] - 1)

@@ -158,35 +158,24 @@ class Runtime:
         )
         key: tuple[str, str] = (model_type.name, image_hash)
         embedding: types.ImageEmbedding | None = self._embeddings.get(key)
-        if request.image is None:
-            if embedding is None:
-                # Before loading the model, which a retry with the image would
-                # otherwise load a second time after keep_alive 0 unloads it.
-                raise UnknownImageError(
-                    f"no embedding for image {image_hash}; send the image"
-                )
-            height, width = embedding.original_height, embedding.original_width
-        else:
-            height, width = request.image.shape[:2]
-        prompt: types.Prompt | None = request.to_prompt(
-            model_type=model_type, height=height, width=width
-        )
-        # Models use the embedding when given one, and return the one they used.
-        model: types.Model = self._load(model_name=model_type.name)
-        response: types.GenerateResponse = model.generate(
-            request=types.GenerateRequest(
-                model=model.name,
-                image=request.image,
-                image_embedding=embedding,
-                prompt=prompt,
+        if request.image is None and embedding is None:
+            # Before loading the model, which a retry with the image would
+            # otherwise load a second time after keep_alive 0 unloads it.
+            raise UnknownImageError(
+                f"no embedding for image {image_hash}; send the image"
             )
+        model: types.Model = self._load(model_name=model_type.name)
+        if embedding is None:
+            assert request.image is not None  # raised UnknownImageError otherwise
+            embedding = model.encode_image(image=request.image)
+        self._embeddings[key] = embedding
+        self._embeddings.move_to_end(key)
+        while len(self._embeddings) > EMBEDDING_CACHE_SIZE:
+            self._embeddings.popitem(last=False)
+        annotations: list[types.Annotation] = model.decode(
+            embedding=embedding, prompt=request
         )
-        if response.image_embedding is not None:
-            self._embeddings[key] = response.image_embedding
-            self._embeddings.move_to_end(key)
-            while len(self._embeddings) > EMBEDDING_CACHE_SIZE:
-                self._embeddings.popitem(last=False)
-        return SegmentResponse(annotations=response.annotations, image_hash=image_hash)
+        return SegmentResponse(annotations=annotations, image_hash=image_hash)
 
     def _load(self, *, model_name: str) -> types.Model:
         # Under _lock. When full, the least recently used model unloads first;

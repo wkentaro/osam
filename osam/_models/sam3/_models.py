@@ -1,6 +1,5 @@
 from typing import cast
 
-import imgviz
 import numpy as np
 import PIL.Image
 from loguru import logger
@@ -19,6 +18,8 @@ class Sam3(types.Model):
         license_url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/blob/40ffee63eb38bc3779318319bf81e9db06687d91/LICENSE",
         source_url="https://github.com/wkentaro/sam3-onnx/tree/f921702fb17fe6f0c6dd054519df71a1c407b142",
     )
+
+    prompt_kinds = frozenset({"points", "box", "texts", "example_boxes"})
 
     # CoreML can't load the point decoder: its point_coords dimension is unbounded.
     _coreml_blobs = frozenset({"image_encoder", "language_encoder", "decoder"})
@@ -96,68 +97,34 @@ class Sam3(types.Model):
         return types.Prompt(texts=["visual"])
 
     @override
-    def generate(self, *, request: types.GenerateRequest) -> types.GenerateResponse:
-        image_embedding: types.ImageEmbedding
-        if request.image_embedding is not None:
-            image_embedding = request.image_embedding
-        elif request.image is not None:
-            image_embedding = self.encode_image(image=request.image)
-        else:
-            raise ValueError("either image or image_embedding is required for Sam3")
+    def _decode(
+        self, *, embedding: types.ImageEmbedding, prompt: types.Prompt
+    ) -> list[types.Annotation]:
+        original_height: int = embedding.original_height
+        original_width: int = embedding.original_width
 
-        original_height: int = image_embedding.original_height
-        original_width: int = image_embedding.original_width
-
-        backbone_fpn_0: NDArray[np.float32] = image_embedding.embedding[None]
-        backbone_fpn_1: NDArray[np.float32] = image_embedding.extra_features[0][None]
-        backbone_fpn_2: NDArray[np.float32] = image_embedding.extra_features[1][None]
-        vision_pos_enc_2: NDArray[np.float32] = image_embedding.extra_features[2][None]
-
-        prompt: types.Prompt
-        if request.prompt is None:
-            prompt = self.default_prompt(height=original_height, width=original_width)
-            logger.warning(
-                "Prompt is not given, so using 'visual' as prompt: {!r}", prompt
-            )
-        else:
-            prompt = request.prompt
+        backbone_fpn_0: NDArray[np.float32] = embedding.embedding[None]
+        backbone_fpn_1: NDArray[np.float32] = embedding.extra_features[0][None]
+        backbone_fpn_2: NDArray[np.float32] = embedding.extra_features[1][None]
+        vision_pos_enc_2: NDArray[np.float32] = embedding.extra_features[2][None]
 
         score_threshold: float = (
-            0 if prompt.score_threshold is None else prompt.score_threshold
+            0.1 if prompt.score_threshold is None else prompt.score_threshold
+        )
+        max_annotations: int = (
+            100 if prompt.max_annotations is None else prompt.max_annotations
         )
 
-        if (
-            prompt.points is not None
-            and prompt.point_labels is not None
-            and len(prompt.point_labels) > 0
-        ):
-            labels: list[int] = prompt.point_labels.tolist()
-            if prompt.texts:
-                # Boxes with text are examples of the objects to find.
-                if set(labels) <= {0, 1}:
-                    raise ValueError("point prompts can't be combined with text")
-            else:
-                # Without text, the prompt is one object, as in SAM and SAM2:
-                # points (0, 1) with at most one box (2 then 3).
-                box_starts: list[int] = [i for i, v in enumerate(labels) if v == 2]
-                if not (
-                    set(labels) <= {0, 1, 2, 3}
-                    and labels.count(3) == len(box_starts) <= 1
-                    and all(labels[i + 1 : i + 2] == [3] for i in box_starts)
-                ):
-                    raise ValueError(
-                        "without texts, give points (labels 0, 1) and at most "
-                        "one box (labels 2, 3) to segment one object; add "
-                        "texts=['visual'] to find every object like the boxes: "
-                        f"{prompt.point_labels=}"
-                    )
-                return self._generate_from_points(
-                    image_embedding=image_embedding,
-                    points=prompt.points,
-                    point_labels=prompt.point_labels,
-                    score_threshold=score_threshold,
-                    max_annotations=prompt.max_annotations,
-                )
+        if prompt.points is not None or prompt.box is not None:
+            # One object, as in SAM and SAM2.
+            points, point_labels = types.point_inputs(prompt=prompt)
+            return self._generate_from_points(
+                image_embedding=embedding,
+                points=points,
+                point_labels=point_labels,
+                score_threshold=score_threshold,
+                max_annotations=max_annotations,
+            )
 
         # The decoder takes a fixed number of boxes, and masks out the unused ones.
         (box_input,) = (
@@ -169,34 +136,22 @@ class Sam3(types.Model):
         box_coords: NDArray[np.float32] = np.zeros((max_boxes, 1, 4), np.float32)
         box_labels: NDArray[np.int64] = np.ones((max_boxes, 1), np.int64)
         box_masks: NDArray[np.bool_] = np.ones((1, max_boxes), np.bool_)
-        if prompt.points is not None and prompt.point_labels is not None:
-            num_boxes: int = len(prompt.points) // 2
-            pairs: list[list[int]] = (
-                []
-                if len(prompt.points) % 2
-                else prompt.point_labels.reshape(-1, 2).tolist()
-            )
-            if not pairs or any(pair not in ([2, 3], [4, 5]) for pair in pairs):
-                raise ValueError(
-                    "with texts, give boxes as point label pairs "
-                    "(2, 3: positive left-top, right-bottom; 4, 5: negative): "
-                    f"{prompt.point_labels=}"
-                )
+        if prompt.example_boxes:
+            num_boxes: int = len(prompt.example_boxes)
             if num_boxes > max_boxes:
                 raise ValueError(f"at most {max_boxes} boxes are supported")
-            corners: NDArray[np.floating] = prompt.points.reshape(num_boxes, 2, 2) / [
-                original_width,
-                original_height,
-            ]
+            corners: NDArray[np.floating] = np.reshape(
+                prompt.example_boxes, (num_boxes, 2, 2)
+            ) / [original_width, original_height]
             # (x_center, y_center, width, height)
             box_coords[:num_boxes, 0] = np.c_[
                 corners.mean(axis=1), corners[:, 1] - corners[:, 0]
             ]
-            box_labels[:num_boxes, 0] = [pair == [2, 3] for pair in pairs]
+            box_labels[:num_boxes, 0] = prompt.example_box_labels or [1] * num_boxes
             box_masks[0, :num_boxes] = False
 
         # One decoder run per text, joined so max_annotations caps them all, as
-        # for YOLO-World.
+        # for YOLO-World. "visual" alone finds every object like the examples.
         texts: list[str] = prompt.texts or ["visual"]
         runs: list[list[NDArray[np.float32]]] = []
         for text in texts:
@@ -243,7 +198,7 @@ class Sam3(types.Model):
         )
 
         # Keep the highest-scoring annotations, in text then decoder order.
-        keep = np.sort(np.argsort(-scores, kind="stable")[: prompt.max_annotations])
+        keep = np.sort(np.argsort(-scores, kind="stable")[:max_annotations])
         annotations: list[types.Annotation] = []
         for i in keep:
             if scores[i] < score_threshold:
@@ -278,21 +233,17 @@ class Sam3(types.Model):
                 )
             )
 
-        return types.GenerateResponse(
-            model=self.name,
-            image_embedding=image_embedding,
-            annotations=annotations,
-        )
+        return annotations
 
     def _generate_from_points(
         self,
         *,
         image_embedding: types.ImageEmbedding,
-        points: NDArray[np.floating],
-        point_labels: NDArray[np.integer],
+        points: NDArray[np.float32],
+        point_labels: NDArray[np.float32],
         score_threshold: float,
-        max_annotations: int | None,
-    ) -> types.GenerateResponse:
+        max_annotations: int,
+    ) -> list[types.Annotation]:
         height: int = image_embedding.original_height
         width: int = image_embedding.original_width
         inputs: dict[str, NDArray] = {
@@ -327,20 +278,6 @@ class Sam3(types.Model):
             > 0
         )
         score = float(iou_predictions[0, best])
-        annotations: list[types.Annotation] = []
-        if mask.any() and score >= score_threshold and max_annotations != 0:
-            ymin, xmin, ymax, xmax = imgviz.masks_to_bboxes(masks=[mask])[0].astype(int)
-            annotations.append(
-                types.Annotation(
-                    mask=mask[ymin : ymax + 1, xmin : xmax + 1],
-                    bounding_box=types.BoundingBox(
-                        xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax
-                    ),
-                    score=score,
-                )
-            )
-        return types.GenerateResponse(
-            model=self.name,
-            image_embedding=image_embedding,
-            annotations=annotations,
-        )
+        if score < score_threshold or max_annotations == 0:
+            return []
+        return types.annotations_from_mask(mask=mask, score=score)

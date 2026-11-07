@@ -13,24 +13,22 @@ import osam._types
 
 def benchmark(model: str, n_times: int):
     runner = osam._registry.get_model_type_by_name(name=model)()
-    request = osam._types.GenerateRequest(
-        model=model,
-        image=np.asarray(PIL.Image.open("../_images/dogs.jpg")),
-        prompt=osam._types.Prompt(
-            points=np.array([[1280, 800]]), point_labels=np.array([1])
-        ),
-    )
+    image = np.asarray(PIL.Image.open("../_images/dogs.jpg"))
+    prompt = osam._types.Prompt(points=[(1280, 800)], point_labels=[1])
+
+    def segment() -> None:
+        runner.decode(embedding=runner.encode_image(image=image), prompt=prompt)
 
     logger.info("Warming up")
     for _ in range(3):
-        runner.generate(request=request)
+        segment()
     logger.info("Finished warming up")
 
     logger.info(f"Benchmarking {n_times} times")
     elapsed_times = []
     for _ in range(n_times):
         t_start = time.time()
-        runner.generate(request=request)
+        segment()
         elapsed_time = time.time() - t_start
         elapsed_times.append(elapsed_time)
     logger.info(f"Average elapsed time: {np.mean(elapsed_times)} [s]")

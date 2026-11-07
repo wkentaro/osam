@@ -1,7 +1,6 @@
 import re
 import threading
 import typing
-from collections.abc import Sequence
 from typing import Any
 from typing import Final
 
@@ -53,8 +52,6 @@ KeepAlive = typing.Annotated[
         "unloads it now",
     ),
 ]
-Box = tuple[float, float, float, float]
-PointLabel = typing.Literal[0, 1]
 
 
 class LoadRequest(pydantic.BaseModel):
@@ -62,7 +59,8 @@ class LoadRequest(pydantic.BaseModel):
     keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
 
 
-class SegmentRequest(pydantic.BaseModel):
+class SegmentRequest(types.Prompt):
+    # The prompt fields, and the model and image to segment.
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     model: str
@@ -75,28 +73,6 @@ class SegmentRequest(pydantic.BaseModel):
         description="In place of image, the hash of an image sent before, whose "
         "embedding the server may still have; 412 asks for the image itself",
     )
-    # One object: points with at most one box.
-    points: list[tuple[float, float]] | None = pydantic.Field(
-        default=None, description="x, y in pixels"
-    )
-    point_labels: list[PointLabel] | None = pydantic.Field(
-        default=None, description="1 for foreground, 0 for background"
-    )
-    box: Box | None = pydantic.Field(
-        default=None, description="xmin, ymin, xmax, ymax in pixels"
-    )
-    # Every match: texts, example boxes, or both.
-    texts: list[str] | None = None
-    example_boxes: list[Box] | None = pydantic.Field(
-        default=None, description="xmin, ymin, xmax, ymax in pixels"
-    )
-    example_box_labels: list[PointLabel] | None = pydantic.Field(
-        default=None,
-        description="1 for a positive example, 0 for a negative one; all 1 if unset",
-    )
-    iou_threshold: float | None = None
-    score_threshold: float | None = None
-    max_annotations: int | None = pydantic.Field(default=None, ge=0)
     keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
 
     @pydantic.field_validator("image", mode="before")
@@ -120,59 +96,7 @@ class SegmentRequest(pydantic.BaseModel):
             raise ValueError("send image or image_hash, not both")
         if self.image is None and self.image_hash is None:
             raise ValueError("send image or image_hash")
-        if (self.points is None) != (self.point_labels is None) or len(
-            self.points or []
-        ) != len(self.point_labels or []):
-            raise ValueError("points and point_labels must have the same length")
-        if self.example_box_labels is not None and len(self.example_box_labels) != len(
-            self.example_boxes or []
-        ):
-            raise ValueError("example_box_labels must match example_boxes")
-        if (self.points is not None or self.box is not None) and (
-            self.texts is not None or self.example_boxes is not None
-        ):
-            raise ValueError(
-                "points and box segment one object, and texts and example_boxes "
-                "find every match; give one or the other"
-            )
         return self
-
-    def to_prompt(
-        self, *, model_type: type[types.Model], height: int, width: int
-    ) -> types.Prompt | None:
-        # The one place that builds the models' point labels: 2 and 3 for a
-        # box's corners, 4 and 5 for a negative box's.
-        thresholds: dict[str, Any] = self.model_dump(
-            include={"iou_threshold", "score_threshold", "max_annotations"},
-            exclude_none=True,
-        )
-        points: list[Sequence[float]] = list(self.points or [])
-        labels: list[int] = list(self.point_labels or [])
-        if self.box is not None:
-            points += [self.box[:2], self.box[2:]]
-            labels += [2, 3]
-        texts: list[str] | None = self.texts
-        if self.example_boxes is not None:
-            for example, label in zip(
-                self.example_boxes,
-                self.example_box_labels or [1] * len(self.example_boxes),
-            ):
-                points += [example[:2], example[2:]]
-                labels += [2, 3] if label else [4, 5]
-            # SAM3's text for "every object like the boxes".
-            texts = texts or ["visual"]
-        if not points and texts is None:
-            if not thresholds:
-                return None  # the model's default prompt
-            return model_type.default_prompt(height=height, width=width).model_copy(
-                update=thresholds
-            )
-        return types.Prompt(
-            points=np.array(points, dtype=float) if points else None,
-            point_labels=np.array(labels, dtype=int) if labels else None,
-            texts=texts,
-            **thresholds,
-        )
 
 
 def to_json_fields(*, fields: dict[str, Any]) -> dict[str, Any]:

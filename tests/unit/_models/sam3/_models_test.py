@@ -14,7 +14,7 @@ from osam._models.sam3._models import Sam3
         ([0.5, 0.5, 1.3, 1.3], (50, 50, 99, 99)),
     ],
 )
-def test_generate_keeps_mask_of_box_past_image_edge(
+def test_decode_keeps_mask_of_box_past_image_edge(
     box: list[float], expected: tuple[int, int, int, int]
 ) -> None:
     # The decoder can predict a box past the image for an object cut off by
@@ -42,15 +42,12 @@ def test_generate_keeps_mask_of_box_past_image_edge(
         extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
     )
 
-    response = model.generate(
-        request=types.GenerateRequest(
-            model="sam3",
-            image_embedding=embedding,
-            prompt=types.Prompt(texts=["car"]),
-        )
+    annotations = model.decode(
+        embedding=embedding,
+        prompt=types.Prompt(texts=["car"]),
     )
 
-    [annotation] = response.annotations
+    [annotation] = annotations
     bb = annotation.bounding_box
     assert (bb.xmin, bb.ymin, bb.xmax, bb.ymax) == expected
     assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
@@ -58,39 +55,18 @@ def test_generate_keeps_mask_of_box_past_image_edge(
 
 
 @pytest.mark.parametrize(
-    "point_labels",
-    [[2, 3, 2, 3], [2, 3, 4, 5], [4, 5], [3, 2], [2, 1, 3], [2]],
+    "point_labels, box, expected",
+    [
+        ([1], None, [1]),
+        ([1, 0], None, [1, 0]),
+        (None, (0, 0, 1, 1), [2, 3]),
+        ([1, 0], (0, 0, 1, 1), [1, 0, 2, 3]),
+    ],
 )
-def test_generate_rejects_boxes_without_text_beyond_one_box(
-    point_labels: list[int],
-) -> None:
-    model = Sam3.__new__(Sam3)
-    embedding = types.ImageEmbedding(
-        original_height=100,
-        original_width=100,
-        embedding=np.zeros((1, 1, 1), np.float32),
-        extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
-    )
-
-    with pytest.raises(ValueError, match=r"texts=\['visual'\]"):
-        model.generate(
-            request=types.GenerateRequest(
-                model="sam3",
-                image_embedding=embedding,
-                prompt=types.Prompt(
-                    points=np.zeros((len(point_labels), 2)),
-                    point_labels=np.array(point_labels),
-                ),
-            )
-        )
-
-
-@pytest.mark.parametrize(
-    "point_labels",
-    [[1], [1, 0], [2, 3], [2, 3, 1], [1, 2, 3, 0]],
-)
-def test_generate_segments_one_object_from_points_and_one_box(
-    point_labels: list[int],
+def test_decode_segments_one_object_from_points_and_one_box(
+    point_labels: list[int] | None,
+    box: tuple[float, float, float, float] | None,
+    expected: list[int],
 ) -> None:
     model = Sam3.__new__(Sam3)
     calls: list[list[int]] = []
@@ -104,21 +80,23 @@ def test_generate_segments_one_object_from_points_and_one_box(
         extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
     )
 
-    model.generate(
-        request=types.GenerateRequest(
-            model="sam3",
-            image_embedding=embedding,
-            prompt=types.Prompt(
-                points=np.zeros((len(point_labels), 2)),
-                point_labels=np.array(point_labels),
-            ),
-        )
+    model.decode(
+        embedding=embedding,
+        prompt=types.Prompt.model_validate(
+            {
+                "points": None
+                if point_labels is None
+                else [[0, 0]] * len(point_labels),
+                "point_labels": point_labels,
+                "box": box,
+            }
+        ),
     )
 
-    assert calls == [point_labels]
+    assert calls == [expected]
 
 
-def test_generate_finds_objects_for_each_text() -> None:
+def test_decode_finds_objects_for_each_text() -> None:
     language_encoder = pytypes.SimpleNamespace(
         run=lambda *_: [
             np.ones((1, 32), bool),
@@ -153,16 +131,13 @@ def test_generate_finds_objects_for_each_text() -> None:
         extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
     )
 
-    response = model.generate(
-        request=types.GenerateRequest(
-            model="sam3",
-            image_embedding=embedding,
-            prompt=types.Prompt(texts=["car", "dog"], max_annotations=2),
-        )
+    annotations = model.decode(
+        embedding=embedding,
+        prompt=types.Prompt(texts=["car", "dog"], max_annotations=2),
     )
 
     # The cap applies across texts, keeping the highest scores.
-    assert [(a.text, a.score) for a in response.annotations] == [
+    assert [(a.text, a.score) for a in annotations] == [
         ("car", pytest.approx(0.9)),
         ("dog", pytest.approx(0.5)),
     ]

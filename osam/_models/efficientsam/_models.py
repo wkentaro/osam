@@ -2,6 +2,7 @@ from typing import cast
 
 import numpy as np
 import numpy.typing as npt
+from typing_extensions import override
 
 from osam import _types as types
 from osam._models.sam import SamBase
@@ -15,7 +16,8 @@ class EfficientSam(SamBase):
         license_spdx="Apache-2.0",
     )
 
-    def _encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
+    @override
+    def encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         batched_images: npt.NDArray[np.float32] = (
             image.transpose(2, 0, 1)[None].astype(np.float32) / 255
         )
@@ -33,24 +35,21 @@ class EfficientSam(SamBase):
             embedding=image_embedding,
         )
 
+    @override
     def _generate_mask_from_image_embedding(
         self,
         *,
         image_embedding: types.ImageEmbedding,
-        prompt: types.Prompt,
+        points: npt.NDArray[np.float32],
+        point_labels: npt.NDArray[np.float32],
     ) -> npt.NDArray[np.bool_]:
-        input_point: npt.NDArray[np.float32] = np.array(prompt.points, dtype=np.float32)
-        input_label: npt.NDArray[np.float32] = np.array(
-            prompt.point_labels, dtype=np.float32
-        )
-
         decoder_inputs = {
             # batch_size, embedding_dim, height, width
             "image_embeddings": image_embedding.embedding[None, :, :, :],
             # batch_size, num_queries, num_points, 2
-            "batched_point_coords": input_point[None, None, :, :],
+            "batched_point_coords": points[None, None, :, :],
             # batch_size, num_queries, num_points
-            "batched_point_labels": input_label[None, None, :],
+            "batched_point_labels": point_labels[None, None, :],
             "orig_im_size": np.array(
                 (image_embedding.original_height, image_embedding.original_width),
                 dtype=np.int64,

@@ -5,23 +5,30 @@ import hashlib
 import threading
 from collections.abc import Callable
 
+import imgviz
 import numpy as np
+import numpy.typing as npt
 import onnxruntime
 from loguru import logger
 
 from .. import _onnx
+from ..types import Annotation
 from ..types import Blob
+from ..types import BoundingBox
 from ..types import Device
 from ..types import ModelMetadata
-from ._generate import GenerateRequest
-from ._generate import GenerateResponse
 from ._image_embedding import ImageEmbedding
+from ._prompt import THRESHOLDS
 from ._prompt import Prompt
+from ._prompt import PromptKind
 
 
 class Model(abc.ABC):
     name: str
     metadata: ModelMetadata
+
+    # The prompt kinds decode takes; others raise ValueError.
+    prompt_kinds: frozenset[PromptKind]
 
     _blobs: dict[str, Blob]
     # Blobs that run on CoreML with device="coreml", all when None; the others
@@ -112,14 +119,48 @@ class Model(abc.ABC):
             modified_at = max(modified_at, blob_modified_at)
         return modified_at
 
+    @abc.abstractmethod
     def encode_image(self, *, image: np.ndarray) -> ImageEmbedding:
-        raise NotImplementedError
+        # image: an RGB (H, W, 3) uint8 array.
+        pass
 
     @classmethod
+    @abc.abstractmethod
     def default_prompt(cls, *, height: int, width: int) -> Prompt:
         # The prompt used when a request gives none.
-        raise NotImplementedError
+        pass
+
+    def decode(self, *, embedding: ImageEmbedding, prompt: Prompt) -> list[Annotation]:
+        if not prompt.kinds:
+            prompt = self.default_prompt(
+                height=embedding.original_height, width=embedding.original_width
+            ).model_copy(
+                update=prompt.model_dump(include=set(THRESHOLDS), exclude_none=True)
+            )
+            logger.debug("Using the default prompt: {prompt!r}", prompt=prompt)
+        if unsupported := prompt.kinds - self.prompt_kinds:
+            raise ValueError(
+                f"{self.name} takes {', '.join(sorted(self.prompt_kinds))}, "
+                f"not {', '.join(sorted(unsupported))}"
+            )
+        return self._decode(embedding=embedding, prompt=prompt)
 
     @abc.abstractmethod
-    def generate(self, *, request: GenerateRequest) -> GenerateResponse:
+    def _decode(self, *, embedding: ImageEmbedding, prompt: Prompt) -> list[Annotation]:
         pass
+
+
+def annotations_from_mask(
+    *, mask: npt.NDArray[np.bool_], score: float | None = None
+) -> list[Annotation]:
+    # The mask cropped to its bounding box, or none for an empty mask.
+    if not mask.any():
+        return []
+    ymin, xmin, ymax, xmax = imgviz.masks_to_bboxes(masks=[mask])[0].astype(int)
+    return [
+        Annotation(
+            mask=mask[ymin : ymax + 1, xmin : xmax + 1],
+            bounding_box=BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax),
+            score=score,
+        )
+    ]
