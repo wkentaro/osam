@@ -18,6 +18,7 @@ import uvicorn
 
 import osam
 from osam import _http
+from osam import _runtime
 from osam import _server
 
 _IMAGE: Final = np.asarray(
@@ -231,7 +232,10 @@ def _serving() -> Iterator[str]:
     # osam serve in this process, so a test can patch it.
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
-    server = uvicorn.Server(uvicorn.Config(_server.app, log_level="warning"))
+    runtime = _runtime.Runtime()
+    server = uvicorn.Server(
+        uvicorn.Config(_server.create_app(runtime=runtime), log_level="warning")
+    )
     thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]})
     thread.start()
     try:
@@ -241,6 +245,7 @@ def _serving() -> Iterator[str]:
     finally:
         server.should_exit = True
         thread.join()
+        runtime.close()
 
 
 def test_host_checks_the_version(monkeypatch: pytest.MonkeyPatch) -> None:

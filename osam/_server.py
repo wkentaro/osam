@@ -1,6 +1,5 @@
 import asyncio
 import concurrent.futures
-import contextlib
 import functools
 import json
 import logging
@@ -9,7 +8,6 @@ import secrets
 import socket
 import threading
 import time
-import typing
 from collections.abc import Callable
 from collections.abc import Sequence
 from typing import Any
@@ -22,87 +20,11 @@ import uvicorn
 
 from . import __version__
 from . import _registry
-from . import _runtime as _runtime_module
+from . import _runtime
 from . import _types as types
 from ._requests import LoadRequest
 from ._requests import SegmentRequest
 from ._requests import SegmentResponse
-
-# Every call runs on one thread, in order, as the runtime runs one at a time.
-# Queued requests wait here instead of holding FastAPI's thread pool, so other
-# routes stay free.
-# ponytail: one worker, so a long pull also delays segment.
-_worker = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-# `osam serve --device` and `--max-loaded-models` set these. One model by
-# default; an application using two, such as one for clicks and one for text,
-# sets 2 so they don't reload in turn.
-try:
-    _runtime = _runtime_module.Runtime(
-        device=typing.cast(
-            types.Device | None, os.environ.get("OSAM_SERVE_DEVICE") or None
-        ),
-        max_loaded_models=int(os.environ.get("OSAM_MAX_LOADED_MODELS") or 1),
-    )
-except ValueError as e:
-    raise ValueError(f"OSAM_SERVE_DEVICE or OSAM_MAX_LOADED_MODELS: {e}") from None
-
-
-@contextlib.asynccontextmanager
-async def _lifespan(app: fastapi.FastAPI):
-    # https://github.com/tiangolo/fastapi/issues/1508#issuecomment-638365277
-    os.makedirs(os.path.expanduser("~/.cache/osam"), exist_ok=True)
-    handler = logging.FileHandler(os.path.expanduser("~/.cache/osam/osam.log"))
-    handler.setLevel(logging.DEBUG)
-    fmt = "%(asctime)s [%(levelname)s] %(module)s:%(funcName)s:%(lineno)s - %(message)s"
-    handler.setFormatter(logging.Formatter(fmt=fmt))
-    logging.getLogger("uvicorn").addHandler(handler)
-    yield
-
-
-app: fastapi.FastAPI = fastapi.FastAPI(
-    title="osam", version=__version__, lifespan=_lifespan
-)
-
-
-# Errors are {"error": message}, as in Ollama.
-def _error(
-    *, message: str, status_code: int, headers: dict[str, str] | None = None
-) -> fastapi.responses.JSONResponse:
-    return fastapi.responses.JSONResponse(
-        {"error": message}, status_code=status_code, headers=headers
-    )
-
-
-def _describe_validation_errors(*, errors: Sequence[Any]) -> str:
-    return "; ".join(
-        f"{'.'.join(map(str, error['loc']))}: {error['msg']}" for error in errors
-    )
-
-
-# Starlette's base class also covers routing errors, such as an unknown path.
-app.add_exception_handler(
-    starlette.exceptions.HTTPException,
-    lambda request, exc: _error(
-        message=exc.detail, status_code=exc.status_code, headers=exc.headers
-    ),
-)
-# Anything else is a 500, still in that shape; uvicorn logs the traceback.
-app.add_exception_handler(
-    Exception,
-    lambda request, exc: _error(
-        message=str(exc) or type(exc).__name__, status_code=500
-    ),
-)
-app.add_exception_handler(
-    _registry.UnknownModelError,
-    lambda request, exc: _error(message=str(exc), status_code=404),
-)
-app.add_exception_handler(
-    fastapi.exceptions.RequestValidationError,
-    lambda request, exc: _error(
-        message=_describe_validation_errors(errors=exc.errors()), status_code=422
-    ),
-)
 
 
 class ModelList(pydantic.BaseModel):
@@ -121,96 +43,158 @@ class PullRequest(pydantic.BaseModel):
     model: str
 
 
-@app.get("/")
-def index() -> fastapi.Response:
-    return fastapi.Response("osam is running")
-
-
-@app.get("/api/version")
-def version() -> Version:
-    return Version(version=__version__)
-
-
-@app.get("/api/models")
-def list_models() -> ModelList:
-    return ModelList(models=_runtime.list())
-
-
-@app.get("/api/ps")
-def list_running_models() -> RunningModelList:
-    return RunningModelList(models=_runtime.ps())
-
-
-# Streams NDJSON progress lines, as Ollama does, ending in success or error.
-@app.post("/api/pull", response_class=fastapi.responses.StreamingResponse)
-async def pull(request: PullRequest) -> fastapi.responses.StreamingResponse:
-    # Looked up before streaming, so an unknown model is a 404.
-    model_type: type[types.Model] = _registry.get_model_type_by_name(name=request.model)
-    loop = asyncio.get_running_loop()
-    lines: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-    cancel = threading.Event()
-
-    def progress(line: dict[str, Any]) -> None:
-        loop.call_soon_threadsafe(lines.put_nowait, line)
-
-    def work() -> None:
-        try:
-            _runtime.pull(model=model_type.name, progress=progress, cancel=cancel)
-            last: dict[str, Any] = {"status": "success"}
-        except Exception as e:
-            last = {"error": str(e)}
-        # Through the same queue, so it follows every progress line.
-        loop.call_soon_threadsafe(lines.put_nowait, last)
-
-    async def stream():
-        loop.run_in_executor(_worker, work)
-        try:
-            while True:
-                line = await lines.get()
-                yield json.dumps(line) + "\n"
-                if "error" in line or line["status"] == "success":
-                    return
-        finally:
-            cancel.set()  # the client left, so stop downloading
-
-    return fastapi.responses.StreamingResponse(
-        stream(), media_type="application/x-ndjson"
+# Errors are {"error": message}, as in Ollama.
+def _error(
+    *, message: str, status_code: int, headers: dict[str, str] | None = None
+) -> fastapi.responses.JSONResponse:
+    return fastapi.responses.JSONResponse(
+        {"error": message}, status_code=status_code, headers=headers
     )
 
 
-@app.delete("/api/models/{name}")
-async def remove(name: str) -> None:
-    await _run(call=functools.partial(_runtime.remove, model=name))
+def _describe_validation_errors(*, errors: Sequence[Any]) -> str:
+    return "; ".join(
+        f"{'.'.join(map(str, error['loc']))}: {error['msg']}" for error in errors
+    )
 
 
-@app.post("/api/segment", response_model=SegmentResponse)
-async def segment(request: SegmentRequest) -> SegmentResponse:
-    try:
-        return await _run(call=functools.partial(_runtime.segment, request=request))
-    except _runtime_module.UnknownImageError as e:
-        raise fastapi.HTTPException(412, str(e))
-    except ValueError as e:
-        raise fastapi.HTTPException(400, str(e))
+def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
+    # The routes of osam serve, running models on runtime, which the caller
+    # closes.
+    app = fastapi.FastAPI(title="osam", version=__version__)
+    # Every call runs on one thread, in order, as the runtime runs one at a time.
+    # Queued requests wait here instead of holding FastAPI's thread pool, so other
+    # routes stay free. Its idle thread exits once the app is garbage collected.
+    # ponytail: one worker, so a long pull also delays segment.
+    worker = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+    async def run(*, call: Callable[[], Any]) -> Any:
+        return await asyncio.get_running_loop().run_in_executor(worker, call)
+
+    # Starlette's base class also covers routing errors, such as an unknown path.
+    app.add_exception_handler(
+        starlette.exceptions.HTTPException,
+        lambda request, exc: _error(
+            message=exc.detail, status_code=exc.status_code, headers=exc.headers
+        ),
+    )
+    # Anything else is a 500, still in that shape; uvicorn logs the traceback.
+    app.add_exception_handler(
+        Exception,
+        lambda request, exc: _error(
+            message=str(exc) or type(exc).__name__, status_code=500
+        ),
+    )
+    app.add_exception_handler(
+        _registry.UnknownModelError,
+        lambda request, exc: _error(message=str(exc), status_code=404),
+    )
+    app.add_exception_handler(
+        fastapi.exceptions.RequestValidationError,
+        lambda request, exc: _error(
+            message=_describe_validation_errors(errors=exc.errors()), status_code=422
+        ),
+    )
+
+    @app.get("/")
+    def index() -> fastapi.Response:
+        return fastapi.Response("osam is running")
+
+    @app.get("/api/version")
+    def version() -> Version:
+        return Version(version=__version__)
+
+    @app.get("/api/models")
+    def list_models() -> ModelList:
+        return ModelList(models=runtime.list())
+
+    @app.get("/api/ps")
+    def list_running_models() -> RunningModelList:
+        return RunningModelList(models=runtime.ps())
+
+    # Streams NDJSON progress lines, as Ollama does, ending in success or error.
+    @app.post("/api/pull", response_class=fastapi.responses.StreamingResponse)
+    async def pull(request: PullRequest) -> fastapi.responses.StreamingResponse:
+        # Looked up before streaming, so an unknown model is a 404.
+        model_type: type[types.Model] = _registry.get_model_type_by_name(
+            name=request.model
+        )
+        loop = asyncio.get_running_loop()
+        lines: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        cancel = threading.Event()
+
+        def progress(line: dict[str, Any]) -> None:
+            loop.call_soon_threadsafe(lines.put_nowait, line)
+
+        def work() -> None:
+            try:
+                runtime.pull(model=model_type.name, progress=progress, cancel=cancel)
+                last: dict[str, Any] = {"status": "success"}
+            except Exception as e:
+                last = {"error": str(e)}
+            # Through the same queue, so it follows every progress line.
+            loop.call_soon_threadsafe(lines.put_nowait, last)
+
+        async def stream():
+            loop.run_in_executor(worker, work)
+            try:
+                while True:
+                    line = await lines.get()
+                    yield json.dumps(line) + "\n"
+                    if "error" in line or line["status"] == "success":
+                        return
+            finally:
+                cancel.set()  # the client left, so stop downloading
+
+        return fastapi.responses.StreamingResponse(
+            stream(), media_type="application/x-ndjson"
+        )
+
+    @app.delete("/api/models/{name}")
+    async def remove(name: str) -> None:
+        await run(call=functools.partial(runtime.remove, model=name))
+
+    @app.post("/api/segment", response_model=SegmentResponse)
+    async def segment(request: SegmentRequest) -> SegmentResponse:
+        try:
+            return await run(call=functools.partial(runtime.segment, request=request))
+        except _runtime.UnknownImageError as e:
+            raise fastapi.HTTPException(412, str(e))
+        except ValueError as e:
+            raise fastapi.HTTPException(400, str(e))
+
+    @app.post("/api/load")
+    async def load(request: LoadRequest) -> None:
+        await run(call=functools.partial(runtime.load, request=request))
+
+    return app
 
 
-@app.post("/api/load")
-async def load(request: LoadRequest) -> None:
-    await _run(call=functools.partial(_runtime.load, request=request))
-
-
-async def _run(*, call: Callable[[], Any]) -> Any:
-    return await asyncio.get_running_loop().run_in_executor(_worker, call)
+def uvicorn_server(*, app: fastapi.FastAPI, **config: Any) -> uvicorn.Server:
+    # A server for app that also logs to ~/.cache/osam/osam.log, next to the
+    # CLI's log. After uvicorn.Config, which replaces uvicorn's log handlers.
+    server = uvicorn.Server(uvicorn.Config(app, **config))
+    os.makedirs(os.path.expanduser("~/.cache/osam"), exist_ok=True)
+    handler = logging.FileHandler(os.path.expanduser("~/.cache/osam/osam.log"))
+    handler.setLevel(logging.DEBUG)
+    fmt = "%(asctime)s [%(levelname)s] %(module)s:%(funcName)s:%(lineno)s - %(message)s"
+    handler.setFormatter(logging.Formatter(fmt=fmt))
+    logging.getLogger("uvicorn").addHandler(handler)
+    return server
 
 
 def run_private(
     *,
     token: str,
+    runtime: _runtime.Runtime,
     report_port: Callable[[int], object],
     wait_for_parent: Callable[[], object],
 ) -> None:
     # The server osam.Client starts: it serves only requests that carry token,
     # until wait_for_parent returns.
     AUTHORIZATION: Final = f"Bearer {token}"
+
+    app = create_app(runtime=runtime)
 
     @app.middleware("http")
     async def check_token(request: fastapi.Request, call_next):
@@ -224,7 +208,7 @@ def run_private(
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     sock.listen()  # so requests sent before uvicorn starts wait instead of failing
-    server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+    server = uvicorn_server(app=app, log_level="warning")
 
     def exit_with_parent() -> None:
         # Shutting down waits for requests in flight, which no one is left to
