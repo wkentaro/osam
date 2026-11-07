@@ -89,6 +89,8 @@ class Runtime:
                 size=model_type.get_size(),
                 modified_at=model_type.get_modified_at(),
                 metadata=model_type.metadata,
+                capabilities=["segment"],
+                prompt_kinds=sorted(model_type.prompt_kinds),
             )
             for model_type in self._model_types
         ]

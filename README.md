@@ -330,7 +330,9 @@ server's version. Errors come back as `{"error": "...", "code": "..."}`,
 where `code`, such as `"model_not_found"` or `"missing_images"`, stays the same
 across releases, and `osam.ResponseError.code` holds it. `/api/models`,
 `/api/pull` and `DELETE /api/models/{name}` match `osam list`, `osam pull` and
-`osam rm`. `/api/pull` streams NDJSON lines such as
+`osam rm`; each model in `/api/models` also lists its `capabilities`, such as
+`"segment"`, and the `prompt_kinds` it takes, such as `"points"` and
+`"texts"`. `/api/pull` streams NDJSON lines such as
 `{"status": "pulling encoder.onnx", "completed": 524288, "total": 24799761}` and
 ends with `{"status": "success"}` or `{"error": "...", "code": "pull_failed"}`. The full schema is at
 <http://127.0.0.1:11368/docs>.

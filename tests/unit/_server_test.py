@@ -66,6 +66,8 @@ def test_list_models(app: fastapi.FastAPI) -> None:
     (model,) = response.json()["models"]
     assert model["name"] == "fake:latest"
     assert model["metadata"]["license_name"] == "MIT"
+    assert model["capabilities"] == ["segment"]
+    assert model["prompt_kinds"] == ["points"]
 
 
 def test_pull_streams_progress(
