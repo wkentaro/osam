@@ -137,16 +137,13 @@ def rm(model_name):
     type=click.IntRange(min=1),
     help="models to keep loaded at once (default: 1)",
 )
-@click.option("--reload", is_flag=True, help="reload server on file changes")
 def serve(
     host: str,
     port: int,
     device: types.Device | None,
     max_loaded_models: int | None,
-    reload: bool,
 ) -> None:
-    # An environment variable reaches the app even when --reload starts it in
-    # a new process.
+    # The app reads its settings from the environment.
     if device is not None:
         os.environ["OSAM_SERVE_DEVICE"] = device
     if max_loaded_models is not None:
@@ -154,7 +151,7 @@ def serve(
     import uvicorn
 
     logger.info("Starting server at http://{host}:{port}/docs", host=host, port=port)
-    uvicorn.run("osam._server:app", host=host, port=port, reload=reload)
+    uvicorn.run("osam._server:app", host=host, port=port)
 
 
 @contextlib.contextmanager
