@@ -173,7 +173,7 @@ def test_unreachable_host_reported_in_one_line():
 
 def test_failed_server_start_reported_in_one_line(tmp_path: pathlib.Path):
     (tmp_path / "uvicorn.py").write_text("raise ImportError('broken uvicorn')\n")
-    env = {**os.environ, "PYTHONPATH": str(tmp_path), "OSAM_SERVE_DEVICE": "invalid"}
+    env = {**os.environ, "PYTHONPATH": str(tmp_path)}
     env.pop("OSAM_HOST", None)
     result = subprocess.run(["osam", "list"], capture_output=True, text=True, env=env)
     assert result.returncode == 1

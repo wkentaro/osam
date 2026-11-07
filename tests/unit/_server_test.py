@@ -1,6 +1,8 @@
 import asyncio
 import base64
+import contextlib
 import json
+import logging
 import pathlib
 import threading
 import time
@@ -10,6 +12,7 @@ from collections.abc import Iterator
 from typing import Final
 
 import anyio
+import fastapi
 import httpx
 import numpy as np
 import pytest
@@ -32,14 +35,17 @@ _TINY_IMAGE_B64: Final = _json.image_ndarray_to_b64data(
 )
 
 
-@pytest.fixture(autouse=True)
-def _no_model_loaded(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    # The server's state is per process, so a model a test leaves loaded would
-    # be in the next test's /api/ps.
-    monkeypatch.setattr(_server, "_runtime", _runtime.Runtime())
-    yield
+@pytest.fixture
+def runtime() -> Iterator[_runtime.Runtime]:
+    runtime = _runtime.Runtime()
+    yield runtime
     # A keep_alive timer holds its runtime, and the models in it.
-    _server._runtime.close()
+    runtime.close()
+
+
+@pytest.fixture
+def app(runtime: _runtime.Runtime) -> fastapi.FastAPI:
+    return _server.create_app(runtime=runtime)
 
 
 def _patch_encode_image(*, monkeypatch: pytest.MonkeyPatch, encode_image) -> None:
@@ -48,8 +54,8 @@ def _patch_encode_image(*, monkeypatch: pytest.MonkeyPatch, encode_image) -> Non
     monkeypatch.setattr(model_type, "encode_image", encode_image)
 
 
-def test_openapi_documents_every_route() -> None:
-    response = TestClient(_server.app).get("/openapi.json")
+def test_openapi_documents_every_route(app: fastapi.FastAPI) -> None:
+    response = TestClient(app).get("/openapi.json")
     assert response.status_code == 200, response.text
     assert {
         "/api/segment",
@@ -63,14 +69,16 @@ def test_openapi_documents_every_route() -> None:
     assert "/api/generate" not in response.json()["paths"]  # removed in 0.11
 
 
-def test_list_models() -> None:
-    response = TestClient(_server.app).get("/api/models")
+def test_list_models(app: fastapi.FastAPI) -> None:
+    response = TestClient(app).get("/api/models")
     models = {model["name"]: model for model in response.json()["models"]}
     assert models["efficientsam:10m"]["size"] > 0
     assert models["efficientsam:10m"]["metadata"]["license_spdx"] == "Apache-2.0"
 
 
-def test_pull_streams_progress(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pull_streams_progress(
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI
+) -> None:
     model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
 
     def pull(progress, cancel):
@@ -78,7 +86,7 @@ def test_pull_streams_progress(monkeypatch: pytest.MonkeyPatch) -> None:
         progress("encoder.onnx", 2, 2)
 
     monkeypatch.setattr(model_type, "pull", pull)
-    client = TestClient(_server.app)
+    client = TestClient(app)
     response = client.post("/api/pull", json={"model": "efficientsam:10m"})
     assert response.headers["content-type"] == "application/x-ndjson"
     assert [json.loads(line) for line in response.text.splitlines()] == [
@@ -97,8 +105,10 @@ def test_pull_streams_progress(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.status_code == 404
 
 
-def test_segment_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = TestClient(_server.app)
+def test_segment_reports_errors(
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI
+) -> None:
+    client = TestClient(app)
     response = client.post(
         "/api/segment", json={"model": "missing", "image": _TINY_IMAGE_B64}
     )
@@ -119,24 +129,27 @@ def test_segment_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
         assert self.device == "cpu"
         raise RuntimeError("out of GPU memory")
 
-    monkeypatch.setattr(_server, "_runtime", _runtime.Runtime(device="cpu"))
     _patch_encode_image(monkeypatch=monkeypatch, encode_image=fail)
-    response = TestClient(_server.app, raise_server_exceptions=False).post(
-        "/api/segment", json={"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
-    )
+    with contextlib.closing(_runtime.Runtime(device="cpu")) as cpu:
+        response = TestClient(
+            _server.create_app(runtime=cpu), raise_server_exceptions=False
+        ).post(
+            "/api/segment",
+            json={"model": "efficientsam:10m", "image": _TINY_IMAGE_B64},
+        )
     assert response.status_code == 500
     assert response.json() == {"error": "out of GPU memory"}
 
 
 def test_queued_segments_leave_the_thread_pool_free(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI
 ) -> None:
     def blocked(self, *, image):
         release.wait()
         raise ValueError("released")
 
     async def scenario() -> None:
-        transport = httpx.ASGITransport(app=_server.app)
+        transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport, base_url="http://test"
         ) as client:
@@ -164,7 +177,7 @@ def test_queued_segments_leave_the_thread_pool_free(
 
 
 def test_segment_keeps_image_embedding_inside(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI
 ) -> None:
     embedding = types.ImageEmbedding(
         original_height=1,
@@ -176,7 +189,7 @@ def test_segment_keeps_image_embedding_inside(
     )
     model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(model_type, "decode", lambda self, *, embedding, prompt: [])
-    client = TestClient(_server.app)
+    client = TestClient(app)
 
     response = client.post(
         "/api/segment", json={"model": "efficientsam:10m", "image": _TINY_IMAGE_B64}
@@ -185,9 +198,10 @@ def test_segment_keeps_image_embedding_inside(
     assert response.json().keys() == {"annotations", "image_hash"}
 
 
-def test_segment_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
-    _server._runtime._embeddings.clear()
-    client = TestClient(_server.app)
+def test_segment_reuses_cached_embedding(
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
+) -> None:
+    client = TestClient(app)
     prompt = {"points": [[1280, 800]], "point_labels": [1]}
     body = {"model": "efficientsam:10m", "image": _IMAGE_B64, **prompt}
     first = client.post("/api/segment", json=body)
@@ -197,7 +211,7 @@ def test_segment_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> Non
     def fail(*args, **kwargs):
         raise AssertionError("encoded the image again")
 
-    model = _server._runtime._loaded["efficientsam:10m"].model
+    model = runtime._loaded["efficientsam:10m"].model
     monkeypatch.setattr(type(model), "encode_image", fail)
     second = client.post("/api/segment", json=body)
     assert second.status_code == 200, second.text
@@ -211,9 +225,7 @@ def test_segment_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> Non
     assert third.status_code == 200, third.text
     assert third.json()["annotations"] == first.json()["annotations"]
     assert third.json()["image_hash"] == image_hash
-    monkeypatch.setattr(
-        _server._runtime, "_load", fail
-    )  # 412 without loading the model
+    monkeypatch.setattr(runtime, "_load", fail)  # 412 without loading the model
     missing = client.post("/api/segment", json={**by_hash, "image_hash": "0" * 64})
     assert missing.status_code == 412
     assert "send the image" in missing.json()["error"]
@@ -222,8 +234,8 @@ def test_segment_reuses_cached_embedding(monkeypatch: pytest.MonkeyPatch) -> Non
     assert "not both" in both.json()["error"]
 
 
-def test_routing_errors_use_the_error_shape() -> None:
-    client = TestClient(_server.app)
+def test_routing_errors_use_the_error_shape(app: fastapi.FastAPI) -> None:
+    client = TestClient(app)
     assert client.get("/api/missing").json() == {"error": "Not Found"}
     response = client.post("/api/version")
     assert response.status_code == 405
@@ -231,8 +243,8 @@ def test_routing_errors_use_the_error_shape() -> None:
     assert response.headers["allow"] == "GET"
 
 
-def test_version() -> None:
-    response = TestClient(_server.app).get("/api/version")
+def test_version(app: fastapi.FastAPI) -> None:
+    response = TestClient(app).get("/api/version")
     assert response.json() == {"version": _server.__version__}
 
 
@@ -244,8 +256,10 @@ def test_parse_duration(value, seconds) -> None:
     assert _requests._parse_duration(value) == seconds
 
 
-def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = TestClient(_server.app)
+def test_keep_alive_unloads_the_model(
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
+) -> None:
+    client = TestClient(app)
     body = {"model": "efficientsam:10m", "image": _IMAGE_B64}
 
     response = client.post("/api/segment", json={**body, "keep_alive": -1})
@@ -273,7 +287,7 @@ def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     assert timer.interval == 0.2
     timer.function()
     assert client.get("/api/ps").json() == {"models": []}
-    assert not _server._runtime._embeddings
+    assert not runtime._embeddings
 
     # /api/load loads a model and sets its keep_alive; 0 unloads it, and
     # leaves another loaded model alone.
@@ -293,9 +307,11 @@ def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
         assert response.status_code == 422, keep_alive
 
 
-def test_two_models_stay_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(_server._runtime, "_max_loaded_models", 2)
-    client = TestClient(_server.app)
+def test_two_models_stay_loaded(
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
+) -> None:
+    monkeypatch.setattr(runtime, "_max_loaded_models", 2)
+    client = TestClient(app)
 
     def segment(model: str) -> None:
         body = {"model": model, "image": _TINY_IMAGE_B64, "keep_alive": -1}
@@ -308,25 +324,25 @@ def test_two_models_stay_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
     segment("efficientsam:10m")
     segment("sam2:tiny")
     assert running() == ["sam2:tiny", "efficientsam:10m"]
-    sam2 = _server._runtime._loaded["sam2:tiny"].model
+    sam2 = runtime._loaded["sam2:tiny"].model
     segment("efficientsam:10m")
-    assert _server._runtime._loaded["sam2:tiny"].model is sam2  # not reloaded
+    assert runtime._loaded["sam2:tiny"].model is sam2  # not reloaded
     assert running() == ["efficientsam:10m", "sam2:tiny"]
 
     # A full server unloads the least recently used model and its embeddings.
     client.post("/api/load", json={"model": "sam2:tiny", "keep_alive": 0})
-    assert [model for model, _ in _server._runtime._embeddings] == ["efficientsam:10m"]
-    monkeypatch.setattr(_server._runtime, "_max_loaded_models", 1)
+    assert [model for model, _ in runtime._embeddings] == ["efficientsam:10m"]
+    monkeypatch.setattr(runtime, "_max_loaded_models", 1)
     segment("sam2:tiny")
     assert running() == ["sam2:tiny"]
-    assert [model for model, _ in _server._runtime._embeddings] == ["sam2:tiny"]
+    assert [model for model, _ in runtime._embeddings] == ["sam2:tiny"]
 
 
 def test_failed_load_unloads_the_others_and_retries(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
 ) -> None:
-    monkeypatch.setattr(_server._runtime, "_max_loaded_models", 2)
-    client = TestClient(_server.app)
+    monkeypatch.setattr(runtime, "_max_loaded_models", 2)
+    client = TestClient(app)
     body = {"image": _TINY_IMAGE_B64, "keep_alive": -1}
     response = client.post("/api/segment", json={**body, "model": "efficientsam:10m"})
     assert response.status_code == 200, response.text
@@ -338,18 +354,18 @@ def test_failed_load_unloads_the_others_and_retries(
     # A failed download unloads nothing.
     with monkeypatch.context() as patch:
         patch.setattr(sam2, "pull", offline)
-        response = TestClient(_server.app, raise_server_exceptions=False).post(
+        response = TestClient(app, raise_server_exceptions=False).post(
             "/api/segment", json={**body, "model": "sam2:tiny"}
         )
     assert response.json() == {"error": "network is unreachable"}
-    assert list(_server._runtime._loaded) == ["efficientsam:10m"]
+    assert list(runtime._loaded) == ["efficientsam:10m"]
 
     loaded_at_each_load: list[list[str]] = []
     failed: list[weakref.ref] = []
     init = sam2.__init__
 
     def out_of_memory_once(self, *args, **kwargs) -> None:
-        loaded_at_each_load.append(list(_server._runtime._loaded))
+        loaded_at_each_load.append(list(runtime._loaded))
         if not failed:
             failed.append(weakref.ref(self))
             raise RuntimeError("out of memory")
@@ -361,13 +377,13 @@ def test_failed_load_unloads_the_others_and_retries(
     response = client.post("/api/segment", json={**body, "model": "sam2:tiny"})
     assert response.status_code == 200, response.text
     assert loaded_at_each_load == [["efficientsam:10m"], []]
-    assert list(_server._runtime._loaded) == ["sam2:tiny"]
+    assert list(runtime._loaded) == ["sam2:tiny"]
 
 
 def test_cpu_fallback_next_to_a_gpu_model_retries(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
 ) -> None:
-    monkeypatch.setattr(_server._runtime, "_max_loaded_models", 2)
+    monkeypatch.setattr(runtime, "_max_loaded_models", 2)
     efficientsam = _server._registry.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(efficientsam, "device", property(lambda self: "cuda"))
     sam2 = _server._registry.get_model_type_by_name(name="sam2:tiny")
@@ -375,14 +391,14 @@ def test_cpu_fallback_next_to_a_gpu_model_retries(
     init = sam2.__init__
 
     def counted(self, *args, **kwargs) -> None:
-        loads.append(list(_server._runtime._loaded))
+        loads.append(list(runtime._loaded))
         init(self, *args, **kwargs)
 
     monkeypatch.setattr(sam2, "__init__", counted)
-    _server._runtime._load(model_name="efficientsam:10m")
-    _server._runtime._load(model_name="sam2:tiny")  # lands on CPU next to "cuda"
+    runtime._load(model_name="efficientsam:10m")
+    runtime._load(model_name="sam2:tiny")  # lands on CPU next to "cuda"
     assert loads == [["efficientsam:10m"], []]
-    assert list(_server._runtime._loaded) == ["sam2:tiny"]
+    assert list(runtime._loaded) == ["sam2:tiny"]
 
 
 @pytest.mark.parametrize(
@@ -397,9 +413,11 @@ def test_cpu_fallback_next_to_a_gpu_model_retries(
         {"box": [0, 0, 1]},
     ],
 )
-def test_segment_request_rejects_invalid_prompts(fields: dict) -> None:
+def test_segment_request_rejects_invalid_prompts(
+    fields: dict, app: fastapi.FastAPI
+) -> None:
     body = {"model": "sam3", "image_hash": "0", **fields}
-    response = TestClient(_server.app).post("/api/segment", json=body)
+    response = TestClient(app).post("/api/segment", json=body)
     assert response.status_code == 422, response.text
 
 
@@ -417,3 +435,17 @@ def test_keep_alive_frees_the_model_before_another_load() -> None:
     while not locked_when_freed and time.monotonic() < deadline:
         time.sleep(0.01)
     assert locked_when_freed == [True]
+
+
+def test_uvicorn_server_logs_to_the_osam_log(
+    app: fastapi.FastAPI, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    uvicorn_logger = logging.getLogger("uvicorn")
+    monkeypatch.setattr(uvicorn_logger, "handlers", [])
+    _server.uvicorn_server(app=app, log_level="warning")
+    uvicorn_logger.error("model crashed")
+    for handler in uvicorn_logger.handlers:
+        handler.close()
+    log: pathlib.Path = tmp_path / ".cache/osam/osam.log"
+    assert "model crashed" in log.read_text()
