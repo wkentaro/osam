@@ -256,16 +256,23 @@ def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     assert running["device"] in typing.get_args(types.Device)
     assert running["expires_at"] is None
 
-    # A slow runner can spend the whole keep_alive before /api/ps, so give
-    # it a second and compare against the time before the request.
+    # The test fires the unload timer itself, so a slow runner can't unload
+    # the model before /api/ps sees it.
+    timers: list[threading.Timer] = []
+
+    class _Timer(threading.Timer):
+        def start(self) -> None:
+            timers.append(self)
+
+    monkeypatch.setattr(_runtime.threading, "Timer", _Timer)
     requested_at = time.time()
-    response = client.post("/api/segment", json={**body, "keep_alive": "1s"})
+    response = client.post("/api/segment", json={**body, "keep_alive": "0.2s"})
     assert response.status_code == 200, response.text
     (running,) = client.get("/api/ps").json()["models"]
-    assert running["expires_at"] > requested_at
-    deadline = time.monotonic() + 5
-    while client.get("/api/ps").json()["models"] and time.monotonic() < deadline:
-        time.sleep(0.05)
+    assert requested_at + 0.2 <= running["expires_at"] <= time.time() + 0.2
+    (timer,) = timers
+    assert timer.interval == 0.2
+    timer.function()
     assert client.get("/api/ps").json() == {"models": []}
     assert not _server._runtime._embeddings
 
