@@ -21,11 +21,14 @@ def image_ndarray_to_b64data(*, ndarray):
     return base64.b64encode(png).decode("utf-8")
 
 
-def image_b64data_to_ndarray(*, b64data):
-    # ValueError, so pydantic reports bad input as a validation error.
+def image_b64data_to_ndarray(*, b64data, mode: str | None = None):
+    # mode, such as "RGB", converts the image, as a palette image's array
+    # holds palette indices. ValueError, so pydantic reports bad input as a
+    # validation error.
     data = base64.b64decode(b64data)
     try:
-        return np.asarray(PIL.Image.open(io.BytesIO(data)))
+        image = PIL.Image.open(io.BytesIO(data))
+        return np.asarray(image if mode is None else image.convert(mode))
     # OSError covers a file PIL can't identify and a truncated one.
     except (OSError, PIL.Image.DecompressionBombError) as e:
         raise ValueError(f"not an image file: {e}") from e
