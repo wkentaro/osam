@@ -61,16 +61,23 @@ longer has it.
   object's first and last frame, and whether the request hit the cache.
   `first_frame` and `last_frame` limit the frames returned, and
   `include_masks: false` leaves out the masks.
-- A `texts` prompt assigns object ids, and later actions refer to them. The
-  `done` line lists those `detections`, each id with its box on the prompt
-  frame, and a request whose later actions use those ids sends them back as
-  `detections`. On a cache miss the server matches the new detections to the
-  sent ones by box IoU and keeps the client's ids. When a sent id has no
-  match, it answers 409 with `"code": "detections_changed"` and the new
-  detections, instead of applying an edit to the wrong object.
+- A `texts` prompt assigns object ids, including to objects that the
+  detector first finds on later frames, and later actions refer to them. The
+  `done` line lists those `detections`, each id with its anchor: the first
+  frame it appears on and its box there. A request whose later actions use
+  those ids sends them back as `detections`.
+- The server keeps its own ids for the result of the first action, and maps
+  the client's ids to them before it looks up any later prefix, on a cache
+  hit as well as a miss. Each sent detection maps to the server object with
+  the highest box IoU on the anchor frame. When a sent id has no match, the
+  server answers 409 with `"code": "detections_changed"` and its own
+  detections, instead of applying an edit to the wrong object. So two
+  requests with the same actions but different `detections` never share a
+  cached result for the later actions.
 - The server caches tracker state by model, device, frames, and action
-  prefix, and image features by model and image reference. Both caches are
-  bounded in bytes. `/api/segment` uses the same feature cache.
+  prefix, with the actions in its own ids, and image features by model and
+  image reference. Both caches are bounded in bytes. `/api/segment` uses the
+  same feature cache.
 - `Annotation` gains `object_id`, errors gain a stable `code`, and
   `/api/models` lists each model's `capabilities` and `prompt_kinds`.
 - `osam run --video DIR` takes a directory of images.
