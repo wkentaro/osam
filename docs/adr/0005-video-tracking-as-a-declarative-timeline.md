@@ -43,13 +43,17 @@ longer has it.
   image file, or a reference `"sha256:<hex>"` to an image the server has
   seen. Frames that the server lacks get 412 with `"code": "missing_images"`
   and their references, and the client resends those inline.
+
 - `/api/segment` moves to the same form: `image` takes either value, and
   replaces the separate `image_hash` field and its bare hex digest. Neither
   field has been released, so no client breaks.
+
 - osam takes a list of images, not a video file, so it needs no video
   decoder. A labelme folder, frames a user extracted with ffmpeg, and frames
   from a camera are all lists of images.
+
 - Actions:
+
   - `{"type": "prompt", "frame", ...}` with the fields of `Prompt` is the
     first action, and only the first. With `points` or `box` it tracks one
     object. With `texts` it finds every match. `example_boxes` without
@@ -61,6 +65,7 @@ longer has it.
   - `{"type": "remove", "object_id"}` removes an object.
 
   Coordinates are pixels, as in `/api/segment`.
+
 - Every action after the first carries `base`: the `result` digest of the
   response the user saw when making it. The `done` line reports `result`, a
   digest of the object ids and masks on every frame of the video, whatever
@@ -70,21 +75,26 @@ longer has it.
   `"code": "base_changed"` and the new digest when it does not. This is the
   If-Match of HTTP. It keeps ids safe to refer to, since a replay that numbers
   objects differently, or segments them differently, fails before any edit.
+
 - Action k applies to the result of actions 0 to k-1 propagated over every
   frame, in both directions from the first prompt frame. The server works out
   what it must recompute.
+
 - The response is NDJSON with one line per frame,
   `{"frame", "annotations"}`, then a last line with `"done": true`, each
   object's first and last frame, `result`, and whether the request hit the
   cache.
   `first_frame` and `last_frame` limit the frames returned, and
   `include_masks: false` leaves out the masks.
+
 - The server caches tracker state by model, device, frames, and action
   prefix, and image features by model and image reference. Both caches are
   bounded in bytes. `/api/segment` uses the same feature cache.
+
 - `Annotation` gains `object_id`, numbered in the order objects appear.
   Errors gain a stable `code`, and
   `/api/models` lists each model's `capabilities` and `prompt_kinds`.
+
 - `osam run --video DIR` takes a directory of images.
 
 ## Consequences
