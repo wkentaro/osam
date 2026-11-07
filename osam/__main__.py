@@ -130,28 +130,35 @@ def rm(model_name):
 @click.option(
     "--device",
     type=click.Choice(typing.get_args(types.Device)),
+    envvar="OSAM_SERVE_DEVICE",
+    show_envvar=True,
     help="execution device (default: the onnxruntime providers available)",
 )
 @click.option(
     "--max-loaded-models",
     type=click.IntRange(min=1),
-    help="models to keep loaded at once (default: 1)",
+    default=1,
+    show_default=True,
+    envvar="OSAM_MAX_LOADED_MODELS",
+    show_envvar=True,
+    help="models to keep loaded at once",
 )
 def serve(
     host: str,
     port: int,
     device: types.Device | None,
-    max_loaded_models: int | None,
+    max_loaded_models: int,
 ) -> None:
-    # The app reads its settings from the environment.
-    if device is not None:
-        os.environ["OSAM_SERVE_DEVICE"] = device
-    if max_loaded_models is not None:
-        os.environ["OSAM_MAX_LOADED_MODELS"] = str(max_loaded_models)
-    import uvicorn
+    from . import _runtime
+    from . import _server
 
     logger.info("Starting server at http://{host}:{port}/docs", host=host, port=port)
-    uvicorn.run("osam._server:app", host=host, port=port)
+    with contextlib.closing(
+        _runtime.Runtime(device=device, max_loaded_models=max_loaded_models)
+    ) as runtime:
+        _server.uvicorn_server(
+            app=_server.create_app(runtime=runtime), host=host, port=port
+        ).run()
 
 
 @contextlib.contextmanager

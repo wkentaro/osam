@@ -77,12 +77,10 @@ class HttpBackend:
             raise ValueError(
                 f"max_loaded_models must be 1 or more: {max_loaded_models}"
             )
-        # The private server's settings, which _server reads on import. Set even
-        # when unset, so a value meant for `osam serve` in the caller's
-        # environment doesn't reach it.
-        self._server_env: dict[str, str] = {
-            "OSAM_SERVE_DEVICE": device or "",
-            "OSAM_MAX_LOADED_MODELS": str(max_loaded_models or ""),
+        # The private server's Runtime arguments.
+        self._server_settings: dict[str, Any] = {
+            "device": device,
+            "max_loaded_models": max_loaded_models or 1,
         }
         self._lock = threading.Lock()
         # host, port and token of the server, swapped whole on a restart, so a
@@ -301,9 +299,13 @@ class HttpBackend:
     def _start(self) -> None:
         token: str = secrets.token_urlsafe(32)
         if getattr(sys, "frozen", False):
-            process, pipe, port = _start_frozen(token=token, env=self._server_env)
+            process, pipe, port = _start_frozen(
+                token=token, settings=self._server_settings
+            )
         else:
-            process, pipe, port = _start_subprocess(token=token, env=self._server_env)
+            process, pipe, port = _start_subprocess(
+                token=token, settings=self._server_settings
+            )
         # The endpoint first: a request that sees the new process must also see
         # its endpoint, or it would restart a healthy server.
         self._endpoint = ("127.0.0.1", port, token)
@@ -324,7 +326,7 @@ _Process = subprocess.Popen | multiprocessing.process.BaseProcess
 
 
 def _start_subprocess(
-    *, token: str, env: dict[str, str]
+    *, token: str, settings: dict[str, Any]
 ) -> tuple[_Process, IO[bytes], int]:
     # A fresh interpreter, unlike multiprocessing, which re-runs the caller's
     # script in the child unless it is guarded by `if __name__ == "__main__"`.
@@ -335,7 +337,7 @@ def _start_subprocess(
     )
     assert process.stdin is not None and process.stdout is not None
     try:
-        process.stdin.write(json.dumps({"token": token, "env": env}).encode())
+        process.stdin.write(json.dumps({"token": token, "settings": settings}).encode())
         process.stdin.write(b"\n")
         process.stdin.flush()
         # ponytail: no timeout, the child exits rather than hangs on a failed start.
@@ -353,7 +355,7 @@ def _start_subprocess(
 
 
 def _start_frozen(
-    *, token: str, env: dict[str, str]
+    *, token: str, settings: dict[str, Any]
 ) -> tuple[_Process, multiprocessing.connection.Connection, int]:
     # A frozen application has no Python to run, so the server runs from its
     # executable through multiprocessing.freeze_support().
@@ -364,7 +366,7 @@ def _start_frozen(
     conn, child_conn = context.Pipe()
     process = context.Process(
         target=_serve_connection,
-        kwargs={"conn": child_conn, "token": token, "env": env},
+        kwargs={"conn": child_conn, "token": token, "settings": settings},
         name="osam-server",
         daemon=True,
     )
@@ -412,7 +414,7 @@ def _response_error(*, status_code: int, data: bytes) -> ResponseError:
 def _serve_stdio() -> None:
     # The child of _start_subprocess: settings on stdin, how it started on
     # stdout, and stdin closing when the parent exits.
-    settings: dict[str, Any] = json.loads(sys.stdin.readline())
+    start: dict[str, Any] = json.loads(sys.stdin.readline())
     # Keep stray output, native libraries' too, off the start line.
     stdout = os.fdopen(os.dup(sys.stdout.fileno()), "w")
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
@@ -422,8 +424,8 @@ def _serve_stdio() -> None:
         stdout.flush()
 
     _serve(
-        token=settings["token"],
-        env=settings["env"],
+        token=start["token"],
+        settings=start["settings"],
         report=report,
         wait_for_parent=sys.stdin.read,
     )
@@ -433,7 +435,7 @@ def _serve_connection(
     *,
     conn: multiprocessing.connection.Connection,
     token: str,
-    env: dict[str, str],
+    settings: dict[str, Any],
 ) -> None:
     def wait_for_parent() -> None:
         try:
@@ -443,7 +445,7 @@ def _serve_connection(
 
     _serve(
         token=token,
-        env=env,
+        settings=settings,
         report=conn.send,
         wait_for_parent=wait_for_parent,
     )
@@ -452,11 +454,10 @@ def _serve_connection(
 def _serve(
     *,
     token: str,
-    env: dict[str, str],
+    settings: dict[str, Any],
     report: Callable[[dict[str, Any]], object],
     wait_for_parent: Callable[[], object],
 ) -> None:
-    os.environ.update(env)  # before _server is imported
     # A windowed frozen application, such as a PyInstaller --noconsole build,
     # has no standard streams, and logging to them fails.
     if sys.stdout is None:
@@ -474,10 +475,14 @@ def _serve(
         report({"port": port})
 
     try:
+        from . import _runtime
         from . import _server
 
         _server.run_private(
-            token=token, report_port=report_port, wait_for_parent=wait_for_parent
+            token=token,
+            runtime=_runtime.Runtime(**settings),
+            report_port=report_port,
+            wait_for_parent=wait_for_parent,
         )
     except Exception as e:  # e.g. a broken onnxruntime install
         if started:
