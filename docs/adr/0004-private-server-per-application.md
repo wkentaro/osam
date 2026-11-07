@@ -82,5 +82,5 @@ osam.
   memory.
 - Debugging spans two processes, and server logs need to reach the
   application.
-- Video tracking keeps state across frames and gets an explicit session
-  resource when it is added. It is the only stateful part of the API.
+- Video tracking keeps state across frames. ADR 0005 keeps that state as a
+  server cache of a timeline the client sends, not as a session resource.
