@@ -39,11 +39,13 @@ longer has it.
 
 ## Decision
 
-- A request has `model`, `frames`, and `actions`. Each frame takes the same
-  value as `image` in `/api/segment`: a base64 image file, or a reference
-  `"sha256:<hex>"` to an image the server has seen. Frames that the server
-  lacks get 412 with `"code": "missing_images"` and their references, and the
-  client resends those inline.
+- A request has `model`, `frames`, and `actions`. Each frame is a base64
+  image file, or a reference `"sha256:<hex>"` to an image the server has
+  seen. Frames that the server lacks get 412 with `"code": "missing_images"`
+  and their references, and the client resends those inline.
+- `/api/segment` moves to the same form: `image` takes either value, and
+  replaces the separate `image_hash` field and its bare hex digest. Neither
+  field has been released, so no client breaks.
 - osam takes a list of images, not a video file, so it needs no video
   decoder. A labelme folder, frames a user extracted with ffmpeg, and frames
   from a camera are all lists of images.
