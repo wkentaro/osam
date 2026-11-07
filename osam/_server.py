@@ -43,12 +43,27 @@ class PullRequest(pydantic.BaseModel):
     model: str
 
 
-# Errors are {"error": message}, as in Ollama.
+# Errors are {"error": message, "code": code}: the message as in Ollama, and a
+# code that stays the same across releases, for clients to branch on.
 def _error(
-    *, message: str, status_code: int, headers: dict[str, str] | None = None
+    *,
+    message: str,
+    status_code: int,
+    code: str | None = None,
+    headers: dict[str, str] | None = None,
 ) -> fastapi.responses.JSONResponse:
+    CODES: Final = {
+        400: "invalid_request",
+        404: "not_found",
+        405: "method_not_allowed",
+        412: "missing_images",
+        422: "invalid_request",
+    }
+
     return fastapi.responses.JSONResponse(
-        {"error": message}, status_code=status_code, headers=headers
+        {"error": message, "code": code or CODES.get(status_code, "internal_error")},
+        status_code=status_code,
+        headers=headers,
     )
 
 
@@ -87,7 +102,9 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
     )
     app.add_exception_handler(
         _registry.UnknownModelError,
-        lambda request, exc: _error(message=str(exc), status_code=404),
+        lambda request, exc: _error(
+            message=str(exc), status_code=404, code="model_not_found"
+        ),
     )
     app.add_exception_handler(
         fastapi.exceptions.RequestValidationError,
@@ -131,7 +148,7 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
                 runtime.pull(model=model_type.name, progress=progress, cancel=cancel)
                 last: dict[str, Any] = {"status": "success"}
             except Exception as e:
-                last = {"error": str(e)}
+                last = {"error": str(e), "code": "pull_failed"}
             # Through the same queue, so it follows every progress line.
             loop.call_soon_threadsafe(lines.put_nowait, last)
 
@@ -200,8 +217,10 @@ def run_private(
     async def check_token(request: fastapi.Request, call_next):
         given: str = request.headers.get("authorization", "")
         if not secrets.compare_digest(given.encode(), AUTHORIZATION.encode()):
-            return fastapi.responses.JSONResponse(
-                {"error": "missing or wrong token"}, status_code=401
+            return _error(
+                message="missing or wrong token",
+                status_code=401,
+                code="unauthorized",
             )
         return await call_next(request)
 

@@ -27,13 +27,16 @@ from . import types
 
 
 class ResponseError(Exception):
-    """An error the server returned, with its HTTP status code."""
+    """An error the server returned, with its HTTP status code and its code,
+    such as "model_not_found", which stays the same across releases."""
 
     status_code: int
+    code: str | None
 
-    def __init__(self, message: str, status_code: int):
+    def __init__(self, message: str, status_code: int, code: str | None = None):
         super().__init__(message)
         self.status_code = status_code
+        self.code = code
 
 
 class _InvalidRequestError(ResponseError, ValueError):
@@ -146,7 +149,7 @@ class HttpBackend:
     ) -> None:
         for line in self._stream(path="/api/pull", body={"model": model}):
             if "error" in line:
-                raise _PullError(line["error"], status_code=200)
+                raise _PullError(line["error"], status_code=200, code=line.get("code"))
             if progress is not None:
                 progress(line)
 
@@ -400,15 +403,18 @@ def _wait(*, process: _Process, timeout: float | None) -> bool:
 
 
 def _response_error(*, status_code: int, data: bytes) -> ResponseError:
+    code: str | None = None
     try:
-        message: str = json.loads(data)["error"]
-    except (ValueError, KeyError, TypeError):
+        body: dict[str, Any] = json.loads(data)
+        message: str = body["error"]
+        code = body.get("code")
+    except (ValueError, KeyError, TypeError, AttributeError):
         message = data.decode(errors="replace")
     if status_code in (400, 422):
-        return _InvalidRequestError(message, status_code=status_code)
+        return _InvalidRequestError(message, status_code=status_code, code=code)
     if status_code == 404:
-        return _NotFoundError(message, status_code=status_code)
-    return ResponseError(message, status_code=status_code)
+        return _NotFoundError(message, status_code=status_code, code=code)
+    return ResponseError(message, status_code=status_code, code=code)
 
 
 def _serve_stdio() -> None:

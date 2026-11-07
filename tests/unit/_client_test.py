@@ -92,7 +92,7 @@ def test_unknown_model_raises_lookup_error(any_client: osam.Client) -> None:
         with pytest.raises(LookupError, match="not found") as e:
             call()
         if isinstance(e.value, osam.ResponseError):
-            assert e.value.status_code == 404
+            assert (e.value.status_code, e.value.code) == (404, "model_not_found")
 
 
 def test_invalid_arguments_raise_before_a_request(
