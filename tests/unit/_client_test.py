@@ -365,7 +365,7 @@ def _listening(*, port: int) -> bool:
     return True
 
 
-def test_segment_sends_a_repeated_image_by_hash(
+def test_segment_sends_a_repeated_image_by_reference(
     client: osam.Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     encoded: list[np.ndarray] = []
@@ -378,7 +378,8 @@ def test_segment_sends_a_repeated_image_by_hash(
         return encode(ndarray=ndarray)
 
     def recording(*, method: str, path: str, body: Any = None) -> Any:
-        sent.append({"image", "image_hash"} & set(body or {}))
+        image: str = (body or {}).get("image", "")
+        sent.append({"ref" if image.startswith("sha256:") else "image"})
         return request(method=method, path=path, body=body)
 
     monkeypatch.setattr(_http._json, "image_ndarray_to_b64data", counting)
@@ -386,13 +387,13 @@ def test_segment_sends_a_repeated_image_by_hash(
     image = _IMAGE[::2, ::2].copy()  # not sent by an earlier test
     for _ in range(2):
         client.segment("efficientsam:10m", image)
-    assert sent == [{"image"}, {"image_hash"}]
+    assert sent == [{"image"}, {"ref"}]
     assert len(encoded) == 1
 
     # Another model has no embedding of it yet, so the server asks for it.
     sent.clear()
     client.segment("sam2:tiny", image)
-    assert sent == [{"image_hash"}, {"image"}]
+    assert sent == [{"ref"}, {"image"}]
     assert len(encoded) == 1
 
     image[0, 0] += 1  # edited in place, so it is a new image

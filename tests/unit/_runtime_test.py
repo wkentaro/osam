@@ -78,7 +78,7 @@ def test_keep_alive_unloads_the_model(
     assert runtime.ps() == []
     # Its embeddings went with it.
     with pytest.raises(_errors.UnknownImageError):
-        _segment(runtime=runtime, model="a", image=None, image_hash=response.image_hash)
+        _segment(runtime=runtime, model="a", image=response.image)
 
     # load keeps a model loaded; keep_alive 0 unloads it, and only it.
     runtime.load(request=_requests.LoadRequest(model="a"))
@@ -100,15 +100,14 @@ def test_segment_reuses_cached_embedding(
         raise AssertionError("encoded the image again")
 
     monkeypatch.setattr(model_type, "encode_image", fail)
-    assert _segment(runtime=runtime, model="a").image_hash == first.image_hash
-    by_hash = {"image": None, "image_hash": first.image_hash}
-    assert _segment(runtime=runtime, model="a", **by_hash) == first
+    assert _segment(runtime=runtime, model="a").image == first.image
+    assert _segment(runtime=runtime, model="a", image=first.image) == first
 
-    # An unknown hash raises before loading, so a retry with the image loads once.
+    # An unknown reference raises before loading, so a retry with the image loads once.
     runtime.load(request=_requests.LoadRequest(model="a", keep_alive=0))
     monkeypatch.setattr(model_type, "__init__", fail)
-    with pytest.raises(_errors.UnknownImageError, match="send the image"):
-        _segment(runtime=runtime, model="a", image=None, image_hash="0" * 64)
+    with pytest.raises(_errors.UnknownImageError, match="send the images"):
+        _segment(runtime=runtime, model="a", image="sha256:" + "0" * 64)
 
 
 def test_two_models_stay_loaded(

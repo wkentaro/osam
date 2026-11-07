@@ -59,19 +59,22 @@ class LoadRequest(pydantic.BaseModel):
     keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
 
 
+IMAGE_REF_PREFIX: Final = "sha256:"
+# An image the server has seen, by the hash of its RGB pixels, as
+# _json.image_ref gives it.
+ImageRef = typing.Annotated[
+    str, pydantic.StringConstraints(pattern=f"^{IMAGE_REF_PREFIX}[0-9a-f]{{64}}$")
+]
+
+
 class SegmentRequest(types.Prompt):
     # The prompt fields, and the model and image to segment.
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     model: str
-    image: Base64Image | None = pydantic.Field(
-        default=None,
-        description="A base64-encoded image file, such as PNG or JPEG",
-    )
-    image_hash: str | None = pydantic.Field(
-        default=None,
-        description="In place of image, the hash of an image sent before, whose "
-        "embedding the server may still have; 412 asks for the image itself",
+    image: Base64Image | ImageRef = pydantic.Field(
+        description="A base64-encoded image file, such as PNG or JPEG, or the "
+        "reference a response gave for one sent before; 412 asks for the file",
     )
     keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
 
@@ -80,7 +83,7 @@ class SegmentRequest(types.Prompt):
     def _decode_image(cls, image: object) -> object:
         # Every model takes RGB, so grayscale, RGBA and palette images become
         # RGB here, before the image is hashed.
-        if isinstance(image, str):
+        if isinstance(image, str) and not image.startswith(IMAGE_REF_PREFIX):
             return _json.image_b64data_to_ndarray(b64data=image, mode="RGB")
         if not isinstance(image, np.ndarray):
             return image  # pydantic rejects it
@@ -95,14 +98,6 @@ class SegmentRequest(types.Prompt):
             )
         return image
 
-    @pydantic.model_validator(mode="after")
-    def _check(self) -> "SegmentRequest":
-        if self.image is not None and self.image_hash is not None:
-            raise ValueError("send image or image_hash, not both")
-        if self.image is None and self.image_hash is None:
-            raise ValueError("send image or image_hash")
-        return self
-
 
 def to_json_fields(*, fields: dict[str, Any]) -> dict[str, Any]:
     # The fields given, with arrays, and the numbers in them, as JSON types.
@@ -115,7 +110,7 @@ def to_json_fields(*, fields: dict[str, Any]) -> dict[str, Any]:
 
 class SegmentResponse(pydantic.BaseModel):
     annotations: list[types.Annotation]
-    image_hash: str = pydantic.Field(
-        description="Of the request's image, to send as image_hash with further "
-        "prompts on it",
+    image: ImageRef = pydantic.Field(
+        description="A reference to the request's image, to send as image with "
+        "further prompts on it",
     )

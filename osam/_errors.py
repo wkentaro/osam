@@ -13,8 +13,13 @@ class UnknownModelError(LookupError):
 
 
 class UnknownImageError(LookupError):
-    # An image_hash whose embedding the runtime doesn't have.
-    pass
+    # Image references whose embeddings the runtime doesn't have.
+
+    refs: list[str]
+
+    def __init__(self, *, refs: list[str]):
+        super().__init__(f"no embedding for {', '.join(refs)}; send the images")
+        self.refs = refs
 
 
 class DownloadError(RuntimeError):

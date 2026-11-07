@@ -51,9 +51,12 @@ def _error(
     status_code: int,
     code: str,
     headers: dict[str, str] | None = None,
+    **fields: Any,
 ) -> fastapi.responses.JSONResponse:
     return fastapi.responses.JSONResponse(
-        {"error": message, "code": code}, status_code=status_code, headers=headers
+        {"error": message, "code": code, **fields},
+        status_code=status_code,
+        headers=headers,
     )
 
 
@@ -103,6 +106,17 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
                 message=str(exc), status_code=reported.status_code, code=reported.code
             ),
         )
+    # Also lists the images to send again, in place of their references.
+    missing: _errors.Reported = _errors.REPORTED[_errors.UnknownImageError]
+    app.add_exception_handler(
+        _errors.UnknownImageError,
+        lambda request, exc: _error(
+            message=str(exc),
+            status_code=missing.status_code,
+            code=missing.code,
+            images=exc.refs,
+        ),
+    )
     app.add_exception_handler(
         fastapi.exceptions.RequestValidationError,
         lambda request, exc: _error(

@@ -50,7 +50,7 @@ class Runtime:
     # running model.
     _loaded: collections.OrderedDict[str, _Loaded]
     _loaded_lock: threading.Lock
-    # By model name and image hash, least recently used first; under _lock.
+    # By model name and image reference, least recently used first; under _lock.
     _embeddings: collections.OrderedDict[tuple[str, str], types.ImageEmbedding]
 
     def __init__(
@@ -139,7 +139,7 @@ class Runtime:
             self._keep_alive(model_name=name, seconds=request.keep_alive)
 
     def segment(self, *, request: SegmentRequest) -> SegmentResponse:
-        # Raises UnknownImageError for an image_hash it has no embedding for,
+        # Raises UnknownImageError for an image reference it has no embedding for,
         # and ValueError for a prompt the model doesn't take.
         model_type: type[types.Model] = self.model_type(name=request.model)
         with self._lock:
@@ -163,28 +163,26 @@ class Runtime:
     def _segment(
         self, *, request: SegmentRequest, model_type: type[types.Model]
     ) -> SegmentResponse:
-        # Recent image embeddings stay cached, by model name and image hash, so
+        # Recent image embeddings stay cached, by model name and image reference, so
         # several prompts on one image encode it once. A SAM3 embedding takes
         # about 100 MB.
         # ponytail: fixed size, make it configurable if memory or hit rate matters.
         EMBEDDING_CACHE_SIZE: Final = 4
 
-        image_hash: str = (
-            typing.cast(str, request.image_hash)
-            if request.image is None
-            else _json.hash_image(image=request.image)
+        image_ref: str = (
+            request.image
+            if isinstance(request.image, str)
+            else _json.image_ref(image=request.image)
         )
-        key: tuple[str, str] = (model_type.name, image_hash)
+        key: tuple[str, str] = (model_type.name, image_ref)
         embedding: types.ImageEmbedding | None = self._embeddings.get(key)
-        if request.image is None and embedding is None:
+        if isinstance(request.image, str) and embedding is None:
             # Before loading the model, which a retry with the image would
             # otherwise load a second time after keep_alive 0 unloads it.
-            raise _errors.UnknownImageError(
-                f"no embedding for image {image_hash}; send the image"
-            )
+            raise _errors.UnknownImageError(refs=[image_ref])
         model: types.Model = self._load(model_name=model_type.name)
         if embedding is None:
-            assert request.image is not None  # raised UnknownImageError otherwise
+            assert not isinstance(request.image, str)  # raised UnknownImageError
             embedding = model.encode_image(image=request.image)
         self._embeddings[key] = embedding
         self._embeddings.move_to_end(key)
@@ -193,7 +191,7 @@ class Runtime:
         annotations: list[types.Annotation] = model.decode(
             embedding=embedding, prompt=request
         )
-        return SegmentResponse(annotations=annotations, image_hash=image_hash)
+        return SegmentResponse(annotations=annotations, image=image_ref)
 
     def _load(self, *, model_name: str) -> types.Model:
         # Under _lock. When full, the least recently used model unloads first;

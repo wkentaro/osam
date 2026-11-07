@@ -38,3 +38,8 @@ def hash_image(*, image: np.ndarray) -> str:
     digest = hashlib.sha256(np.ascontiguousarray(image).data)
     digest.update(repr((image.shape, image.dtype.str)).encode())
     return digest.hexdigest()
+
+
+def image_ref(*, image: np.ndarray) -> str:
+    # How requests refer to an image the server has seen, in place of the image.
+    return f"sha256:{hash_image(image=image)}"

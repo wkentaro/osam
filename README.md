@@ -319,10 +319,11 @@ request. The server keeps one model loaded. An application using two passes
 server, so they don't reload in turn; a full server unloads the least recently
 used model first. It also keeps the
 embeddings of recent images, so further prompts on the same image skip the
-image encoder. A response to a request with an image includes its
-`image_hash`, which further requests can send in place of the image; the
-server answers 412 when it no longer has
-that image, and `osam.Client` then sends the image. A model unloads 5 minutes after its last request; `keep_alive` changes that,
+image encoder. A response gives its image's reference, `"sha256:<hex>"`,
+in `image`, which further requests can send as `image` in place of the file;
+the server answers 412 with `"code": "missing_images"` and the references in
+`images` when it no longer has that image, and `osam.Client` then sends the
+image. A model unloads 5 minutes after its last request; `keep_alive` changes that,
 in seconds or as a duration such as `"10m"`, with `-1` to keep it loaded and `0`
 to unload it now. `/api/ps` lists the loaded models and `/api/version` the
 server's version. Errors come back as `{"error": "...", "code": "..."}`,

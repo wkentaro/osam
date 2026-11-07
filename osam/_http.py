@@ -44,10 +44,9 @@ class HttpBackend:
     _process: "_Process | None"
     # Closing it tells the private server to exit.
     _pipe: IO[bytes] | multiprocessing.connection.Connection | None
-    # The last image sent: its local hash, its encoding, and the hash the
-    # server returned for it, as a client often sends one image with
-    # several prompts.
-    _image: tuple[str, str, str]
+    # The last image: its reference, its encoding, and whether the server
+    # took it, as a client often sends one image with several prompts.
+    _image: tuple[str, str, bool]
     # Whether this client owns its server, set once: _process is briefly
     # None while another request restarts it.
     _private: bool
@@ -81,7 +80,7 @@ class HttpBackend:
         self._https = False
         self._process = None
         self._pipe = None
-        self._image = ("", "", "")
+        self._image = ("", "", False)
         self._private = host is None
         self._closed = False
         if host is None:
@@ -147,37 +146,39 @@ class HttpBackend:
     def segment(
         self, *, request: _requests.SegmentRequest
     ) -> _requests.SegmentResponse:
-        assert request.image is not None
+        assert not isinstance(request.image, str)
         image: np.ndarray = request.image
         body: dict[str, Any] = request.model_dump(
-            mode="json", exclude={"image", "image_hash"}, exclude_none=True
+            mode="json", exclude={"image"}, exclude_none=True
         )
 
-        def post(**image_fields: str) -> _requests.SegmentResponse:
+        def post(image_field: str) -> _requests.SegmentResponse:
             response = _requests.SegmentResponse.model_validate(
                 self._request(
-                    method="POST", path="/api/segment", body=body | image_fields
+                    method="POST",
+                    path="/api/segment",
+                    body=body | {"image": image_field},
                 )
             )
-            self._image = (key, encoded, response.image_hash)
+            self._image = (ref, encoded, True)
             return response
 
         # Hashing takes a fraction of the time PNG encoding does. Read and
         # written whole, so a concurrent call can't mix up two images.
-        key: str = _json.hash_image(image=image)
-        cached_key, encoded, server_hash = self._image
-        if cached_key != key:
+        ref: str = _json.image_ref(image=image)
+        cached_ref, encoded, sent = self._image
+        if cached_ref != ref:
             encoded = _json.image_ndarray_to_b64data(ndarray=image)
-        elif server_hash:
+        elif sent:
             # Sent before, so the server likely has its embedding; 412 if not,
             # such as for another model or after a restart.
             try:
-                return post(image_hash=server_hash)
+                return post(ref)
             except _errors.ResponseError as e:
                 missing: _errors.Reported = _errors.REPORTED[_errors.UnknownImageError]
-                if e.status_code != missing.status_code:
+                if e.code != missing.code:
                     raise
-        return post(image=encoded)
+        return post(encoded)
 
     def _request(
         self, *, method: str, path: str, body: dict[str, Any] | None = None

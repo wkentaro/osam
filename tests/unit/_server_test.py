@@ -172,23 +172,24 @@ def test_queued_segments_leave_the_thread_pool_free(
         asyncio.run(scenario())
 
 
-def test_segment_by_image_hash(app: fastapi.FastAPI) -> None:
+def test_segment_by_image_reference(app: fastapi.FastAPI) -> None:
     client = TestClient(app)
     body = {"model": "fake", "image": _TINY_IMAGE_B64}
     response = client.post("/api/segment", json=body)
     assert response.status_code == 200, response.text
-    assert response.json().keys() == {"annotations", "image_hash"}
+    assert response.json().keys() == {"annotations", "image"}
 
-    image_hash = response.json()["image_hash"]
-    by_hash = {"model": "fake", "image_hash": image_hash}
-    assert client.post("/api/segment", json=by_hash).status_code == 200
-    missing = client.post("/api/segment", json={**by_hash, "image_hash": "0" * 64})
+    image_ref = response.json()["image"]
+    assert image_ref.startswith("sha256:")
+    by_ref = {"model": "fake", "image": image_ref}
+    assert client.post("/api/segment", json=by_ref).status_code == 200
+    unknown = "sha256:" + "0" * 64
+    missing = client.post("/api/segment", json={**by_ref, "image": unknown})
     assert missing.status_code == 412
-    assert "send the image" in missing.json()["error"]
     assert missing.json()["code"] == "missing_images"
-    both = client.post("/api/segment", json={**body, "image_hash": image_hash})
-    assert both.status_code == 422
-    assert "not both" in both.json()["error"]
+    assert missing.json()["images"] == [unknown]
+    bad_ref = client.post("/api/segment", json={**by_ref, "image": "sha256:0"})
+    assert bad_ref.status_code == 422
     points = client.post("/api/segment", json={**body, "texts": ["dog"]})
     assert points.status_code == 400
     assert "not texts" in points.json()["error"]
@@ -253,7 +254,7 @@ def test_parse_duration(value, seconds) -> None:
 def test_segment_request_rejects_invalid_prompts(
     fields: dict, app: fastapi.FastAPI
 ) -> None:
-    body = {"model": "sam3", "image_hash": "0", **fields}
+    body = {"model": "sam3", "image": "sha256:" + "0" * 64, **fields}
     response = TestClient(app).post("/api/segment", json=body)
     assert response.status_code == 422, response.text
 
