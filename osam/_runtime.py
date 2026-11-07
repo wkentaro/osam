@@ -35,6 +35,12 @@ class _Loaded:
 
 # Runtime.list shadows list inside the class, hence builtins.list there.
 class Runtime:
+    # The embedding cache's budget. One SAM3 embedding takes about 100 MB and
+    # one EfficientSAM embedding 4 MB; the newest one stays even when it alone
+    # is larger.
+    # ponytail: fixed budget, make it configurable if memory or hit rate matters.
+    _embedding_cache_bytes: int = 1 << 30
+
     # One call at a time, under _lock: loading and running models, and pull and
     # remove, which must not change the files under a model being loaded.
     # device: every loaded model runs on it; None picks one automatically.
@@ -166,11 +172,7 @@ class Runtime:
         self, *, request: SegmentRequest, model_type: type[types.Model]
     ) -> SegmentResponse:
         # Recent image embeddings stay cached, by model name and image reference, so
-        # several prompts on one image encode it once. A SAM3 embedding takes
-        # about 100 MB.
-        # ponytail: fixed size, make it configurable if memory or hit rate matters.
-        EMBEDDING_CACHE_SIZE: Final = 4
-
+        # several prompts on one image encode it once.
         image_ref: str = (
             request.image
             if isinstance(request.image, str)
@@ -188,7 +190,11 @@ class Runtime:
             embedding = model.encode_image(image=request.image)
         self._embeddings[key] = embedding
         self._embeddings.move_to_end(key)
-        while len(self._embeddings) > EMBEDDING_CACHE_SIZE:
+        while (
+            len(self._embeddings) > 1
+            and sum(e.nbytes for e in self._embeddings.values())
+            > self._embedding_cache_bytes
+        ):
             self._embeddings.popitem(last=False)
         annotations: list[types.Annotation] = model.decode(
             embedding=embedding, prompt=request

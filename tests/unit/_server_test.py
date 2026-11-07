@@ -213,6 +213,42 @@ def test_load_and_ps(app: fastapi.FastAPI) -> None:
         assert response.status_code == 422, keep_alive
 
 
+def test_segment_bounds_the_embedding_cache_in_bytes(
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
+) -> None:
+    def encode_image(self, *, image: np.ndarray) -> types.ImageEmbedding:
+        return types.ImageEmbedding(
+            original_height=1,
+            original_width=1,
+            embedding=np.zeros(250, dtype=np.float32),  # 1000 bytes
+        )
+
+    _patch_encode_image(monkeypatch=monkeypatch, encode_image=encode_image)
+    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
+    monkeypatch.setattr(model_type, "decode", lambda self, *, embedding, prompt: [])
+    monkeypatch.setattr(runtime, "_embedding_cache_bytes", 2500)
+    client = TestClient(app)
+    refs: list[str] = []
+    for value in range(4):
+        image = _json.image_ndarray_to_b64data(
+            ndarray=np.full((1, 1, 3), value, dtype=np.uint8)
+        )
+        response = client.post(
+            "/api/segment", json={"model": "efficientsam:10m", "image": image}
+        )
+        assert response.status_code == 200, response.text
+        refs.append(response.json()["image"])
+    assert [ref for _, ref in runtime._embeddings] == refs[2:]
+
+    # The newest one stays, even when it alone is over the budget.
+    monkeypatch.setattr(runtime, "_embedding_cache_bytes", 1)
+    response = client.post(
+        "/api/segment", json={"model": "efficientsam:10m", "image": refs[3]}
+    )
+    assert response.status_code == 200, response.text
+    assert [ref for _, ref in runtime._embeddings] == refs[3:]
+
+
 def test_routing_errors_use_the_error_shape(app: fastapi.FastAPI) -> None:
     client = TestClient(app)
     assert client.get("/api/missing").json() == {
