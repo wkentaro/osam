@@ -256,10 +256,13 @@ def test_keep_alive_unloads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     assert running["device"] in typing.get_args(types.Device)
     assert running["expires_at"] is None
 
-    response = client.post("/api/segment", json={**body, "keep_alive": "0.2s"})
+    # A slow runner can spend the whole keep_alive before /api/ps, so give
+    # it a second and compare against the time before the request.
+    requested_at = time.time()
+    response = client.post("/api/segment", json={**body, "keep_alive": "1s"})
     assert response.status_code == 200, response.text
     (running,) = client.get("/api/ps").json()["models"]
-    assert running["expires_at"] > time.time()
+    assert running["expires_at"] > requested_at
     deadline = time.monotonic() + 5
     while client.get("/api/ps").json()["models"] and time.monotonic() < deadline:
         time.sleep(0.05)
