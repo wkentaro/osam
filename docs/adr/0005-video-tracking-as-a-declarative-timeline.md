@@ -61,7 +61,8 @@ longer has it.
   Coordinates are pixels, as in `/api/segment`.
 - Every action after the first carries `base`: the `result` digest of the
   response the user saw when making it. The `done` line reports `result`, a
-  digest of the object ids and masks on every returned frame. Before applying
+  digest of the object ids and masks on every frame of the video, whatever
+  `first_frame`, `last_frame`, and `include_masks` returned. Before applying
   an action, the server checks that the result it holds or replayed for the
   earlier actions has that digest, and answers 409 with
   `"code": "base_changed"` and the new digest when it does not. This is the
