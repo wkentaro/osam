@@ -92,7 +92,9 @@ def test_pull_streams_progress(
 
     monkeypatch.setattr(model_type, "pull", fail)
     response = client.post("/api/pull", json={"model": "fake"})
-    assert response.text.splitlines()[-1] == json.dumps({"error": "disk full"})
+    assert response.text.splitlines()[-1] == json.dumps(
+        {"error": "disk full", "code": "pull_failed"}
+    )
     response = client.post("/api/pull", json={"model": "missing"})
     assert response.status_code == 404
 
@@ -106,6 +108,7 @@ def test_segment_reports_errors(
     )
     assert response.status_code == 404
     assert "not found" in response.json()["error"]
+    assert response.json()["code"] == "model_not_found"
     truncated: str = base64.b64encode(base64.b64decode(_IMAGE_B64)[:1000]).decode()
     for body in [
         {"image": "eA=="},
@@ -114,6 +117,7 @@ def test_segment_reports_errors(
         response = client.post("/api/segment", json={"model": "fake", **body})
         assert response.status_code == 422, body
         assert "not an image file" in response.json()["error"]
+        assert response.json()["code"] == "invalid_request"
 
     def fail(self, *, image):
         assert self.device == "cpu"
@@ -130,7 +134,7 @@ def test_segment_reports_errors(
             json={"model": "fake", "image": _TINY_IMAGE_B64},
         )
     assert response.status_code == 500
-    assert response.json() == {"error": "out of GPU memory"}
+    assert response.json() == {"error": "out of GPU memory", "code": "internal_error"}
 
 
 def test_queued_segments_leave_the_thread_pool_free(
@@ -181,6 +185,7 @@ def test_segment_by_image_hash(app: fastapi.FastAPI) -> None:
     missing = client.post("/api/segment", json={**by_hash, "image_hash": "0" * 64})
     assert missing.status_code == 412
     assert "send the image" in missing.json()["error"]
+    assert missing.json()["code"] == "missing_images"
     both = client.post("/api/segment", json={**body, "image_hash": image_hash})
     assert both.status_code == 422
     assert "not both" in both.json()["error"]
@@ -207,10 +212,16 @@ def test_load_and_ps(app: fastapi.FastAPI) -> None:
 
 def test_routing_errors_use_the_error_shape(app: fastapi.FastAPI) -> None:
     client = TestClient(app)
-    assert client.get("/api/missing").json() == {"error": "Not Found"}
+    assert client.get("/api/missing").json() == {
+        "error": "Not Found",
+        "code": "not_found",
+    }
     response = client.post("/api/version")
     assert response.status_code == 405
-    assert response.json() == {"error": "Method Not Allowed"}
+    assert response.json() == {
+        "error": "Method Not Allowed",
+        "code": "method_not_allowed",
+    }
     assert response.headers["allow"] == "GET"
 
 

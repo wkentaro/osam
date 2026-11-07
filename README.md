@@ -324,9 +324,11 @@ server answers 412 when it no longer has
 that image, and `osam.Client` then sends the image. A model unloads 5 minutes after its last request; `keep_alive` changes that,
 in seconds or as a duration such as `"10m"`, with `-1` to keep it loaded and `0`
 to unload it now. `/api/ps` lists the loaded models and `/api/version` the
-server's version. Errors come back as `{"error": "..."}`. `/api/models`,
+server's version. Errors come back as `{"error": "...", "code": "..."}`,
+where `code`, such as `"model_not_found"` or `"missing_images"`, stays the same
+across releases, and `osam.ResponseError.code` holds it. `/api/models`,
 `/api/pull` and `DELETE /api/models/{name}` match `osam list`, `osam pull` and
 `osam rm`. `/api/pull` streams NDJSON lines such as
 `{"status": "pulling encoder.onnx", "completed": 524288, "total": 24799761}` and
-ends with `{"status": "success"}` or `{"error": "..."}`. The full schema is at
+ends with `{"status": "success"}` or `{"error": "...", "code": "pull_failed"}`. The full schema is at
 <http://127.0.0.1:11368/docs>.
