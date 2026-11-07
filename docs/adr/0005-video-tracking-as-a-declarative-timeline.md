@@ -47,35 +47,40 @@ longer has it.
 - osam takes a list of images, not a video file, so it needs no video
   decoder. A labelme folder, frames a user extracted with ffmpeg, and frames
   from a camera are all lists of images.
-- Actions name objects by where the user clicked, never by id:
+- Actions:
   - `{"type": "prompt", "frame", ...}` with the fields of `Prompt` is the
     first action, and only the first. With `points` or `box` it tracks one
     object. With `texts` it finds every match. `example_boxes` without
     `texts` is an error.
   - `{"type": "add", "frame", "points", "point_labels", "box"}` adds an
     object.
-  - `{"type": "refine", "frame", "points", "point_labels"}` refines the
-    object whose mask on that frame contains the first positive point.
-  - `{"type": "remove", "frame", "point"}` removes the object whose mask on
-    that frame contains the point.
+  - `{"type": "refine", "frame", "object_id", "points", "point_labels"}`
+    corrects an object with positive and negative points.
+  - `{"type": "remove", "object_id"}` removes an object.
 
-  When several masks contain the point, the target is the one listed first in
-  that frame's annotations. When none does, the server answers 409 with
-  `"code": "no_object_at_point"`. Coordinates are pixels, as in
-  `/api/segment`.
+  Coordinates are pixels, as in `/api/segment`.
+- Every action after the first carries `base`: the `result` digest of the
+  response the user saw when making it. The `done` line reports `result`, a
+  digest of the object ids and masks on every returned frame. Before applying
+  an action, the server checks that the result it holds or replayed for the
+  earlier actions has that digest, and answers 409 with
+  `"code": "base_changed"` and the new digest when it does not. This is the
+  If-Match of HTTP. It keeps ids safe to refer to, since a replay that numbers
+  objects differently, or segments them differently, fails before any edit.
 - Action k applies to the result of actions 0 to k-1 propagated over every
   frame, in both directions from the first prompt frame. The server works out
   what it must recompute.
 - The response is NDJSON with one line per frame,
   `{"frame", "annotations"}`, then a last line with `"done": true`, each
-  object's first and last frame, and whether the request hit the cache.
+  object's first and last frame, `result`, and whether the request hit the
+  cache.
   `first_frame` and `last_frame` limit the frames returned, and
   `include_masks: false` leaves out the masks.
 - The server caches tracker state by model, device, frames, and action
   prefix, and image features by model and image reference. Both caches are
   bounded in bytes. `/api/segment` uses the same feature cache.
-- `Annotation` gains `object_id`, numbered in the order objects appear. Ids
-  label objects in responses only. Errors gain a stable `code`, and
+- `Annotation` gains `object_id`, numbered in the order objects appear.
+  Errors gain a stable `code`, and
   `/api/models` lists each model's `capabilities` and `prompt_kinds`.
 - `osam run --video DIR` takes a directory of images.
 
@@ -89,13 +94,9 @@ longer has it.
   The `done` line reports a miss so a client can explain the wait.
 - The server derives the propagation mode from the list. That logic moves
   from the client-facing API into the runtime, where upstream keeps it too.
-- A request means the same thing on any device, since no action depends on
-  how the server numbered objects. A replay on another device can still
-  order near-equal detections differently, which changes the ids in the
-  response, or leave no object under a click, which fails with 409 instead
-  of editing another object.
-- Ids in responses stay the same while the server replays on one device,
-  and can change on another. A client that attaches its own names to objects,
-  such as labels in labelme, has to match them again after that.
+- An edit applies only to the result the user saw. Replays on the same
+  device reproduce it. A replay on another device, such as after a GPU falls
+  back to CPU, usually changes some mask and fails with 409, so the client
+  shows the new result and the user makes the edits again.
 - Requests grow with the number of frames and actions, by about 70 bytes per
   frame reference.
