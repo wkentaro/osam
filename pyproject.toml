@@ -111,7 +111,14 @@ dev = [
 select = ["GR:baseline", "GR:opinionated"]
 # GR013 enforces the stricter form of GR001.
 ignore = ["GR001"]
-per-file-ignores = { "osam/_models/_clip/**" = ["GR"] }
+# Vendored code, kept close to its source so the two diff.
+per-file-ignores = { "osam/_models/_clip/**" = [
+  "GR",
+], "osam/_models/sam3/_tracker.py" = [
+  "GR",
+], "osam/_models/sam3/_video.py" = [
+  "GR",
+] }
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -177,3 +184,10 @@ line-ending = "auto"
 
 [tool.ruff.lint.isort]
 force-single-line = true
+
+# Names from SAM3's source, which the vendored video code keeps.
+[tool.typos.default.extend-words]
+tpos = "tpos"
+
+[tool.typos.default.extend-identifiers]
+_propogate_tracker_one_frame_local_gpu = "_propogate_tracker_one_frame_local_gpu"
