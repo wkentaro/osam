@@ -471,3 +471,49 @@ def test_timeout_on_a_silent_host() -> None:
         with pytest.raises(TimeoutError):
             osam.Client(host=f"127.0.0.1:{port}", timeout=0.5)
         assert time.monotonic() - start < 5
+
+
+def test_track_sends_frames_the_server_lacks(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.unit._server_test import _patch_tracking
+
+    applied: list[str] = _patch_tracking(
+        monkeypatch=monkeypatch,
+        model_type=_registry.get_model_type_by_name(name="efficientsam:10m"),
+    )
+    frames = [np.full((2, 2, 3), value, np.uint8) for value in range(3)]
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    with _serving() as host, osam.Client(in_process=True) as in_process:
+        client = osam.Client(host=host)
+        backend = _backend(client)
+        posted: list[list[bool]] = []
+        stream = backend._stream
+
+        def recording(*, path: str, body: dict[str, Any]):
+            posted.append([f.startswith("sha256:") for f in body["frames"]])
+            return stream(path=path, body=body)
+
+        monkeypatch.setattr(backend, "_stream", recording)
+        for any_client in [client, in_process]:
+            response = any_client.track("efficientsam:10m", frames[:2], [prompt])
+            assert [f.frame for f in response.frames] == [0, 1]
+            assert response.frames[1].annotations[0].object_id == 0
+            assert response.done.cache == "miss"
+        # By reference, then the two frames it lacked inline.
+        assert posted == [[True, True], [False, False]]
+
+        posted.clear()
+        add = {"type": "add", "frame": 2, "box": [0, 0, 1, 1]}
+        response = client.track(
+            "efficientsam:10m",
+            frames,
+            [prompt, {**add, "base": response.done.result}],
+            include_masks=False,
+        )
+        assert posted == [[True, True, True], [True, True, False]]
+        assert response.done.cache == "miss"  # three frames, another video
+        assert response.frames[2].annotations[1].mask is None
+        assert applied.count("add") == 1
+
+        with pytest.raises(osam.ResponseError) as e:
+            client.track("efficientsam:10m", frames, [prompt, {**add, "base": "x"}])
+        assert e.value.code == "base_changed"

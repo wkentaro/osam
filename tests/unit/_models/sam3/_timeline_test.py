@@ -6,7 +6,8 @@ import pytest
 
 from osam import _requests
 from osam import _runtime
-from osam import _types as types
+from osam import _types
+from osam import types
 from osam._models.sam3 import _timeline
 
 
@@ -28,10 +29,14 @@ def test_a_null_threshold_is_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     # null, so a null threshold must pass as the omitted one does.
     monkeypatch.setattr(_timeline, "VideoInference", _Predictor)
     prompts = [
-        types.PromptAction(type="prompt", frame=0, texts=["dog"]),
-        types.PromptAction(type="prompt", frame=0, texts=["dog"], score_threshold=None),
+        _types.PromptAction(type="prompt", frame=0, texts=["dog"]),
+        _types.PromptAction(
+            type="prompt", frame=0, texts=["dog"], score_threshold=None
+        ),
     ]
-    prompts.append(types.PromptAction.model_validate_json(prompts[0].model_dump_json()))
+    prompts.append(
+        _types.PromptAction.model_validate_json(prompts[0].model_dump_json())
+    )
     for prompt in prompts:
         timeline = _timeline.Timeline(
             sessions={}, get_features=lambda frame: {}, num_frames=1, height=4, width=4
@@ -39,7 +44,7 @@ def test_a_null_threshold_is_unset(monkeypatch: pytest.MonkeyPatch) -> None:
         timeline.apply(action=prompt)
     with pytest.raises(ValueError, match="no thresholds"):
         timeline.apply(
-            action=types.PromptAction(
+            action=_types.PromptAction(
                 type="prompt", frame=0, texts=["dog"], score_threshold=0.5
             )
         )
@@ -58,7 +63,7 @@ def test_replay_gives_the_same_result() -> None:
     height, width = image.shape[:2]
     prompt = {"type": "prompt", "frame": 0, "texts": ["dog"]}
 
-    def track(runtime: _runtime.Runtime, actions: list) -> _requests.TrackResponse:
+    def track(runtime: _runtime.Runtime, actions: list) -> types.TrackResponse:
         return runtime.track(
             request=_requests.TrackRequest(
                 model="sam3", frames=frames, actions=actions, keep_alive=-1

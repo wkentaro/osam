@@ -300,6 +300,21 @@ no server, and takes the same calls. `device`, `max_loaded_models` and
 models. An unknown model raises `LookupError` on both; from a server, it is
 also an `osam.ResponseError` with status code 404.
 
+`client.track("sam3", frames, actions)` tracks objects through a list of RGB
+frames, taking the actions of `/api/track` below, and returns each frame's
+annotations and `done`. Each edit passes the `done.result` it was made on as
+`base`. It sends frames by reference first and sends inline only those the
+server lacks.
+
+```python
+response = client.track("sam3", frames, [{"type": "prompt", "frame": 0, "texts": ["person"]}])
+first = response.done.objects[0].object_id
+response = client.track("sam3", frames, [
+    {"type": "prompt", "frame": 0, "texts": ["person"]},
+    {"type": "remove", "object_id": first, "base": response.done.result},
+])
+```
+
 ### HTTP
 
 ```bash

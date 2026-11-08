@@ -25,11 +25,7 @@ from . import _types as types
 from ._requests import LoadRequest
 from ._requests import SegmentRequest
 from ._requests import SegmentResponse
-from ._requests import TrackDone
-from ._requests import TrackFrame
-from ._requests import TrackObject
 from ._requests import TrackRequest
-from ._requests import TrackResponse
 
 if typing.TYPE_CHECKING:
     from ._models.sam3._timeline import Timeline
@@ -219,7 +215,7 @@ class Runtime:
             finally:
                 self._keep_alive(model_name=model_type.name, seconds=request.keep_alive)
 
-    def track(self, *, request: TrackRequest) -> TrackResponse:
+    def track(self, *, request: TrackRequest) -> types.TrackResponse:
         # Raises UnknownImageError for frame references it doesn't have,
         # _errors.BaseChangedError for an action on another result, and ValueError for
         # actions the model or the result doesn't take.
@@ -281,7 +277,7 @@ class Runtime:
 
     def _track(
         self, *, request: TrackRequest, model_type: type[types.Model]
-    ) -> TrackResponse:
+    ) -> types.TrackResponse:
         refs: builtins.list[str] = []
         images: builtins.list[np.ndarray] = []
         missing: builtins.list[str] = []
@@ -350,17 +346,19 @@ class Runtime:
         self._tracks.move_to_end(key)
         _evict(cache=self._tracks, max_bytes=self._track_cache_bytes)
 
-        objects: dict[int, TrackObject] = {}
+        objects: dict[int, types.TrackObject] = {}
         for i, annotations in enumerate(track.frames):
             for a in annotations:
                 assert a.object_id is not None
                 objects.setdefault(
                     a.object_id,
-                    TrackObject(object_id=a.object_id, first_frame=i, last_frame=i),
+                    types.TrackObject(
+                        object_id=a.object_id, first_frame=i, last_frame=i
+                    ),
                 ).last_frame = i
-        return TrackResponse(
+        return types.TrackResponse(
             frames=[
-                TrackFrame(
+                types.TrackFrame(
                     frame=i,
                     # Copies, so that a caller in this process can't change
                     # the cached results.
@@ -374,7 +372,7 @@ class Runtime:
                 )
                 for i in range(request.first_frame, last_frame + 1)
             ],
-            done=TrackDone(
+            done=types.TrackDone(
                 objects=sorted(objects.values(), key=lambda o: o.object_id),
                 result=track.result,
                 cache=cache,

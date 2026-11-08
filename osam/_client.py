@@ -1,5 +1,6 @@
 import builtins
 from collections.abc import Callable
+from collections.abc import Sequence
 from typing import Any
 from typing import Protocol
 
@@ -40,6 +41,9 @@ class _Backend(Protocol):
     def segment(
         self, *, request: _requests.SegmentRequest
     ) -> _requests.SegmentResponse: ...
+
+    def track(self, *, request: _requests.TrackRequest) -> types.TrackResponse:
+        ...
 
 
 # Client.list shadows list inside the class, hence builtins.list there.
@@ -196,3 +200,45 @@ class Client:
             {"model": model, "image": image} | _requests.to_json_fields(fields=prompt)
         )
         return self._backend.segment(request=request).annotations
+
+    def track(
+        self,
+        model: str,
+        frames: Sequence[np.ndarray],
+        actions: builtins.list[dict[str, Any]],
+        *,
+        first_frame: int | None = None,
+        last_frame: int | None = None,
+        include_masks: bool | None = None,
+        keep_alive: float | str | None = None,
+    ) -> types.TrackResponse:
+        """Track objects through frames, RGB arrays of one size, with model.
+
+        actions: every edit so far, in order, with coordinates in pixels:
+
+        - {"type": "prompt", "frame", ...} with the prompt of segment, first
+          and only first: points or a box track one object, texts every match.
+        - {"type": "add", "frame", "points", "point_labels", "box", "base"}
+        - {"type": "refine", "frame", "object_id", "points", "point_labels",
+          "base"}
+        - {"type": "remove", "object_id", "base"}
+
+        base is the done.result of the response the edit was made on; another
+        result raises ResponseError with code "base_changed". The response has
+        the annotations of first_frame to last_frame, each with its object_id,
+        and done with each object's frames, result, and whether it hit the
+        server's cache. Frames the server saw before go by reference.
+        include_masks, keep_alive: as in segment.
+        """
+        request = _requests.TrackRequest.model_validate(
+            {"model": model, "frames": builtins.list(frames), "actions": actions}
+            | _requests.to_json_fields(
+                fields={
+                    "first_frame": first_frame,
+                    "last_frame": last_frame,
+                    "include_masks": include_masks,
+                    "keep_alive": keep_alive,
+                }
+            )
+        )
+        return self._backend.track(request=request)

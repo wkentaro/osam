@@ -46,11 +46,20 @@ class ResponseError(Exception):
 
     status_code: int
     code: str | None
+    # The image references a "missing_images" error asks to send.
+    images: list[str]
 
-    def __init__(self, message: str, status_code: int, code: str | None = None):
+    def __init__(
+        self,
+        message: str,
+        status_code: int,
+        code: str | None = None,
+        images: list[str] | None = None,
+    ):
         super().__init__(message)
         self.status_code = status_code
         self.code = code
+        self.images = images or []
 
 
 class InvalidRequestError(ResponseError, ValueError):
