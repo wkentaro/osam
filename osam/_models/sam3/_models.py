@@ -1,3 +1,5 @@
+import os
+from collections.abc import Callable
 from typing import Final
 from typing import cast
 
@@ -12,6 +14,12 @@ from osam import _onnx
 from osam import _types as types
 
 from .._clip import tokenize
+from . import _video
+from ._timeline import Timeline
+
+# ponytail: the video models load from this directory of sam3-onnx exports,
+# models/sam3_{name}.onnx, until they are uploaded as blobs.
+_VIDEO_MODELS_ENV: Final = "OSAM_SAM3_VIDEO_MODELS"
 
 # sam3-onnx's models, by file name without the sam3_ prefix and .onnx.
 _FILES: Final[dict[str, types.Blob]] = {
@@ -118,6 +126,63 @@ class Sam3(types.Model):
             )
             blobs[name] = _FILES[_file(name=name, device=session)]
         return blobs
+
+    _video_sessions: dict[str, onnxruntime.InferenceSession] | None = None
+
+    @classmethod
+    @override
+    def tracks(cls) -> bool:
+        return bool(os.environ.get(_VIDEO_MODELS_ENV))
+
+    @override
+    def new_timeline(
+        self,
+        *,
+        get_embedding: Callable[[int], types.ImageEmbedding],
+        num_frames: int,
+        height: int,
+        width: int,
+    ) -> Timeline:
+        if self._video_sessions is None:
+            # On the image encoder's device. ponytail: WebGPU's plugin provider
+            # needs add_provider_for_devices, so the video models fall back to
+            # CPU there.
+            providers: list[str] = [
+                p
+                for p in self._inference_sessions["image_encoder"].get_providers()
+                if p != "WebGpuExecutionProvider"
+            ]
+            directory: str = os.environ[_VIDEO_MODELS_ENV]
+            self._video_sessions = {
+                name: onnxruntime.InferenceSession(
+                    os.path.join(directory, f"sam3_{name}.onnx"), providers=providers
+                )
+                for name in _video.MODEL_NAMES
+            }
+
+        def get_features(frame: int) -> dict[str, NDArray]:
+            # The image encoder's outputs by name, as encode_image keeps them.
+            embedding: types.ImageEmbedding = get_embedding(frame)
+            NAMES: Final = [
+                "backbone_fpn_1",
+                "backbone_fpn_2",
+                "vision_pos_enc_2",
+                "image_embeddings",
+                "high_res_features1",
+                "high_res_features2",
+            ]
+            return {
+                "backbone_fpn_0": embedding.embedding,
+                **dict(zip(NAMES, embedding.extra_features)),
+            }
+
+        return Timeline(
+            sessions=self._video_sessions,
+            get_features=get_features,
+            num_frames=num_frames,
+            height=height,
+            width=width,
+        )
 
     @override
     def encode_image(self, *, image: NDArray[np.uint8]) -> types.ImageEmbedding:

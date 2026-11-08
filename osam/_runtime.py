@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from typing import Any
 from typing import Final
 
+import numpy as np
 from loguru import logger
 
 from . import __version__
@@ -23,6 +24,38 @@ from . import _types as types
 from ._requests import LoadRequest
 from ._requests import SegmentRequest
 from ._requests import SegmentResponse
+from ._requests import TrackDone
+from ._requests import TrackFrame
+from ._requests import TrackObject
+from ._requests import TrackRequest
+from ._requests import TrackResponse
+
+if typing.TYPE_CHECKING:
+    from ._models.sam3._timeline import Timeline
+
+
+@dataclasses.dataclass
+class _Track:
+    # The annotations on every frame after a list of actions, and the result
+    # digest after each of its prefixes.
+    frames: list[list[types.Annotation]]
+    results: list[str]
+
+    @property
+    def nbytes(self) -> int:
+        # With about 128 bytes a frame for the lists and its reference.
+        return 128 * len(self.frames) + sum(
+            0 if a.mask is None else a.mask.nbytes for f in self.frames for a in f
+        )
+
+
+@dataclasses.dataclass
+class _LiveTimeline:
+    # The video, by model, device and frames, and the actions applied to it.
+    video: tuple[str, str, tuple[str, ...]]
+    timeline: "Timeline"
+    actions: list[str] = dataclasses.field(default_factory=list)
+    results: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -40,6 +73,11 @@ class Runtime:
     # is larger.
     # ponytail: fixed budget, make it configurable if memory or hit rate matters.
     _embedding_cache_bytes: int = 1 << 30
+    # The frames /api/track was sent, which it encodes again when their
+    # embeddings were evicted: about 6 MB each at 1080p.
+    _frame_cache_bytes: int = 2 << 30
+    # Track results by video and actions, for undo and retries.
+    _track_cache_bytes: int = 1 << 30
 
     # One call at a time, under _lock: loading and running models, and pull and
     # remove, which must not change the files under a model being loaded.
@@ -58,6 +96,16 @@ class Runtime:
     _loaded_lock: threading.Lock
     # By model name and image reference, least recently used first; under _lock.
     _embeddings: collections.OrderedDict[tuple[str, str], types.ImageEmbedding]
+    # By image reference, least recently used first; under _lock.
+    _frames: collections.OrderedDict[str, np.ndarray]
+    _tracks: collections.OrderedDict[
+        tuple[tuple[str, str, tuple[str, ...]], tuple[str, ...]], _Track
+    ]
+    # ponytail: one timeline, so an edit after an undo replays every
+    # action; keep one per prefix if those replays take too long.
+    _timeline: _LiveTimeline | None
+    # The frames of the request running, by index.
+    _track_images: builtins.list[np.ndarray]
 
     def __init__(
         self,
@@ -83,6 +131,10 @@ class Runtime:
         self._loaded = collections.OrderedDict()
         self._loaded_lock = threading.Lock()
         self._embeddings = collections.OrderedDict()
+        self._frames = collections.OrderedDict()
+        self._tracks = collections.OrderedDict()
+        self._timeline = None
+        self._track_images = []
 
     def version(self) -> str:
         return __version__
@@ -95,7 +147,9 @@ class Runtime:
                 size=model_type.get_size(device=self._device),
                 modified_at=model_type.get_modified_at(device=self._device),
                 metadata=model_type.metadata,
-                capabilities=["segment"],
+                capabilities=["segment", "track"]
+                if model_type.tracks()
+                else ["segment"],
                 prompt_kinds=sorted(model_type.prompt_kinds),
             )
             for model_type in self._model_types
@@ -160,6 +214,19 @@ class Runtime:
             finally:
                 self._keep_alive(model_name=model_type.name, seconds=request.keep_alive)
 
+    def track(self, *, request: TrackRequest) -> TrackResponse:
+        # Raises UnknownImageError for frame references it doesn't have,
+        # _errors.BaseChangedError for an action on another result, and ValueError for
+        # actions the model or the result doesn't take.
+        model_type: type[types.Model] = self.model_type(name=request.model)
+        if not model_type.tracks():
+            raise ValueError(f"{model_type.name} doesn't track")
+        with self._lock:
+            try:
+                return self._track(request=request, model_type=model_type)
+            finally:
+                self._keep_alive(model_name=model_type.name, seconds=request.keep_alive)
+
     def close(self) -> None:
         # Unloads every model and stops their timers, which hold this runtime.
         with self._lock:
@@ -192,20 +259,172 @@ class Runtime:
         if embedding is None:
             assert not isinstance(request.image, str)  # raised UnknownImageError
             embedding = model.encode_image(image=request.image)
-        self._embeddings[key] = embedding
-        self._embeddings.move_to_end(key)
-        while (
-            len(self._embeddings) > 1
-            and sum(e.nbytes for e in self._embeddings.values())
-            > self._embedding_cache_bytes
-        ):
-            self._embeddings.popitem(last=False)
+        self._cache_embedding(key=key, embedding=embedding)
         annotations: list[types.Annotation] = model.decode(
             embedding=embedding, prompt=request
         )
         if not request.include_masks:
             annotations = [a.model_copy(update={"mask": None}) for a in annotations]
         return SegmentResponse(annotations=annotations, image=image_ref)
+
+    def _cache_embedding(
+        self, *, key: tuple[str, str], embedding: types.ImageEmbedding
+    ) -> None:
+        self._embeddings[key] = embedding
+        self._embeddings.move_to_end(key)
+        _evict(cache=self._embeddings, max_bytes=self._embedding_cache_bytes)
+
+    def _track(
+        self, *, request: TrackRequest, model_type: type[types.Model]
+    ) -> TrackResponse:
+        refs: builtins.list[str] = []
+        images: builtins.list[np.ndarray] = []
+        missing: builtins.list[str] = []
+        for frame in request.frames:
+            if isinstance(frame, str):
+                refs.append(frame)
+                if frame in self._frames:
+                    images.append(self._frames[frame])
+                else:
+                    missing.append(frame)
+            else:
+                refs.append(_json.image_ref(image=frame))
+                images.append(frame)
+        if missing:
+            raise _errors.UnknownImageError(refs=missing)
+        for ref, image in zip(refs, images):
+            self._frames[ref] = image
+            self._frames.move_to_end(ref)
+        _evict(cache=self._frames, max_bytes=self._frame_cache_bytes)
+        if len({image.shape for image in images}) > 1:
+            raise ValueError("frames must all have the same size")
+        num_frames: int = len(images)
+        last_frame: int = (
+            num_frames - 1 if request.last_frame is None else request.last_frame
+        )
+        if not request.first_frame <= last_frame < num_frames:
+            raise ValueError(
+                f"first_frame and last_frame must be in order and under {num_frames}"
+            )
+
+        model: types.Model = self._load(model_name=model_type.name)
+        video: tuple[str, str, tuple[str, ...]] = (
+            model_type.name,
+            model.device,
+            tuple(refs),
+        )
+        actions: tuple[str, ...] = tuple(a.model_dump_json() for a in request.actions)
+        track: _Track | None = self._tracks.get((video, actions))
+        cache: typing.Literal["hit", "partial", "miss"] = "hit"
+        if track is None:
+            # For the live timeline to encode frames again, during this request
+            # only, so it keeps no frames between requests.
+            self._track_images = images
+            try:
+                track, cache = self._apply(
+                    request=request,
+                    model=model,
+                    video=video,
+                    actions=actions,
+                    num_frames=num_frames,
+                    height=images[0].shape[0],
+                    width=images[0].shape[1],
+                )
+            finally:
+                self._track_images = []
+            self._tracks[(video, actions)] = track
+        self._tracks.move_to_end((video, actions))
+        _evict(cache=self._tracks, max_bytes=self._track_cache_bytes)
+
+        objects: dict[int, TrackObject] = {}
+        for i, annotations in enumerate(track.frames):
+            for a in annotations:
+                assert a.object_id is not None
+                objects.setdefault(
+                    a.object_id,
+                    TrackObject(object_id=a.object_id, first_frame=i, last_frame=i),
+                ).last_frame = i
+        return TrackResponse(
+            frames=[
+                TrackFrame(
+                    frame=i,
+                    annotations=track.frames[i]
+                    if request.include_masks
+                    else [a.model_copy(update={"mask": None}) for a in track.frames[i]],
+                )
+                for i in range(request.first_frame, last_frame + 1)
+            ],
+            done=TrackDone(
+                objects=sorted(objects.values(), key=lambda o: o.object_id),
+                result=track.results[-1],
+                cache=cache,
+            ),
+        )
+
+    def _apply(
+        self,
+        *,
+        request: TrackRequest,
+        model: types.Model,
+        video: tuple[str, str, tuple[str, ...]],
+        actions: tuple[str, ...],
+        num_frames: int,
+        height: int,
+        width: int,
+    ) -> tuple[_Track, typing.Literal["hit", "partial", "miss"]]:
+        # Applies the actions the live timeline hasn't, or replays them all
+        # on a new one, checking each action's base before applying it.
+        live: _LiveTimeline | None = self._timeline
+        if (
+            live is None
+            or live.video != video
+            or tuple(live.actions) != actions[: len(live.actions)]
+        ):
+
+            def get_embedding(frame: int) -> types.ImageEmbedding:
+                key: tuple[str, str] = (video[0], video[2][frame])
+                embedding: types.ImageEmbedding | None = self._embeddings.get(key)
+                if embedding is None:
+                    embedding = model.encode_image(image=self._track_images[frame])
+                self._cache_embedding(key=key, embedding=embedding)
+                return embedding
+
+            self._timeline = None  # free the old one first
+            live = _LiveTimeline(
+                video=video,
+                timeline=model.new_timeline(
+                    get_embedding=get_embedding,
+                    num_frames=num_frames,
+                    height=height,
+                    width=width,
+                ),
+            )
+        self._timeline = live
+        applied: int = len(live.actions)
+        try:
+            for i in range(applied, len(actions)):
+                action: types.Action = request.actions[i]
+                if not isinstance(action, types.PromptAction) and (
+                    action.base != live.results[i - 1]
+                ):
+                    raise _errors.BaseChangedError(index=i, result=live.results[i - 1])
+                live.timeline.apply(action=action)
+                live.actions.append(actions[i])
+                live.results.append(live.timeline.result())
+        except _errors.BaseChangedError:
+            raise
+        except Exception:
+            # An action may have half applied.
+            self._timeline = None
+            raise
+        track = _Track(
+            frames=[live.timeline.annotations(frame=i) for i in range(num_frames)],
+            results=builtins.list(live.results),
+        )
+        cache: typing.Literal["hit", "partial", "miss"] = (
+            "hit" if applied == len(actions) else "partial" if applied else "miss"
+        )
+        return track, cache
 
     def _load(self, *, model_name: str) -> types.Model:
         # Under _lock. When full, the least recently used model unloads first;
@@ -290,3 +509,11 @@ class Runtime:
             loaded.timer.cancel()
         for key in [key for key in self._embeddings if key[0] == model_name]:
             del self._embeddings[key]
+        if self._timeline is not None and self._timeline.video[0] == model_name:
+            self._timeline = None
+
+
+def _evict(*, cache: collections.OrderedDict, max_bytes: int) -> None:
+    # Least recently used first, keeping the newest even when it alone is larger.
+    while len(cache) > 1 and sum(v.nbytes for v in cache.values()) > max_bytes:
+        cache.popitem(last=False)

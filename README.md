@@ -338,3 +338,24 @@ across releases, and `osam.ResponseError.code` holds it. `/api/models`,
 `{"status": "pulling encoder.onnx", "completed": 524288, "total": 24799761}` and
 ends with `{"status": "success"}` or `{"error": "...", "code": "pull_failed"}`. The full schema is at
 <http://127.0.0.1:11368/docs>.
+
+`/api/track` tracks objects through a video with SAM3, as
+[ADR 0005](docs/adr/0005-video-tracking-as-a-declarative-timeline.md) describes.
+It takes `frames`, each an image file or a reference as in `/api/segment`, and
+`actions`, every edit so far: a `prompt` first, then `add`, `refine` and
+`remove`, each with `base`, the `result` of the response the edit was made on.
+
+```json
+{"model": "sam3", "frames": ["sha256:...", "sha256:..."], "actions": [
+  {"type": "prompt", "frame": 0, "texts": ["person"]},
+  {"type": "refine", "frame": 5, "object_id": 0, "points": [[320, 240]],
+   "point_labels": [0], "base": "sha256:..."}]}
+```
+
+It streams one line per frame, `{"frame": 0, "annotations": [...]}`, each
+annotation with its `object_id`, then
+`{"done": true, "objects": [...], "result": "sha256:...", "cache": "partial"}`.
+A `base` other than the server's result gets 409 with `"code": "base_changed"`
+and the new `result`. Until the video models are uploaded, it needs
+`OSAM_SAM3_VIDEO_MODELS`, a directory of sam3-onnx exports, and `/api/models`
+lists `"track"` in SAM3's `capabilities` only then.

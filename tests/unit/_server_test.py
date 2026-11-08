@@ -52,6 +52,7 @@ def test_openapi_documents_every_route(app: fastapi.FastAPI) -> None:
     assert response.status_code == 200, response.text
     assert {
         "/api/segment",
+        "/api/track",
         "/api/load",
         "/api/models",
         "/api/pull",
@@ -306,3 +307,173 @@ def test_a_value_error_is_a_400_on_every_route(
     response = TestClient(app).post("/api/load", json={"model": "efficientsam:10m"})
     assert response.status_code == 400
     assert response.json() == {"error": "no such thing", "code": "invalid_request"}
+
+
+class _FakeTimeline:
+    # Object i, from action i, covers frames i and up as a one-pixel mask.
+
+    def __init__(self, *, get_embedding, num_frames: int, applied: list):
+        self._get_embedding = get_embedding
+        self._num_frames = num_frames
+        self._applied = applied
+        self._count = 0
+
+    def apply(self, *, action) -> None:
+        if getattr(action, "object_id", None) == 99:
+            raise ValueError("no object 99")
+        self._get_embedding(0)
+        self._applied.append(action.type)
+        self._count += 1
+
+    def annotations(self, *, frame: int) -> list[types.Annotation]:
+        return [
+            types.annotations_from_mask(mask=np.ones((1, 1), bool), score=1)[
+                0
+            ].model_copy(update={"object_id": i})
+            for i in range(min(self._count, frame + 1))
+        ]
+
+    def result(self) -> str:
+        return f"sha256:{self._count:064d}"
+
+
+def _patch_tracking(
+    *, monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
+) -> list[str]:
+    # The fake model tracks with _FakeTimeline; returns the actions it applies.
+    applied: list[str] = []
+    model_type = runtime.model_type(name="fake")
+    monkeypatch.setattr(model_type, "tracks", classmethod(lambda cls: True))
+    monkeypatch.setattr(
+        model_type,
+        "new_timeline",
+        lambda self, *, get_embedding, num_frames, height, width: _FakeTimeline(
+            get_embedding=get_embedding, num_frames=num_frames, applied=applied
+        ),
+    )
+    return applied
+
+
+def _post_track(*, client: TestClient, **fields) -> tuple[list[dict], dict]:
+    response = client.post("/api/track", json={"model": "fake", **fields})
+    assert response.status_code == 200, response.text
+    *frames, done = (json.loads(line) for line in response.text.splitlines())
+    return frames, done
+
+
+def test_track_streams_frames_and_caches_action_prefixes(
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
+) -> None:
+    applied = _patch_tracking(monkeypatch=monkeypatch, runtime=runtime)
+    client = TestClient(app)
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    frames, done = _post_track(
+        client=client, frames=[_TINY_IMAGE_B64] * 3, actions=[prompt]
+    )
+    assert [f["frame"] for f in frames] == [0, 1, 2]
+    assert [a["object_id"] for a in frames[2]["annotations"]] == [0]
+    assert frames[0]["annotations"][0]["mask"]
+    assert done == {
+        "done": True,
+        "objects": [{"object_id": 0, "first_frame": 0, "last_frame": 2}],
+        "result": f"sha256:{1:064d}",
+        "cache": "miss",
+    }
+    assert applied == ["prompt"]
+
+    # By reference, and the same actions: no model runs.
+    ref = _json.image_ref(image=np.zeros((1, 1, 3), np.uint8))
+    add = {"type": "add", "frame": 1, "box": [0, 0, 1, 1], "base": done["result"]}
+    frames, done = _post_track(
+        client=client,
+        frames=[ref] * 3,
+        actions=[prompt],
+        first_frame=1,
+        last_frame=1,
+        include_masks=False,
+    )
+    assert done["cache"] == "hit"
+    assert [f["frame"] for f in frames] == [1]
+    assert frames[0]["annotations"][0]["mask"] is None
+    assert applied == ["prompt"]
+
+    # A new action applies to the cached timeline.
+    frames, done = _post_track(client=client, frames=[ref] * 3, actions=[prompt, add])
+    assert done["cache"] == "partial"
+    assert done["objects"][1] == {"object_id": 1, "first_frame": 1, "last_frame": 2}
+    assert applied == ["prompt", "add"]
+
+    # Undo returns the earlier result without running the model.
+    _, undone = _post_track(client=client, frames=[ref] * 3, actions=[prompt])
+    assert undone["cache"] == "hit"
+    assert applied == ["prompt", "add"]
+
+    # An edit on another result than the server's, such as after a replay.
+    stale = {**add, "base": "sha256:" + "f" * 64}
+    response = client.post(
+        "/api/track",
+        json={
+            "model": "fake",
+            "frames": [ref] * 3,
+            "actions": [prompt, stale],
+        },
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "base_changed"
+    assert response.json()["result"] == f"sha256:{1:064d}"
+
+
+def test_track_reports_errors(
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
+) -> None:
+    client = TestClient(app)
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    unknown = "sha256:" + "0" * 64
+    body = {"model": "fake", "frames": [_TINY_IMAGE_B64, unknown]}
+
+    response = client.post("/api/track", json={**body, "actions": [prompt]})
+    assert response.status_code == 400, response.text
+    assert "doesn't track" in response.json()["error"]
+
+    _patch_tracking(monkeypatch=monkeypatch, runtime=runtime)
+
+    missing = client.post("/api/track", json={**body, "actions": [prompt]})
+    assert missing.status_code == 412, missing.text
+    assert missing.json()["code"] == "missing_images"
+    assert missing.json()["images"] == [unknown]
+
+    body["frames"] = [_TINY_IMAGE_B64]
+    remove = {"type": "remove", "object_id": 0, "base": "sha256:" + "0" * 64}
+    for actions in [[remove], [prompt, prompt], []]:
+        response = client.post("/api/track", json={**body, "actions": actions})
+        assert response.status_code == 422, response.text
+    response = client.post(
+        "/api/track",
+        json={
+            **body,
+            "actions": [
+                prompt,
+                {**remove, "object_id": 99, "base": f"sha256:{1:064d}"},
+            ],
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["error"] == "no object 99"
+    response = client.post(
+        "/api/track", json={**body, "actions": [prompt], "last_frame": 1}
+    )
+    assert response.status_code == 400, response.text
+
+
+def test_sam3_tracks_with_the_video_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    def capabilities() -> list[str]:
+        with contextlib.closing(_runtime.Runtime()) as runtime:
+            app = _server.create_app(runtime=runtime)
+            models = TestClient(app).get("/api/models").json()["models"]
+        (sam3,) = (m for m in models if m["name"] == "sam3:latest")
+        return sam3["capabilities"]
+
+    monkeypatch.delenv("OSAM_SAM3_VIDEO_MODELS", raising=False)
+    assert capabilities() == ["segment"]
+    monkeypatch.setenv("OSAM_SAM3_VIDEO_MODELS", "/models")
+    assert capabilities() == ["segment", "track"]

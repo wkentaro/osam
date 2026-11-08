@@ -7,6 +7,11 @@ from ._model import Model
 from ._model import annotations_from_mask
 from ._prompt import Prompt
 from ._prompt import point_inputs
+from ._track import Action
+from ._track import AddAction
+from ._track import PromptAction
+from ._track import RefineAction
+from ._track import RemoveAction
 
 __all__ = [
     *_public,
@@ -14,6 +19,11 @@ __all__ = [
     "ImageEmbedding",
     "Model",
     "Prompt",
+    "Action",
+    "AddAction",
+    "PromptAction",
+    "RefineAction",
+    "RemoveAction",
     "annotations_from_mask",
     "point_inputs",
 ]

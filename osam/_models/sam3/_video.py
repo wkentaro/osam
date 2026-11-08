@@ -648,11 +648,19 @@ class VideoInference:
         self.obj_id_to_score.pop(obj_id, None)
 
     def add_tracker_new_points(
-        self, frame_idx: int, obj_id: int, points: NDArray, labels: NDArray
+        self,
+        frame_idx: int,
+        obj_id: int,
+        points: NDArray | None,
+        labels: NDArray | None,
+        box: NDArray | None = None,
     ) -> tuple[int, VideoOutput]:
         """Refine an object with points (N, 2) normalized by the video size and
         their labels (N,), replacing its earlier points on that frame, or add a
-        new object with a new obj_id. Return the outputs on that frame."""
+        new object with a new obj_id. Return the outputs on that frame.
+
+        Unlike upstream, it also takes a box (x1, y1, x2, y2) normalized by the
+        video size, which goes before the points, as the tracker takes it."""
         if frame_idx not in self.cached_frame_outputs:
             raise RuntimeError(
                 f"frame {frame_idx} has no outputs yet, propagate before adding points"
@@ -673,7 +681,7 @@ class VideoInference:
         self.removed_obj_ids.discard(obj_id)
 
         _, obj_ids, video_res_masks = tracker.add_new_points_or_box(
-            frame_idx, obj_id, points=points, labels=labels
+            frame_idx, obj_id, points=points, labels=labels, box=box
         )
         # Upstream fills the holes of every object's mask and keeps only this one.
         (mask,) = _fill_holes_in_mask_scores(video_res_masks[obj_ids.index(obj_id)])

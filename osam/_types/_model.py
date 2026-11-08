@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import hashlib
 import threading
+import typing
 from collections.abc import Callable
 
 import imgviz
@@ -21,6 +22,9 @@ from ._image_embedding import ImageEmbedding
 from ._prompt import THRESHOLDS
 from ._prompt import Prompt
 from ._prompt import PromptKind
+
+if typing.TYPE_CHECKING:
+    from .._models.sam3._timeline import Timeline
 
 
 class Model(abc.ABC):
@@ -173,6 +177,23 @@ class Model(abc.ABC):
     def _decode(self, *, embedding: ImageEmbedding, prompt: Prompt) -> list[Annotation]:
         pass
 
+    @classmethod
+    def tracks(cls) -> bool:
+        # Whether new_timeline tracks objects through video frames.
+        return False
+
+    def new_timeline(
+        self,
+        *,
+        get_embedding: Callable[[int], ImageEmbedding],
+        num_frames: int,
+        height: int,
+        width: int,
+    ) -> Timeline:
+        # A video of num_frames frames, whose embeddings get_embedding returns
+        # by frame index, for /api/track's actions.
+        raise NotImplementedError(f"{self.name} doesn't track")
+
 
 def annotations_from_mask(
     *, mask: npt.NDArray[np.bool_], score: float | None = None
@@ -183,7 +204,8 @@ def annotations_from_mask(
     ymin, xmin, ymax, xmax = imgviz.masks_to_bboxes(masks=[mask])[0].astype(int)
     return [
         Annotation(
-            mask=mask[ymin : ymax + 1, xmin : xmax + 1],
+            # A copy, so a cached annotation doesn't keep the whole mask.
+            mask=mask[ymin : ymax + 1, xmin : xmax + 1].copy(),
             bounding_box=BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax),
             score=score,
         )
