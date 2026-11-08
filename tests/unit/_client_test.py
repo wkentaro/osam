@@ -517,3 +517,25 @@ def test_track_sends_frames_the_server_lacks(monkeypatch: pytest.MonkeyPatch) ->
         with pytest.raises(osam.ResponseError) as e:
             client.track("efficientsam:10m", frames, [prompt, {**add, "base": "x"}])
         assert e.value.code == "base_changed"
+
+
+def test_track_sends_every_frame_when_the_server_loses_more(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # As after a restart between the first 412 and the frames it asked for.
+    frames = [np.full((2, 2, 3), value, np.uint8) for value in range(3)]
+    refs = [_http._json.image_ref(image=frame) for frame in frames]
+    posted: list[list[bool]] = []
+    done = {"done": True, "objects": [], "result": "sha256:0", "cache": "miss"}
+
+    def stream(*, path: str, body: dict[str, Any]):
+        posted.append([f.startswith("sha256:") for f in body["frames"]])
+        if len(posted) < 3:
+            missing = refs[2:] if len(posted) == 1 else refs[:2]
+            raise osam.ResponseError("", 412, "missing_images", images=missing)
+        return iter([done])
+
+    monkeypatch.setattr(_backend(client), "_stream", stream)
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    assert client.track("efficientsam:10m", frames, [prompt]).done.result == "sha256:0"
+    assert posted == [[True, True, True], [True, True, False], [False, False, False]]

@@ -181,7 +181,7 @@ class HttpBackend:
         return post(encoded)
 
     def track(self, *, request: _requests.TrackRequest) -> types.TrackResponse:
-        # Every frame by reference first, then the ones the server lacks.
+        # Every frame by reference first.
         frames: list[np.ndarray] = typing.cast(list[np.ndarray], request.frames)
         refs: list[str] = [_json.image_ref(image=frame) for frame in frames]
         body: dict[str, Any] = request.model_dump(
@@ -195,18 +195,25 @@ class HttpBackend:
                 done=types.TrackDone.model_validate(done),
             )
 
-        try:
-            return post(refs)
-        except _errors.ResponseError as e:
-            if e.code != _errors.REPORTED[_errors.UnknownImageError].code:
-                raise
-            missing: set[str] = set(e.images)
-        return post(
-            [
-                _json.image_ndarray_to_b64data(ndarray=frame) if ref in missing else ref
-                for ref, frame in zip(refs, frames)
-            ]
-        )
+        # The ones a 412 lists inline, then, if the server lost more, such as
+        # in a restart, every one, which can't be missing.
+        inline: set[str] = set()
+        for attempt in range(3):
+            try:
+                return post(
+                    [
+                        _json.image_ndarray_to_b64data(ndarray=frame)
+                        if ref in inline
+                        else ref
+                        for ref, frame in zip(refs, frames)
+                    ]
+                )
+            except _errors.ResponseError as e:
+                missing: _errors.Reported = _errors.REPORTED[_errors.UnknownImageError]
+                if e.code != missing.code or attempt == 2:
+                    raise
+                inline |= set(e.images) if attempt == 0 else set(refs)
+        raise AssertionError("unreachable")
 
     def _request(
         self, *, method: str, path: str, body: dict[str, Any] | None = None
