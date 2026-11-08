@@ -5,6 +5,7 @@ import inspect
 import json
 import os
 import pathlib
+import re
 import sys
 import typing
 from collections.abc import Iterator
@@ -215,12 +216,20 @@ def _load_json(ctx, param, value: str | None) -> dict | None:
 
 @cli.command(help="Run a model")
 @click.argument("model_name", metavar="model", type=str)
+@click.option("--image", "image_path", type=click.Path(exists=True), help="image path")
 @click.option(
-    "--image",
-    "image_path",
-    type=click.Path(exists=True),
-    help="image path",
-    required=True,
+    "--video",
+    "video_dir",
+    type=click.Path(exists=True, file_okay=False),
+    help="directory of video frames as images, in name order; the prompt is "
+    "on the first (sam3)",
+)
+@click.option(
+    "-o",
+    "--output",
+    "output_dir",
+    type=click.Path(file_okay=False),
+    help="directory to write a PNG per frame to, for --video",
 )
 @click.option(
     "--prompt",
@@ -264,7 +273,9 @@ def _load_json(ctx, param, value: str | None) -> dict | None:
 @click.option("--json", is_flag=True, help="json output")
 def run(
     model_name: str,
-    image_path: str,
+    image_path: str | None,
+    video_dir: str | None,
+    output_dir: str | None,
     prompt,
     points: list[list[float]],
     boxes: list[list[float]],
@@ -276,9 +287,10 @@ def run(
     device: types.Device | None,
     json: bool,
 ) -> None:
-    # RGB, as a palette image's array holds palette indices, and the
-    # visualization draws on three channels.
-    image: np.ndarray = np.asarray(PIL.Image.open(image_path).convert("RGB"))
+    if (image_path is None) == (video_dir is None):
+        raise click.UsageError("give one of --image or --video")
+    if video_dir is not None and output_dir is None and not json:
+        raise click.UsageError("--video needs -o, or --json")
 
     thresholds: dict = {
         "score_threshold": score_threshold,
@@ -327,6 +339,23 @@ def run(
             )
         prompt_flags = prompt
 
+    if video_dir is not None:
+        if thresholds:
+            raise click.UsageError("--video takes no thresholds")
+        _track(
+            model_name=model_name,
+            video_dir=video_dir,
+            output_dir=output_dir,
+            prompt=prompt_flags,
+            device=device,
+            json=json,
+        )
+        return
+
+    assert image_path is not None
+    # RGB, as a palette image's array holds palette indices, and the
+    # visualization draws on three channels.
+    image: np.ndarray = np.asarray(PIL.Image.open(image_path).convert("RGB"))
     try:
         with _client(device=device) as client:
             annotations: list[types.Annotation] = client.segment(
@@ -348,8 +377,6 @@ def run(
             ).model_dump_json()
         )
     else:
-        visualization: np.ndarray
-
         run_texts: list[str] | None = prompt_flags.get("texts")
         if run_texts:
             instance_labels = [
@@ -371,47 +398,114 @@ def run(
                 caption = None
             captions.append(caption)
 
-        bboxes: NDArray[np.float32] | None = None
-        if all(annotation.bounding_box is not None for annotation in annotations):
-            bboxes = np.array(
-                [
-                    [
-                        getattr(annotation.bounding_box, key)
-                        for key in ["ymin", "xmin", "ymax", "xmax"]
-                    ]
-                    for annotation in annotations
-                ],
-                dtype=np.float32,
-            )
-
-        masks: NDArray[np.bool_] | None = None
-        if all(
-            annotation.mask is not None and annotation.bounding_box is not None
-            for annotation in annotations
-        ):
-            h, w = image.shape[:2]
-            mask_list = []
-            for annotation in annotations:
-                full_mask = np.zeros((h, w), dtype=bool)
-                assert annotation.bounding_box is not None
-                bb = annotation.bounding_box
-                full_mask[bb.ymin : bb.ymax + 1, bb.xmin : bb.xmax + 1] = (
-                    annotation.mask
-                )
-                mask_list.append(full_mask)
-            masks = np.array(mask_list)
-
-        visualization = imgviz.instances2rgb(
+        visualization: np.ndarray = _visualize(
             image=image,
+            annotations=annotations,
             labels=instance_labels,
-            bboxes=bboxes,
-            masks=masks,
             captions=captions,
-            alpha=0.5,
         )
-
         sys.stdout.buffer.write(_json.image_ndarray_to_png(ndarray=visualization))
 
 
 if __name__ == "__main__":
     cli()
+
+
+def _visualize(
+    *,
+    image: np.ndarray,
+    annotations: list[types.Annotation],
+    labels: list[int],
+    captions: list[str | None],
+) -> np.ndarray:
+    bboxes: NDArray[np.float32] | None = None
+    if all(annotation.bounding_box is not None for annotation in annotations):
+        bboxes = np.array(
+            [
+                [
+                    getattr(annotation.bounding_box, key)
+                    for key in ["ymin", "xmin", "ymax", "xmax"]
+                ]
+                for annotation in annotations
+            ],
+            dtype=np.float32,
+        )
+
+    masks: NDArray[np.bool_] | None = None
+    if all(
+        annotation.mask is not None and annotation.bounding_box is not None
+        for annotation in annotations
+    ):
+        h, w = image.shape[:2]
+        mask_list = []
+        for annotation in annotations:
+            full_mask = np.zeros((h, w), dtype=bool)
+            assert annotation.bounding_box is not None
+            bb = annotation.bounding_box
+            full_mask[bb.ymin : bb.ymax + 1, bb.xmin : bb.xmax + 1] = annotation.mask
+            mask_list.append(full_mask)
+        masks = np.array(mask_list)
+
+    return imgviz.instances2rgb(
+        image=image,
+        labels=labels,
+        bboxes=bboxes,
+        masks=masks,
+        captions=captions,
+        alpha=0.5,
+    )
+
+
+def _track(
+    *,
+    model_name: str,
+    video_dir: str,
+    output_dir: str | None,
+    prompt: dict,
+    device: types.Device | None,
+    json: bool,
+) -> None:
+    # Frames in name order, numbers by value, so frame_2 comes before frame_10.
+    paths: list[pathlib.Path] = sorted(
+        (p for p in pathlib.Path(video_dir).iterdir() if p.is_file()),
+        key=lambda p: [
+            int(part) if part.isdigit() else part for part in re.split(r"(\d+)", p.name)
+        ],
+    )
+    if not paths:
+        raise click.UsageError(f"{video_dir} has no frames")
+    try:
+        frames: list[np.ndarray] = [
+            np.asarray(PIL.Image.open(path).convert("RGB")) for path in paths
+        ]
+    except PIL.UnidentifiedImageError as e:
+        raise click.BadParameter(str(e), param_hint="--video")
+    try:
+        with _client(device=device) as client:
+            response: types.TrackResponse = client.track(
+                model_name, frames, [{"type": "prompt", "frame": 0, **prompt}]
+            )
+    except click.ClickException:
+        raise
+    except Exception:
+        logger.exception("Failed to run model")
+        sys.exit(1)
+
+    if json:
+        for frame in response.frames:
+            click.echo(frame.model_dump_json())
+        click.echo(response.done.model_dump_json())
+    if output_dir is None:
+        return
+    os.makedirs(output_dir, exist_ok=True)
+    for path, frame in zip(paths, response.frames):
+        ids: list[int] = [typing.cast(int, a.object_id) for a in frame.annotations]
+        visualization: np.ndarray = _visualize(
+            image=frames[frame.frame],
+            annotations=frame.annotations,
+            # By object, so each keeps its color through the video.
+            labels=[1 + i for i in ids],
+            captions=[str(i) for i in ids],
+        )
+        with open(os.path.join(output_dir, f"{path.stem}.png"), "wb") as f:
+            f.write(_json.image_ndarray_to_png(ndarray=visualization))

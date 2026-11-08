@@ -1,3 +1,4 @@
+import json
 import os
 import pathlib
 import subprocess
@@ -13,6 +14,7 @@ from click.testing import CliRunner
 
 import osam.types
 from osam import __main__
+from osam import _registry
 from osam import _runtime
 from osam import _server
 
@@ -134,3 +136,41 @@ def test_cli_runs_twice_in_one_process(tmp_path: pathlib.Path) -> None:
         [sys.executable, "-c", script], capture_output=True, text=True, env=env
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_run_video_writes_a_png_per_frame(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    from tests.unit._client_test import _serving
+    from tests.unit._server_test import _patch_tracking
+
+    _patch_tracking(
+        monkeypatch=monkeypatch,
+        model_type=_registry.get_model_type_by_name(name="efficientsam:10m"),
+    )
+    video = tmp_path / "video"
+    video.mkdir()
+    for i in [10, 2, 1]:  # name order takes 2 before 10
+        PIL.Image.fromarray(np.full((4, 4, 3), i, np.uint8)).save(video / f"{i}.jpg")
+    out = tmp_path / "out"
+    with _serving() as host:
+        monkeypatch.setenv("OSAM_HOST", host)
+        result = CliRunner().invoke(
+            __main__.run,
+            ["efficientsam:10m", "--video", str(video), "--point", "0,0"]
+            + ["-o", str(out), "--json"],
+        )
+    assert result.exit_code == 0, result.output
+    *frames, done = (
+        json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")
+    )
+    assert [f["frame"] for f in frames] == [0, 1, 2]
+    assert done["objects"] == [{"object_id": 0, "first_frame": 0, "last_frame": 2}]
+    assert sorted(p.name for p in out.iterdir()) == ["1.png", "10.png", "2.png"]
+    assert PIL.Image.open(out / "10.png").size == (4, 4)
+
+    result = CliRunner().invoke(
+        __main__.run, ["efficientsam:10m", "--video", str(video)]
+    )
+    assert result.exit_code == 2
+    assert "--video needs -o" in result.output
