@@ -1,3 +1,8 @@
+import gc
+import types
+import typing
+import weakref
+
 import numpy as np
 import pytest
 
@@ -104,3 +109,29 @@ def test_propagation_history() -> None:
     assert video._parse_action_history_for_propagation() == ("propagation_full", None)
     video._add_action_history("propagation_full", 9, None, reverse=True)
     assert video._parse_action_history_for_propagation()[0] == "propagation_fetch"
+
+
+def test_dropping_the_predictor_frees_it_without_gc() -> None:
+    # The runtime unloads a model by dropping its timeline. A reference cycle
+    # through the trackers would keep the sessions until a gc pass.
+    def session(*, outputs: list[str], batch: object = "num_objects") -> object:
+        return types.SimpleNamespace(
+            get_outputs=lambda: [types.SimpleNamespace(name=n) for n in outputs],
+            get_inputs=lambda: [types.SimpleNamespace(shape=[batch])],
+        )
+
+    sessions = {
+        name: session(outputs=["mask_logits", "single_obj_ptr"])
+        for name in {*_video.MODEL_NAMES, *_tracker.MODEL_NAMES}
+    }
+    predictor = _video.VideoInference(
+        typing.cast(dict, sessions), lambda frame: {}, 1, 4, 4
+    )
+    predictor.trackers.append(predictor._new_tracker())
+    ref = weakref.ref(predictor)
+    gc.disable()
+    try:
+        del predictor
+        assert ref() is None
+    finally:
+        gc.enable()

@@ -14,6 +14,7 @@ box reconditioning, and the object limit.
 """
 
 import collections
+import functools
 import typing
 
 import numpy as np
@@ -197,6 +198,15 @@ def _masks_to_boxes(masks: NDArray[np.bool_]) -> NDArray[np.float32]:
     return np.array(boxes, np.float32).reshape(-1, 4)
 
 
+def _tracker_features(
+    features: typing.Callable[[int], dict[str, NDArray]], frame_idx: int
+) -> list[NDArray]:
+    return [
+        features(frame_idx)[name]
+        for name in ["image_embeddings", "high_res_features1", "high_res_features2"]
+    ]
+
+
 class VideoInference:
     """Detect, segment, and track the objects of a text or box prompt in a
     video.
@@ -222,8 +232,9 @@ class VideoInference:
                 "re-export it with: uv run export_onnx.py"
             )
         self._sessions = sessions
-        self._get_features = get_features
-        self._features_cache: tuple[int, dict[str, NDArray]] | None = None
+        # Trackers share this cache without a reference back to self, so
+        # dropping the predictor frees it, and its sessions, right away.
+        self._features = functools.lru_cache(maxsize=1)(get_features)
         self.num_frames = num_frames
         self.video_height = video_height
         self.video_width = video_width
@@ -257,22 +268,10 @@ class VideoInference:
 
     # Models {{
 
-    def _features(self, frame_idx: int) -> dict[str, NDArray]:
-        if self._features_cache is None or self._features_cache[0] != frame_idx:
-            self._features_cache = (frame_idx, self._get_features(frame_idx))
-        return self._features_cache[1]
-
-    def _tracker_features(self, frame_idx: int) -> list[NDArray]:
-        features = self._features(frame_idx)
-        return [
-            features[name]
-            for name in ["image_embeddings", "high_res_features1", "high_res_features2"]
-        ]
-
     def _new_tracker(self) -> Tracker:
         return Tracker(
             self._sessions,
-            self._tracker_features,
+            functools.partial(_tracker_features, self._features),
             self.num_frames,
             self.video_height,
             self.video_width,
