@@ -52,18 +52,18 @@ def _to_bfloat16(x: NDArray[np.float32]) -> NDArray[np.float32]:
     return (rounded & np.uint32(0xFFFF0000)).view(np.float32)
 
 
-def _interpolation_matrix(size_in: int, size_out: int) -> NDArray[np.float32]:
-    """The (size_out, size_in) weights of bilinear interpolation with
-    align_corners=False along one axis."""
-    x = (np.arange(size_out, dtype=np.float64) + 0.5) * (size_in / size_out) - 0.5
-    x = np.clip(x, 0, size_in - 1)
-    x0 = np.floor(x).astype(np.int64)
-    x1 = np.minimum(x0 + 1, size_in - 1)
-    w1 = x - x0
-    matrix = np.zeros((size_out, size_in), np.float64)
-    np.add.at(matrix, (np.arange(size_out), x0), 1 - w1)
-    np.add.at(matrix, (np.arange(size_out), x1), w1)
-    return matrix.astype(np.float32)
+def _lerp(x: NDArray[np.float32], axis: int, size_out: int) -> NDArray[np.float32]:
+    """Bilinear interpolation with align_corners=False along one axis, from
+    the two nearest inputs of each output."""
+    size_in = x.shape[axis]
+    t = (np.arange(size_out, dtype=np.float64) + 0.5) * (size_in / size_out) - 0.5
+    t = np.clip(t, 0, size_in - 1)
+    i0 = np.floor(t).astype(np.int64)
+    i1 = np.minimum(i0 + 1, size_in - 1)
+    shape = [1] * x.ndim
+    shape[axis] = size_out
+    w1 = (t - i0).astype(np.float32).reshape(shape)
+    return np.take(x, i0, axis=axis) * (1 - w1) + np.take(x, i1, axis=axis) * w1
 
 
 def _resize(x: NDArray[np.float32], height: int, width: int) -> NDArray[np.float32]:
@@ -72,9 +72,8 @@ def _resize(x: NDArray[np.float32], height: int, width: int) -> NDArray[np.float
         return x
     if len(x) == 0:
         return np.zeros((0, 1, height, width), x.dtype)
-    rows = _interpolation_matrix(x.shape[-2], height)
-    cols = _interpolation_matrix(x.shape[-1], width)
-    return (rows @ x.astype(np.float32) @ cols.T).astype(x.dtype)
+    y = _lerp(x.astype(np.float32), axis=-2, size_out=height)
+    return _lerp(y, axis=-1, size_out=width).astype(x.dtype)
 
 
 def _resize_antialias(
