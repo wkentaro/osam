@@ -116,9 +116,7 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
     @app.post("/api/pull", response_class=fastapi.responses.StreamingResponse)
     async def pull(request: PullRequest) -> fastapi.responses.StreamingResponse:
         # Looked up before streaming, so an unknown model is a 404.
-        model_type: type[types.Model] = _registry.get_model_type_by_name(
-            name=request.model
-        )
+        model_type: type[types.Model] = runtime.model_type(name=request.model)
         loop = asyncio.get_running_loop()
         lines: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         cancel = threading.Event()

@@ -1,5 +1,7 @@
 # Every model osam knows, by name.
 
+from collections.abc import Sequence
+
 from . import _models
 from . import _types as types
 
@@ -24,14 +26,18 @@ registered_model_types: list[type[types.Model]] = [
 ]
 
 
-def get_model_type_by_name(*, name: str) -> type[types.Model]:
+def get_model_type_by_name(
+    *,
+    name: str,
+    model_types: Sequence[type[types.Model]] = registered_model_types,
+) -> type[types.Model]:
     model_name: str
     if ":" in name:
         model_name = name
     else:
         model_name = f"{name}:latest"
 
-    for cls in registered_model_types:
+    for cls in model_types:
         if cls.name == model_name:
             break
     else:

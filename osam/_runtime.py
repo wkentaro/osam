@@ -8,6 +8,7 @@ import threading
 import time
 import typing
 from collections.abc import Callable
+from collections.abc import Sequence
 from typing import Any
 from typing import Final
 
@@ -41,9 +42,14 @@ class Runtime:
     # remove, which must not change the files under a model being loaded.
     # device: every loaded model runs on it; None picks one automatically.
     # max_loaded_models: when full, the least recently used model unloads first.
+    # model_types: the models it runs, by name; tests pass fakes.
 
     def __init__(
-        self, *, device: types.Device | None = None, max_loaded_models: int = 1
+        self,
+        *,
+        device: types.Device | None = None,
+        max_loaded_models: int = 1,
+        model_types: Sequence[type[types.Model]] = _registry.registered_model_types,
     ):
         if device not in (None, *typing.get_args(types.Device)):
             raise ValueError(f"unknown device {device!r}")
@@ -53,6 +59,7 @@ class Runtime:
             )
         self._device: Final = device
         self._max_loaded_models: Final = max_loaded_models
+        self._model_types: Final = model_types
         self._lock = threading.Lock()
         # By model name, least recently used first. Written under _lock and
         # _loaded_lock; ps takes only _loaded_lock, so it doesn't wait for a
@@ -76,7 +83,7 @@ class Runtime:
                 modified_at=model_type.get_modified_at(),
                 metadata=model_type.metadata,
             )
-            for model_type in _registry.registered_model_types
+            for model_type in self._model_types
         ]
 
     def ps(self) -> builtins.list[types.RunningModel]:
@@ -101,7 +108,7 @@ class Runtime:
     ) -> None:
         # progress gets a line for each chunk, as /api/pull streams them; cancel
         # stops the download.
-        model_type: type[types.Model] = _registry.get_model_type_by_name(name=model)
+        model_type: type[types.Model] = self.model_type(name=model)
 
         def report(filename: str, completed: int, total: int | None) -> None:
             line = {"status": f"pulling {filename}", "completed": completed}
@@ -111,14 +118,14 @@ class Runtime:
             model_type.pull(progress=report if progress else None, cancel=cancel)
 
     def remove(self, *, model: str) -> None:
-        model_type: type[types.Model] = _registry.get_model_type_by_name(name=model)
+        model_type: type[types.Model] = self.model_type(name=model)
         with self._lock:
             model_type.remove()
 
     def load(self, *, request: LoadRequest) -> None:
         # Loads the model, pulling it if needed, and keeps it loaded for
         # keep_alive seconds; negative keeps it loaded, 0 unloads it, as in Ollama.
-        name: str = _registry.get_model_type_by_name(name=request.model).name
+        name: str = self.model_type(name=request.model).name
         with self._lock:
             if request.keep_alive != 0:
                 self._load(model_name=name)
@@ -127,9 +134,7 @@ class Runtime:
     def segment(self, *, request: SegmentRequest) -> SegmentResponse:
         # Raises UnknownImageError for an image_hash it has no embedding for,
         # and ValueError for a prompt the model doesn't take.
-        model_type: type[types.Model] = _registry.get_model_type_by_name(
-            name=request.model
-        )
+        model_type: type[types.Model] = self.model_type(name=request.model)
         with self._lock:
             try:
                 return self._segment(request=request, model_type=model_type)
@@ -141,6 +146,12 @@ class Runtime:
         with self._lock:
             while self._loaded:
                 self._unload(model_name=next(iter(self._loaded)))
+
+    def model_type(self, *, name: str) -> type[types.Model]:
+        # Raises UnknownModelError for a model it doesn't run.
+        return _registry.get_model_type_by_name(
+            name=name, model_types=self._model_types
+        )
 
     def _segment(
         self, *, request: SegmentRequest, model_type: type[types.Model]
@@ -184,9 +195,7 @@ class Runtime:
             with self._loaded_lock:
                 self._loaded.move_to_end(model_name)
             return self._loaded[model_name].model
-        model_type: type[types.Model] = _registry.get_model_type_by_name(
-            name=model_name
-        )
+        model_type: type[types.Model] = self.model_type(name=model_name)
         # Before unloading anything, so a failed download leaves the others loaded.
         model_type.pull()
         while len(self._loaded) >= self._max_loaded_models:
