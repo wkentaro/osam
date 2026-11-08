@@ -100,7 +100,8 @@ class Timeline:
             raise ValueError(f"no object {object_id}")
 
     def _prompt_texts(self, *, action: types.PromptAction) -> None:
-        if set(THRESHOLDS) & action.model_fields_set:
+        # A null threshold is unset, as the action's cache key has it.
+        if any(getattr(action, name) is not None for name in THRESHOLDS):
             raise ValueError("track takes no thresholds")
         texts: list[str] = typing.cast(list[str], action.texts)
         if len(texts) != 1:
