@@ -174,3 +174,11 @@ def test_run_video_writes_a_png_per_frame(
     )
     assert result.exit_code == 2
     assert "--video needs -o" in result.output
+
+    PIL.Image.fromarray(np.zeros((4, 4, 3), np.uint8)).save(video / "1.png")
+    result = CliRunner().invoke(
+        __main__.run,
+        ["efficientsam:10m", "--video", str(video), "--point", "0,0", "-o", str(out)],
+    )
+    assert result.exit_code == 2
+    assert "same name" in result.output

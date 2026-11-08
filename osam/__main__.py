@@ -407,10 +407,6 @@ def run(
         sys.stdout.buffer.write(_json.image_ndarray_to_png(ndarray=visualization))
 
 
-if __name__ == "__main__":
-    cli()
-
-
 def _visualize(
     *,
     image: np.ndarray,
@@ -474,6 +470,11 @@ def _track(
     )
     if not paths:
         raise click.UsageError(f"{video_dir} has no frames")
+    if output_dir is not None and len({p.stem for p in paths}) < len(paths):
+        raise click.UsageError(
+            f"{video_dir} has frames of the same name, which -o would write to "
+            "one file"
+        )
     try:
         frames: list[np.ndarray] = [
             np.asarray(PIL.Image.open(path).convert("RGB")) for path in paths
@@ -509,3 +510,7 @@ def _track(
         )
         with open(os.path.join(output_dir, f"{path.stem}.png"), "wb") as f:
             f.write(_json.image_ndarray_to_png(ndarray=visualization))
+
+
+if __name__ == "__main__":
+    cli()
