@@ -477,3 +477,33 @@ def test_sam3_tracks_with_the_video_models(monkeypatch: pytest.MonkeyPatch) -> N
     assert capabilities() == ["segment"]
     monkeypatch.setenv("OSAM_SAM3_VIDEO_MODELS", "/models")
     assert capabilities() == ["segment", "track"]
+
+
+def test_track_bounds_its_results_with_long_histories(
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
+) -> None:
+    _patch_tracking(monkeypatch=monkeypatch)
+    monkeypatch.setattr(runtime, "_track_cache_bytes", 4096)
+    client = TestClient(app)
+    actions: list[dict] = [
+        {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    ]
+    for _ in range(40):
+        _, done = _post_track(
+            client=client, frames=[_TINY_IMAGE_B64] * 3, actions=actions
+        )
+        actions.append(
+            {
+                "type": "refine",
+                "frame": 0,
+                "object_id": 0,
+                "points": [[0, 0]],
+                "point_labels": [0],
+                "base": done["result"],
+            }
+        )
+    # Each result costs its frames, not its actions, which the key holds by
+    # digest.
+    assert 1 < len(runtime._tracks) < 40
+    assert sum(track.nbytes for track in runtime._tracks.values()) <= 4096
+    assert all(len(actions) == 64 for _, actions in runtime._tracks)

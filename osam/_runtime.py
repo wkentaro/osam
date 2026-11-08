@@ -4,6 +4,7 @@
 import builtins
 import collections
 import dataclasses
+import hashlib
 import threading
 import time
 import typing
@@ -36,14 +37,14 @@ if typing.TYPE_CHECKING:
 
 @dataclasses.dataclass
 class _Track:
-    # The annotations on every frame after a list of actions, and the result
-    # digest after each of its prefixes.
+    # The annotations on every frame after a list of actions, and its digest.
     frames: list[list[types.Annotation]]
-    results: list[str]
+    result: str
 
     @property
     def nbytes(self) -> int:
-        # With about 128 bytes a frame for the lists and its reference.
+        # With about 128 bytes a frame for the lists and its reference in the
+        # key, which holds the actions by digest, so long histories stay small.
         return 128 * len(self.frames) + sum(
             0 if a.mask is None else a.mask.nbytes for f in self.frames for a in f
         )
@@ -99,7 +100,7 @@ class Runtime:
     # By image reference, least recently used first; under _lock.
     _frames: collections.OrderedDict[str, np.ndarray]
     _tracks: collections.OrderedDict[
-        tuple[tuple[str, str, tuple[str, ...]], tuple[str, ...]], _Track
+        tuple[tuple[str, str, tuple[str, ...]], str], _Track
     ]
     # ponytail: one timeline, so an edit after an undo replays every
     # action; keep one per prefix if those replays take too long.
@@ -314,7 +315,11 @@ class Runtime:
             tuple(refs),
         )
         actions: tuple[str, ...] = tuple(a.model_dump_json() for a in request.actions)
-        track: _Track | None = self._tracks.get((video, actions))
+        key: tuple[tuple[str, str, tuple[str, ...]], str] = (
+            video,
+            hashlib.sha256("\n".join(actions).encode()).hexdigest(),
+        )
+        track: _Track | None = self._tracks.get(key)
         cache: typing.Literal["hit", "partial", "miss"] = "hit"
         if track is None:
             # For the live timeline to encode frames again, during this request
@@ -332,8 +337,8 @@ class Runtime:
                 )
             finally:
                 self._track_images = []
-            self._tracks[(video, actions)] = track
-        self._tracks.move_to_end((video, actions))
+            self._tracks[key] = track
+        self._tracks.move_to_end(key)
         _evict(cache=self._tracks, max_bytes=self._track_cache_bytes)
 
         objects: dict[int, TrackObject] = {}
@@ -356,7 +361,7 @@ class Runtime:
             ],
             done=TrackDone(
                 objects=sorted(objects.values(), key=lambda o: o.object_id),
-                result=track.results[-1],
+                result=track.result,
                 cache=cache,
             ),
         )
@@ -419,7 +424,7 @@ class Runtime:
             raise
         track = _Track(
             frames=[live.timeline.annotations(frame=i) for i in range(num_frames)],
-            results=builtins.list(live.results),
+            result=live.results[-1],
         )
         cache: typing.Literal["hit", "partial", "miss"] = (
             "hit" if applied == len(actions) else "partial" if applied else "miss"
