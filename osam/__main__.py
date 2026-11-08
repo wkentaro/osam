@@ -499,10 +499,18 @@ def _track(
         ]
     except PIL.UnidentifiedImageError as e:
         raise click.BadParameter(str(e), param_hint="--video")
+    # --prompt takes Client.segment's keywords: those Client.track takes too,
+    # such as include_masks, are options of the request, the rest the action's.
+    track_keys: set[str] = set(inspect.signature(Client.track).parameters)
+    options: dict = {k: v for k, v in prompt.items() if k in track_keys}
+    action: dict = {k: v for k, v in prompt.items() if k not in track_keys}
     try:
         with _client(device=device) as client:
             response: types.TrackResponse = client.track(
-                model_name, frames, [{"type": "prompt", "frame": 0, **prompt}]
+                model_name,
+                frames,
+                [{"type": "prompt", "frame": 0} | action],
+                **options,
             )
     except click.ClickException:
         raise

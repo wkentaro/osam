@@ -201,3 +201,30 @@ def test_an_object_keeps_its_color_when_an_earlier_one_leaves() -> None:
         image=image, annotations=[annotation(object_id=1, x=4)]
     )
     assert both[4, 5].tolist() == alone[4, 5].tolist() != [0, 0, 0]
+
+
+def test_run_video_passes_include_masks_to_the_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    from tests.unit._client_test import _serving
+    from tests.unit._server_test import _patch_tracking
+
+    _patch_tracking(monkeypatch=monkeypatch)
+    video = tmp_path / "video"
+    video.mkdir()
+    PIL.Image.fromarray(np.zeros((4, 4, 3), np.uint8)).save(video / "0.jpg")
+    prompt = '{"points": [[0, 0]], "point_labels": [1], "include_masks": false}'
+    with _serving() as host:
+        monkeypatch.setenv("OSAM_HOST", host)
+        result = CliRunner().invoke(
+            __main__.run,
+            ["efficientsam:10m", "--video", str(video), "--prompt", prompt, "--json"]
+            + ["-o", str(tmp_path / "out")],
+        )
+    assert result.exit_code == 0, result.output
+    frame, _ = (
+        json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")
+    )
+    (annotation,) = frame["annotations"]
+    assert annotation["mask"] is None
+    assert annotation["bounding_box"] is not None
