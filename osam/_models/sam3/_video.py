@@ -115,14 +115,19 @@ def _component_areas(mask: NDArray[np.bool_]) -> NDArray[np.int32]:
             i = parent[i]
         return i
 
-    row_bounds = np.searchsorted(rows, np.arange(height + 1))
+    row_bounds = np.searchsorted(rows, np.arange(height + 1)).tolist()
+    starts_list, ends_list = starts.tolist(), ends.tolist()
     for y in range(1, height):
-        above = range(row_bounds[y - 1], row_bounds[y])
+        # Both rows' runs are sorted, so one pass joins every touching pair.
+        j, j_end = row_bounds[y - 1], row_bounds[y]
         for i in range(row_bounds[y], row_bounds[y + 1]):
-            for j in above:
-                # 8-connected: the runs overlap once widened by one pixel.
-                if starts[j] <= ends[i] and starts[i] <= ends[j]:
-                    parent[find(i)] = find(j)
+            while j < j_end and ends_list[j] < starts_list[i]:
+                j += 1
+            # 8-connected: the runs overlap once widened by one pixel.
+            k = j
+            while k < j_end and starts_list[k] <= ends_list[i]:
+                parent[find(i)] = find(k)
+                k += 1
     roots = np.array([find(i) for i in range(len(rows))], np.int64)
     areas = np.bincount(roots, weights=ends - starts, minlength=len(rows))
     out = np.zeros((height, width), np.int32)
