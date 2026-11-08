@@ -413,6 +413,7 @@ def _visualize(
     annotations: list[types.Annotation],
     labels: list[int],
     captions: list[str | None],
+    colormap: NDArray[np.uint8] | None = None,
 ) -> np.ndarray:
     bboxes: NDArray[np.float32] | None = None
     if all(annotation.bounding_box is not None for annotation in annotations):
@@ -449,6 +450,23 @@ def _visualize(
         masks=masks,
         captions=captions,
         alpha=0.5,
+        colormap=colormap,
+    )
+
+
+def _visualize_objects(
+    *, image: np.ndarray, annotations: list[types.Annotation]
+) -> np.ndarray:
+    # instances2rgb fills each mask with the color of its position, so the
+    # colormap puts each object's own color there, the same on every frame.
+    ids: list[int] = [typing.cast(int, a.object_id) for a in annotations]
+    colors: NDArray[np.uint8] = imgviz.label_colormap()
+    return _visualize(
+        image=image,
+        annotations=annotations,
+        labels=list(range(1, 1 + len(ids))),
+        captions=[str(i) for i in ids],
+        colormap=colors[[0, *(1 + i % (len(colors) - 1) for i in ids)]],
     )
 
 
@@ -500,13 +518,8 @@ def _track(
         return
     os.makedirs(output_dir, exist_ok=True)
     for path, frame in zip(paths, response.frames):
-        ids: list[int] = [typing.cast(int, a.object_id) for a in frame.annotations]
-        visualization: np.ndarray = _visualize(
-            image=frames[frame.frame],
-            annotations=frame.annotations,
-            # By object, so each keeps its color through the video.
-            labels=[1 + i for i in ids],
-            captions=[str(i) for i in ids],
+        visualization: np.ndarray = _visualize_objects(
+            image=frames[frame.frame], annotations=frame.annotations
         )
         with open(os.path.join(output_dir, f"{path.stem}.png"), "wb") as f:
             f.write(_json.image_ndarray_to_png(ndarray=visualization))

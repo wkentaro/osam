@@ -17,6 +17,7 @@ from osam import __main__
 from osam import _registry
 from osam import _runtime
 from osam import _server
+from osam import _types
 
 
 def test_full_name_comes_from_the_server_list() -> None:
@@ -182,3 +183,21 @@ def test_run_video_writes_a_png_per_frame(
     )
     assert result.exit_code == 2
     assert "same name" in result.output
+
+
+def test_an_object_keeps_its_color_when_an_earlier_one_leaves() -> None:
+    def annotation(*, object_id: int, x: int) -> _types.Annotation:
+        mask = np.zeros((8, 8), bool)
+        mask[2:6, x : x + 4] = True
+        (a,) = _types.annotations_from_mask(mask=mask, score=1)
+        return a.model_copy(update={"object_id": object_id})
+
+    image = np.zeros((8, 8, 3), np.uint8)
+    both = __main__._visualize_objects(
+        image=image,
+        annotations=[annotation(object_id=0, x=0), annotation(object_id=1, x=4)],
+    )
+    alone = __main__._visualize_objects(
+        image=image, annotations=[annotation(object_id=1, x=4)]
+    )
+    assert both[4, 5].tolist() == alone[4, 5].tolist() != [0, 0, 0]
