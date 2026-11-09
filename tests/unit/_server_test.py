@@ -441,6 +441,7 @@ def test_uvicorn_server_logs_to_the_osam_log(
     app: fastapi.FastAPI, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     uvicorn_logger = logging.getLogger("uvicorn")
     monkeypatch.setattr(uvicorn_logger, "handlers", [])
     _server.uvicorn_server(app=app, log_level="warning")
