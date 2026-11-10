@@ -2,14 +2,9 @@
 
 from collections.abc import Sequence
 
+from . import _errors
 from . import _models
 from . import _types as types
-
-
-class UnknownModelError(LookupError):
-    # A model name osam doesn't know: a 404 from the server.
-    pass
-
 
 registered_model_types: list[type[types.Model]] = [
     _models.EfficientSam10m,
@@ -41,5 +36,5 @@ def get_model_type_by_name(
         if cls.name == model_name:
             break
     else:
-        raise UnknownModelError(f"Model {name!r} not found.")
+        raise _errors.UnknownModelError(f"Model {name!r} not found.")
     return cls

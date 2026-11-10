@@ -10,7 +10,7 @@ from . import _http
 from . import _requests
 from . import _runtime
 from . import types
-from ._http import ResponseError
+from ._errors import ResponseError
 
 __all__ = ["Client", "ResponseError"]
 
