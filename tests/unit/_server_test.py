@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
+import osam
 from osam import _json
 from osam import _requests
 from osam import _runtime
@@ -261,7 +262,7 @@ def test_routing_errors_use_the_error_shape(app: fastapi.FastAPI) -> None:
 
 def test_version(app: fastapi.FastAPI) -> None:
     response = TestClient(app).get("/api/version")
-    assert response.json() == {"version": _server.__version__}
+    assert response.json() == {"version": osam.__version__}
 
 
 @pytest.mark.parametrize(
