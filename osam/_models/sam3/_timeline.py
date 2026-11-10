@@ -17,6 +17,17 @@ from ._video import VideoInference
 
 
 class Timeline:
+    _video: typing.Final[VideoInference]
+    _num_frames: typing.Final[int]
+    _scale: typing.Final[NDArray[np.float32]]
+    # The box and points the user gave each object on each frame, which a
+    # refinement adds to, as the predictor replaces them.
+    _prompts: dict[int, dict[int, tuple[NDArray | None, list, list]]]
+    # The annotations on each frame, by object id, and their digest, kept
+    # in place of the predictor's full-frame masks.
+    _annotations: list[list[types.Annotation]]
+    _result: str
+
     def __init__(
         self,
         *,
@@ -26,18 +37,12 @@ class Timeline:
         height: int,
         width: int,
     ):
-        self._video: typing.Final = VideoInference(
-            sessions, get_features, num_frames, height, width
-        )
-        self._num_frames: typing.Final = num_frames
-        self._scale: typing.Final = np.array([width, height], np.float32)
-        # The box and points the user gave each object on each frame, which a
-        # refinement adds to, as the predictor replaces them.
-        self._prompts: dict[int, dict[int, tuple[NDArray | None, list, list]]] = {}
-        # The annotations on each frame, by object id, and their digest, kept
-        # in place of the predictor's full-frame masks.
-        self._annotations: list[list[types.Annotation]] = [[]] * num_frames
-        self._result: str = ""
+        self._video = VideoInference(sessions, get_features, num_frames, height, width)
+        self._num_frames = num_frames
+        self._scale = np.array([width, height], np.float32)
+        self._prompts = {}
+        self._annotations = [[]] * num_frames
+        self._result = ""
 
     def annotations(self, *, frame: int) -> list[types.Annotation]:
         return self._annotations[frame]

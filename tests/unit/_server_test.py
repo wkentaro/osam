@@ -5,6 +5,7 @@ import json
 import logging
 import pathlib
 import threading
+from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Final
 
@@ -312,6 +313,11 @@ def test_a_value_error_is_a_400_on_every_route(
 class _FakeTimeline:
     # Object i, from action i, covers frames i and up as a one-pixel mask.
 
+    _get_embedding: Callable[[int], object]
+    _num_frames: int
+    _applied: list
+    _count: int
+
     def __init__(self, *, get_embedding, num_frames: int, applied: list):
         self._get_embedding = get_embedding
         self._num_frames = num_frames
@@ -338,11 +344,10 @@ class _FakeTimeline:
 
 
 def _patch_tracking(
-    *, monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
+    *, monkeypatch: pytest.MonkeyPatch, model_type: type[types.Model]
 ) -> list[str]:
-    # The fake model tracks with _FakeTimeline; returns the actions it applies.
+    # model_type tracks with _FakeTimeline; returns the actions it applies.
     applied: list[str] = []
-    model_type = runtime.model_type(name="fake")
     monkeypatch.setattr(model_type, "tracks", classmethod(lambda cls: True))
     monkeypatch.setattr(
         model_type,
@@ -364,7 +369,9 @@ def _post_track(*, client: TestClient, **fields) -> tuple[list[dict], dict]:
 def test_track_streams_frames_and_caches_action_prefixes(
     monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
 ) -> None:
-    applied = _patch_tracking(monkeypatch=monkeypatch, runtime=runtime)
+    applied = _patch_tracking(
+        monkeypatch=monkeypatch, model_type=runtime.model_type(name="fake")
+    )
     client = TestClient(app)
     prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
     frames, done = _post_track(
@@ -435,7 +442,7 @@ def test_track_reports_errors(
     assert response.status_code == 400, response.text
     assert "doesn't track" in response.json()["error"]
 
-    _patch_tracking(monkeypatch=monkeypatch, runtime=runtime)
+    _patch_tracking(monkeypatch=monkeypatch, model_type=runtime.model_type(name="fake"))
 
     missing = client.post("/api/track", json={**body, "actions": [prompt]})
     assert missing.status_code == 412, missing.text
@@ -482,7 +489,7 @@ def test_sam3_tracks_with_the_video_models(monkeypatch: pytest.MonkeyPatch) -> N
 def test_track_bounds_its_results_with_long_histories(
     monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
 ) -> None:
-    _patch_tracking(monkeypatch=monkeypatch)
+    _patch_tracking(monkeypatch=monkeypatch, model_type=runtime.model_type(name="fake"))
     monkeypatch.setattr(runtime, "_track_cache_bytes", 4096)
     client = TestClient(app)
     actions: list[dict] = [
