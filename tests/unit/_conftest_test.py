@@ -7,11 +7,15 @@ from tests import conftest
 
 
 @pytest.mark.parametrize("markexpr", ["", "not extra"])
-def test_pytest_configure_pulls_selected_models(
+def test_pytest_configure_pulls_missing_selected_models(
     monkeypatch: pytest.MonkeyPatch, markexpr: str
 ) -> None:
     models = [
-        SimpleNamespace(name=name, pull=Mock())
+        SimpleNamespace(
+            name=name,
+            pull=Mock(),
+            get_size=Mock(return_value=1 if name == "sam2:tiny" else None),
+        )
         for name in ["efficientsam:10m", "sam3:latest", "sam2:tiny", "sam:100m"]
     ]
     monkeypatch.setattr(conftest.osam._registry, "registered_model_types", models)
@@ -22,6 +26,8 @@ def test_pytest_configure_pulls_selected_models(
 
     conftest.pytest_configure(config)
 
-    assert [model.name for model in models if model.pull.called] == [
-        model.name for model in (models[:3] if markexpr else models)
-    ]
+    assert [model.name for model in models if model.pull.called] == (
+        ["efficientsam:10m", "sam3:latest"]
+        if markexpr
+        else ["efficientsam:10m", "sam3:latest", "sam:100m"]
+    )

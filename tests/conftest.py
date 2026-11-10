@@ -22,13 +22,14 @@ def pytest_configure(config):
         "sam2:tiny",
     ]
 
-    # download should not happen in parallel
-    logger.info("Pulling all registered model types")
+    # Workers must not download the same file in parallel. A model already on
+    # disk is verified when a test loads it, not here on every run.
     for model in osam._registry.registered_model_types:
         if default_test_models_only and model.name not in DEFAULT_TEST_MODELS:
             continue
-        model.pull()
-    logger.info("Finished pulling all registered model types")
+        if model.get_size() is None:
+            logger.info("Pulling {name}", name=model.name)
+            model.pull()
 
 
 @pytest.hookimpl(tryfirst=True)  # before xdist reads the groups
