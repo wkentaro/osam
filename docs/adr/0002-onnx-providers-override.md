@@ -29,3 +29,14 @@ selection short of patching a private function.
   requested list fails, so a typo degrades performance rather than crashing.
 - Auto-probing can be added later behind the same resolver without changing
   the interface.
+
+## Update
+
+Later changes moved past two statements above:
+
+- `osam.Client(device=...)`, `osam serve --device` and `osam run --device`
+  now pick the device, so `OSAM_ONNX_PROVIDERS` is no longer the only way.
+  An explicit device that is unavailable raises an error instead of falling
+  back to CPU, and `OSAM_ONNX_PROVIDERS` is not read.
+- With no device and `OSAM_ONNX_PROVIDERS` unset, osam tries CUDA, then
+  WebGPU when `osam[webgpu]` finds a GPU, then CPU.

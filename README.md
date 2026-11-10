@@ -23,9 +23,8 @@ optional shared server, and its commands and HTTP API follow
 
 *Osam* provides:
 
-- **Promptable Vision Models** - Segment Anything Model (SAM), EfficientSAM, YOLO-World;
-- **Local APIs** - CLI & Python & HTTP interface;
-- **Customization** - Host custom vision models.
+- **Promptable Vision Models** - Segment Anything Model (SAM), SAM2, SAM3, EfficientSAM, YOLO-World;
+- **Local APIs** - CLI & Python & HTTP interface.
 
 ## Installation
 
@@ -197,7 +196,7 @@ osam run efficientsam --image examples/_images/dogs.jpg > output.png
 
 # Get a JSON output
 osam run efficientsam --image examples/_images/dogs.jpg --json
-# {"model": "efficientsam", "mask": "..."}
+# {"model": "efficientsam:latest", "annotations": [{"bounding_box": {...}, "text": null, "score": null, "mask": "..."}]}
 
 # Give a prompt
 # 1. point prompt (x,y[,label]: foreground=1 by default, background=0)
