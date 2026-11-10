@@ -64,8 +64,7 @@ class HttpBackend:
         host = host or os.environ.get("OSAM_HOST") or None
         if host is not None and (device, max_loaded_models) != (None, None):
             raise ValueError(
-                "device and max_loaded_models set up a private server; "
-                "host has its own"
+                "device and max_loaded_models set up a private server; host has its own"
             )
         if max_loaded_models is not None and max_loaded_models < 1:
             raise ValueError(

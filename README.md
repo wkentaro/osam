@@ -254,12 +254,12 @@ import osam
 
 image = np.asarray(Image.open("examples/_images/dogs.jpg"))
 with osam.Client() as client:
-    annotation, = client.segment(
+    (annotation,) = client.segment(
         "efficientsam", image, points=[[1439, 504], [1439, 1289]], point_labels=[1, 1]
     )
 mask = np.zeros(image.shape[:2], dtype=np.bool_)
 bbox = annotation.bounding_box
-mask[bbox.ymin:bbox.ymax + 1, bbox.xmin:bbox.xmax + 1] = annotation.mask
+mask[bbox.ymin : bbox.ymax + 1, bbox.xmin : bbox.xmax + 1] = annotation.mask
 Image.fromarray(mask).save("mask.png")
 ```
 
