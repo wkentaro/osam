@@ -34,6 +34,7 @@ dependencies = [
   "gdown>=6.4.0",
   "imgviz>=2.0.0",
   "loguru",
+  "numpy",
   "Pillow",
   "pydantic",
   "typing-extensions>=4.4",
