@@ -16,8 +16,7 @@ class ModelInfo(pydantic.BaseModel):
     )
     metadata: ModelMetadata
     capabilities: list[typing.Literal["segment"]] = pydantic.Field(
-        description="The endpoints the model serves, such as segment for "
-        "/api/segment"
+        description="The endpoints the model serves, such as segment for /api/segment"
     )
     prompt_kinds: list[PromptKind] = pydantic.Field(
         description="The prompt fields it takes; a request with others gets 400"

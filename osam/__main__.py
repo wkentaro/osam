@@ -395,9 +395,9 @@ def run(
                 full_mask = np.zeros((h, w), dtype=bool)
                 assert annotation.bounding_box is not None
                 bb = annotation.bounding_box
-                full_mask[
-                    bb.ymin : bb.ymax + 1, bb.xmin : bb.xmax + 1
-                ] = annotation.mask
+                full_mask[bb.ymin : bb.ymax + 1, bb.xmin : bb.xmax + 1] = (
+                    annotation.mask
+                )
                 mask_list.append(full_mask)
             masks = np.array(mask_list)
 

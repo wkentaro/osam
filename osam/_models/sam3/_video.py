@@ -230,15 +230,15 @@ class VideoInference:
         self.obj_ids: NDArray[np.int64] = np.array([], np.int64)
         self.max_obj_id: int = -1
         self.obj_id_to_score: dict[int, float] = {}
-        self.obj_id_to_tracker_score_frame_wise: dict[
-            int, dict[int, float]
-        ] = collections.defaultdict(dict)
+        self.obj_id_to_tracker_score_frame_wise: dict[int, dict[int, float]] = (
+            collections.defaultdict(dict)
+        )
         self.obj_id_to_last_occluded: dict[int, int] = {}
         self.obj_first_frame_idx: dict[int, int] = {}
         self.unmatched_frame_inds: dict[int, list[int]] = collections.defaultdict(list)
-        self.overlap_pair_to_frame_inds: dict[
-            tuple[int, int], list[int]
-        ] = collections.defaultdict(list)
+        self.overlap_pair_to_frame_inds: dict[tuple[int, int], list[int]] = (
+            collections.defaultdict(list)
+        )
         self.removed_obj_ids: set[int] = set()
         # frame_idx -> obj_id -> the mask that propagation output on that frame
         self.cached_frame_outputs: dict[int, dict[int, NDArray[np.bool_]]] = {}
