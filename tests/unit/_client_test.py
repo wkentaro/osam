@@ -216,7 +216,7 @@ def test_failed_start_reported_without_traceback(
 
 
 def test_unavailable_device_fails_at_start(capfd: pytest.CaptureFixture[str]) -> None:
-    if "CUDAExecutionProvider" in onnxruntime.get_available_providers():
+    if "CUDAExecutionProvider" in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
         pytest.skip("CUDA is available")
     kwargs_list: list[dict[str, Any]] = [{}, {"in_process": True}]
     for kwargs in kwargs_list:
