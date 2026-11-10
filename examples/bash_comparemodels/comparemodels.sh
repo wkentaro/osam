@@ -22,9 +22,9 @@ done
 output_files=()
 for model in "${selections[@]}"; do
     echo "Running $model"
-    output_file=${model/:/-}.jpg
-    osam run $model --image $image_file > $output_file
-    echo "Exported $model.jpg"
-    output_files+=($output_file)
+    output_file=${model/:/-}.png
+    osam run "$model" --image "$image_file" > "$output_file"
+    echo "Exported $output_file"
+    output_files+=("$output_file")
 done
-echo "Compare results: ${output_files[@]}"
+echo "Compare results: ${output_files[*]}"
