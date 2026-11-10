@@ -66,7 +66,7 @@ class Model(abc.ABC):
             blobs = self._device_blobs(device=device)
         self._inference_sessions = {
             key: _onnx.create_device_session(
-                blob=blob,
+                path=blob.path,
                 providers=_onnx.device_providers(
                     device=device,
                     coreml=self._coreml_blobs is None or key in self._coreml_blobs,

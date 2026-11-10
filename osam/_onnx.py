@@ -252,10 +252,10 @@ def run_on_device(
     return binding.get_outputs()
 
 
-def _coreml_model(*, blob: Blob) -> str | bytes:
+def _coreml_model(*, path: str) -> str | bytes:
     # Rewrites every Gemm to transB=1 in memory: the CoreML EP takes minutes to
     # load Gemm(transB=0), as it writes the transposed weight into its model as
-    # text. A blob with nothing to rewrite is returned as its path.
+    # text. A model with nothing to rewrite is returned as its path.
     try:
         import onnx
         from onnx import numpy_helper
@@ -263,7 +263,7 @@ def _coreml_model(*, blob: Blob) -> str | bytes:
         raise RuntimeError(
             "CoreMLExecutionProvider needs onnx: pip install 'osam[cpu]'"
         ) from None
-    model = onnx.load(blob.path, load_external_data=False)
+    model = onnx.load(path, load_external_data=False)
     initializers = {i.name: i for i in model.graph.initializer}
     gemms = [
         node
@@ -273,9 +273,9 @@ def _coreml_model(*, blob: Blob) -> str | bytes:
         and not any(a.name == "transB" and a.i for a in node.attribute)
     ]
     if not gemms:
-        return blob.path
-    logger.debug("Rewriting {!r} for CoreML", blob.path)
-    onnx.load_external_data_for_model(model, os.path.dirname(blob.path))
+        return path
+    logger.debug("Rewriting {!r} for CoreML", path)
+    onnx.load_external_data_for_model(model, os.path.dirname(path))
     for name in {node.input[1] for node in gemms}:
         weight = initializers[name]
         weight.CopyFrom(numpy_helper.from_array(numpy_helper.to_array(weight).T, name))
@@ -291,7 +291,7 @@ def _first_provider(*, providers: _Providers) -> str:
 
 
 def _create_session(
-    *, blob: Blob, providers: _Providers
+    *, path: str, providers: _Providers
 ) -> onnxruntime.InferenceSession:
     sess_options = onnxruntime.SessionOptions()  # type: ignore[possibly-missing-attribute]
     if "CUDAExecutionProvider" in providers and _setup_cuda():
@@ -300,29 +300,29 @@ def _create_session(
     if provider == "WebGpuExecutionProvider":
         # A plugin provider is added by device; CPU stays as the fallback.
         sess_options.add_provider_for_devices([_webgpu_device()], {})
-        return onnxruntime.InferenceSession(blob.path, sess_options)
+        return onnxruntime.InferenceSession(path, sess_options)
     model: str | bytes = (
-        _coreml_model(blob=blob) if provider == "CoreMLExecutionProvider" else blob.path
+        _coreml_model(path=path) if provider == "CoreMLExecutionProvider" else path
     )
     session = onnxruntime.InferenceSession(model, sess_options, providers=providers)
     if isinstance(model, bytes):
         # onnxruntime keeps a model given as bytes, gigabytes for SAM3, to
         # recreate the session on CPU fallback; the original file serves that.
-        session._model_path = blob.path
+        session._model_path = path
         session._model_bytes = None
     return session
 
 
 def create_device_session(
-    *, blob: Blob, providers: _Providers
+    *, path: str, providers: _Providers
 ) -> onnxruntime.InferenceSession:
     session: onnxruntime.InferenceSession = _create_session(
-        blob=blob, providers=providers
+        path=path, providers=providers
     )
     # onnxruntime silently drops a provider it can't use.
     provider: str = _first_provider(providers=providers)
     if provider not in session.get_providers():
-        raise RuntimeError(f"{provider} failed to load {blob.path}")
+        raise RuntimeError(f"{provider} failed to load {path}")
     # Raise on a provider failure in run() too, instead of retrying on CPU.
     session.disable_fallback()
     return session
@@ -334,7 +334,7 @@ def _load_inference_session(
     try:
         if providers is None:
             providers = resolve_providers()
-        inference_session = _create_session(blob=blob, providers=providers)
+        inference_session = _create_session(path=blob.path, providers=providers)
     except Exception as e:
         # Even though there is fallback in onnxruntime, it won't always work.
         # e.g., CUDA is installed and CUDA_PATH is set, but CUDA_VISIBLE_DEVICES

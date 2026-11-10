@@ -157,7 +157,7 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
 ) -> None:
     from osam._models.sam3._models import Sam3
 
-    monkeypatch.setattr(_onnx, "_coreml_model", lambda blob: f"{blob.path}.t")
+    monkeypatch.setattr(_onnx, "_coreml_model", lambda path: f"{path}.t")
     monkeypatch.setattr(_onnx, "_webgpu_device", lambda: None)
     Sam3(device="coreml")
 
@@ -203,7 +203,7 @@ def test_device_dropped_provider_raises(
     monkeypatch.setattr(
         ort.InferenceSession, "get_providers", lambda self: ["CPUExecutionProvider"]
     )
-    monkeypatch.setattr(_onnx, "_coreml_model", lambda blob: blob.path)
+    monkeypatch.setattr(_onnx, "_coreml_model", lambda path: path)
     with pytest.raises(RuntimeError, match="CoreMLExecutionProvider failed to load"):
         Sam3(device="coreml")
 
@@ -410,7 +410,7 @@ def test_coreml_model_rewrites_gemm_to_trans_b(
     feeds = {"x": np.random.default_rng(0).random((3, 4), dtype=np.float32)}
     expected = onnxruntime.InferenceSession(gemm.path).run(None, feeds)
 
-    model = _onnx._coreml_model(blob=gemm)
+    model = _onnx._coreml_model(path=gemm.path)
 
     assert isinstance(model, bytes)
     actual = onnxruntime.InferenceSession(model).run(None, feeds)
@@ -421,14 +421,14 @@ def test_coreml_model_rewrites_gemm_to_trans_b(
         for node in onnx.load_from_string(model).graph.node
     ]
     assert trans_b == [[1], [1], [1]]
-    assert _onnx._coreml_model(blob=other) == other.path
+    assert _onnx._coreml_model(path=other.path) == other.path
     assert not os.path.exists(gemm.coreml_cache_path)
 
     # The session drops the bytes and falls back from the original file.
     monkeypatch.setattr(
         _onnx, "_first_provider", lambda providers: "CoreMLExecutionProvider"
     )
-    session = _onnx._create_session(blob=gemm, providers=["CPUExecutionProvider"])
+    session = _onnx._create_session(path=gemm.path, providers=["CPUExecutionProvider"])
     assert session._model_bytes is None
     session.set_providers(["CPUExecutionProvider"])
     for a, e in zip(session.run(None, feeds), expected):
