@@ -82,5 +82,14 @@ osam.
   memory.
 - Debugging spans two processes, and server logs need to reach the
   application.
-- Video tracking keeps state across frames and gets an explicit session
-  resource when it is added. It is the only stateful part of the API.
+- Video tracking keeps state across frames. ADR 0005 keeps that state as a
+  server cache of a timeline the client sends, not as a session resource.
+
+## Update
+
+The client cannot see an onnxruntime fault, so it restarts the private server
+after a 500, the status for an error the server did not expect, and sends the
+request again once. An error osam expects gets its own status and no restart:
+400 or 422 for a bad request, 404 for an unknown model, 412 for an image the
+server no longer has, and 502 for a failed download. `osam/_errors.py` lists
+them.

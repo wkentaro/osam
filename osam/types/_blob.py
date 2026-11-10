@@ -12,6 +12,8 @@ from typing import Final
 import gdown
 from loguru import logger
 
+from .. import _errors
+
 _BLOB_ENDPOINT_ENV: Final = "OSAM_BLOB_ENDPOINT"
 _DIRECT: Final = "direct"
 
@@ -188,7 +190,7 @@ class Blob:
                     f" Add {_DIRECT!r} to {_BLOB_ENDPOINT_ENV} to fall back to "
                     f"the canonical URL."
                 )
-            raise RuntimeError(message) from last_error
+            raise _errors.DownloadError(message) from last_error
 
         if self.attachments:
             blob_dir: str = os.path.dirname(self.path)

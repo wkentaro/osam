@@ -18,7 +18,9 @@ import pytest
 import uvicorn
 
 import osam
+from osam import _errors
 from osam import _http
+from osam import _registry
 from osam import _runtime
 from osam import _server
 
@@ -59,6 +61,15 @@ def test_client_segments(any_client: osam.Client) -> None:
     )
     assert annotation.mask is not None
     assert annotation.mask.any()
+    (unmasked,) = client.segment(
+        "efficientsam:10m",
+        _IMAGE,
+        points=np.array([[1280, 800]]),
+        point_labels=[1],
+        include_masks=False,
+    )
+    assert unmasked.mask is None
+    assert unmasked.bounding_box == annotation.bounding_box
     # The same on either backend.
     with osam.Client(in_process=True) as in_process:
         (local,) = in_process.segment(
@@ -93,7 +104,7 @@ def test_unknown_model_raises_lookup_error(any_client: osam.Client) -> None:
         with pytest.raises(LookupError, match="not found") as e:
             call()
         if isinstance(e.value, osam.ResponseError):
-            assert e.value.status_code == 404
+            assert (e.value.status_code, e.value.code) == (404, "model_not_found")
 
 
 def test_invalid_arguments_raise_before_a_request(
@@ -286,7 +297,7 @@ def test_raising_from_progress_stops_the_pull(monkeypatch: pytest.MonkeyPatch) -
             progress("encoder.onnx", completed, 1000)
             time.sleep(0.01)
 
-    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
+    model_type = _registry.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(model_type, "pull", pull)
 
     class Stop(Exception):
@@ -306,13 +317,53 @@ def test_failed_pull_raises_runtime_error(monkeypatch: pytest.MonkeyPatch) -> No
     def pull(progress, cancel) -> None:
         raise RuntimeError("Failed to download encoder.onnx")
 
-    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
+    model_type = _registry.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(model_type, "pull", pull)
 
     with _serving() as host, osam.Client(in_process=True) as in_process:
         for client in [osam.Client(host=host), in_process]:
             with pytest.raises(RuntimeError, match="Failed to download"):
                 client.pull("efficientsam:10m")
+
+
+def test_failed_download_before_a_load_raises_runtime_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def pull(*args, **kwargs) -> None:
+        raise _errors.DownloadError("Failed to download encoder.onnx")
+
+    model_type = _registry.get_model_type_by_name(name="efficientsam:10m")
+    monkeypatch.setattr(model_type, "pull", pull)
+
+    with _serving() as host, osam.Client(in_process=True) as in_process:
+        for client in [osam.Client(host=host), in_process]:
+            for call in [
+                lambda: client.segment("efficientsam:10m", _IMAGE),
+                lambda: client.load("efficientsam:10m"),
+            ]:
+                with pytest.raises(RuntimeError, match="Failed to download") as e:
+                    call()
+                if isinstance(e.value, osam.ResponseError):
+                    assert (e.value.status_code, e.value.code) == (502, "pull_failed")
+
+
+def test_failed_download_does_not_restart_a_private_server(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    process = _backend(client)._process
+    sent: list[str] = []
+
+    def fail(*, path: str, **kwargs: Any) -> Any:
+        sent.append(path)
+        raise _http._response_error(
+            status_code=502, data=b'{"error": "Failed to download encoder.onnx"}'
+        )
+
+    monkeypatch.setattr(_backend(client), "_send", fail)
+    with pytest.raises(RuntimeError, match="Failed to download"):
+        client.load("efficientsam:10m")
+    assert sent == ["/api/load"]  # not sent again
+    assert _backend(client)._process is process
 
 
 def _listening(*, port: int) -> bool:
@@ -323,7 +374,7 @@ def _listening(*, port: int) -> bool:
     return True
 
 
-def test_segment_sends_a_repeated_image_by_hash(
+def test_segment_sends_a_repeated_image_by_reference(
     client: osam.Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     encoded: list[np.ndarray] = []
@@ -336,7 +387,8 @@ def test_segment_sends_a_repeated_image_by_hash(
         return encode(ndarray=ndarray)
 
     def recording(*, method: str, path: str, body: Any = None) -> Any:
-        sent.append({"image", "image_hash"} & set(body or {}))
+        image: str = (body or {}).get("image", "")
+        sent.append({"ref" if image.startswith("sha256:") else "image"})
         return request(method=method, path=path, body=body)
 
     monkeypatch.setattr(_http._json, "image_ndarray_to_b64data", counting)
@@ -344,13 +396,13 @@ def test_segment_sends_a_repeated_image_by_hash(
     image = _IMAGE[::2, ::2].copy()  # not sent by an earlier test
     for _ in range(2):
         client.segment("efficientsam:10m", image)
-    assert sent == [{"image"}, {"image_hash"}]
+    assert sent == [{"image"}, {"ref"}]
     assert len(encoded) == 1
 
     # Another model has no embedding of it yet, so the server asks for it.
     sent.clear()
     client.segment("sam2:tiny", image)
-    assert sent == [{"image_hash"}, {"image"}]
+    assert sent == [{"ref"}, {"image"}]
     assert len(encoded) == 1
 
     image[0, 0] += 1  # edited in place, so it is a new image

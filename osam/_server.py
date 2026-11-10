@@ -19,7 +19,7 @@ import starlette.exceptions
 import uvicorn
 
 from . import __version__
-from . import _registry
+from . import _errors
 from . import _runtime
 from . import _types as types
 from ._requests import LoadRequest
@@ -43,12 +43,20 @@ class PullRequest(pydantic.BaseModel):
     model: str
 
 
-# Errors are {"error": message}, as in Ollama.
+# Errors are {"error": message, "code": code}: the message as in Ollama, and a
+# code that stays the same across releases, for clients to branch on.
 def _error(
-    *, message: str, status_code: int, headers: dict[str, str] | None = None
+    *,
+    message: str,
+    status_code: int,
+    code: str,
+    headers: dict[str, str] | None = None,
+    **fields: Any,
 ) -> fastapi.responses.JSONResponse:
     return fastapi.responses.JSONResponse(
-        {"error": message}, status_code=status_code, headers=headers
+        {"error": message, "code": code, **fields},
+        status_code=status_code,
+        headers=headers,
     )
 
 
@@ -72,27 +80,49 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
         return await asyncio.get_running_loop().run_in_executor(worker, call)
 
     # Starlette's base class also covers routing errors, such as an unknown path.
+    ROUTING_CODES: Final = {404: "not_found", 405: "method_not_allowed"}
     app.add_exception_handler(
         starlette.exceptions.HTTPException,
         lambda request, exc: _error(
-            message=exc.detail, status_code=exc.status_code, headers=exc.headers
+            message=exc.detail,
+            status_code=exc.status_code,
+            code=ROUTING_CODES.get(exc.status_code, _errors.INTERNAL.code),
+            headers=exc.headers,
         ),
     )
     # Anything else is a 500, still in that shape; uvicorn logs the traceback.
     app.add_exception_handler(
         Exception,
         lambda request, exc: _error(
-            message=str(exc) or type(exc).__name__, status_code=500
+            message=str(exc) or type(exc).__name__,
+            status_code=_errors.INTERNAL.status_code,
+            code=_errors.INTERNAL.code,
         ),
     )
+    for error_type, reported in _errors.REPORTED.items():
+        app.add_exception_handler(
+            error_type,
+            lambda request, exc, reported=reported: _error(
+                message=str(exc), status_code=reported.status_code, code=reported.code
+            ),
+        )
+    # Also lists the images to send again, in place of their references.
+    missing: _errors.Reported = _errors.REPORTED[_errors.UnknownImageError]
     app.add_exception_handler(
-        _registry.UnknownModelError,
-        lambda request, exc: _error(message=str(exc), status_code=404),
+        _errors.UnknownImageError,
+        lambda request, exc: _error(
+            message=str(exc),
+            status_code=missing.status_code,
+            code=missing.code,
+            images=exc.refs,
+        ),
     )
     app.add_exception_handler(
         fastapi.exceptions.RequestValidationError,
         lambda request, exc: _error(
-            message=_describe_validation_errors(errors=exc.errors()), status_code=422
+            message=_describe_validation_errors(errors=exc.errors()),
+            status_code=422,
+            code=_errors.REPORTED[ValueError].code,
         ),
     )
 
@@ -129,7 +159,10 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
                 runtime.pull(model=model_type.name, progress=progress, cancel=cancel)
                 last: dict[str, Any] = {"status": "success"}
             except Exception as e:
-                last = {"error": str(e)}
+                last = {
+                    "error": str(e),
+                    "code": _errors.REPORTED[_errors.DownloadError].code,
+                }
             # Through the same queue, so it follows every progress line.
             loop.call_soon_threadsafe(lines.put_nowait, last)
 
@@ -154,12 +187,7 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
 
     @app.post("/api/segment", response_model=SegmentResponse)
     async def segment(request: SegmentRequest) -> SegmentResponse:
-        try:
-            return await run(call=functools.partial(runtime.segment, request=request))
-        except _runtime.UnknownImageError as e:
-            raise fastapi.HTTPException(412, str(e))
-        except ValueError as e:
-            raise fastapi.HTTPException(400, str(e))
+        return await run(call=functools.partial(runtime.segment, request=request))
 
     @app.post("/api/load")
     async def load(request: LoadRequest) -> None:
@@ -198,8 +226,10 @@ def run_private(
     async def check_token(request: fastapi.Request, call_next):
         given: str = request.headers.get("authorization", "")
         if not secrets.compare_digest(given.encode(), AUTHORIZATION.encode()):
-            return fastapi.responses.JSONResponse(
-                {"error": "missing or wrong token"}, status_code=401
+            return _error(
+                message="missing or wrong token",
+                status_code=401,
+                code="unauthorized",
             )
         return await call_next(request)
 

@@ -9,6 +9,7 @@ from unittest import mock
 
 import pytest
 
+from osam import _errors
 from osam.types import _blob
 from osam.types._blob import Blob
 from osam.types._blob import PullCancelledError
@@ -147,6 +148,7 @@ def test_pull_raises_after_exhausting_retries(
             blob.pull()
 
     assert excinfo.value.__cause__ is error
+    assert isinstance(excinfo.value, _errors.DownloadError)
 
 
 def test_pull_falls_back_to_direct_when_mirror_fails(

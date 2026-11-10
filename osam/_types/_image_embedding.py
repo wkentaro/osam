@@ -11,3 +11,7 @@ class ImageEmbedding(pydantic.BaseModel):
     original_width: int
     embedding: npt.NDArray[np.float32]
     extra_features: list[npt.NDArray[np.float32]] = pydantic.Field(default_factory=list)
+
+    @property
+    def nbytes(self) -> int:
+        return self.embedding.nbytes + sum(f.nbytes for f in self.extra_features)

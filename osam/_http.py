@@ -21,35 +21,10 @@ import numpy as np
 from loguru import logger
 
 from . import __version__
+from . import _errors
 from . import _json
 from . import _requests
 from . import types
-
-
-class ResponseError(Exception):
-    """An error the server returned, with its HTTP status code."""
-
-    status_code: int
-
-    def __init__(self, message: str, status_code: int):
-        super().__init__(message)
-        self.status_code = status_code
-
-
-class _InvalidRequestError(ResponseError, ValueError):
-    # A request the server rejected, with 400 or 422, such as a prompt that
-    # mixes one object with every match: a ValueError, as in a local call.
-    pass
-
-
-class _NotFoundError(ResponseError, LookupError):
-    # A 404, such as an unknown model: a LookupError, as in a local call.
-    pass
-
-
-class _PullError(ResponseError, RuntimeError):
-    # A pull that failed on the server: a RuntimeError, as in a local call.
-    pass
 
 
 # HttpBackend.list shadows list inside the class, hence builtins.list there.
@@ -69,10 +44,9 @@ class HttpBackend:
     _process: "_Process | None"
     # Closing it tells the private server to exit.
     _pipe: IO[bytes] | multiprocessing.connection.Connection | None
-    # The last image sent: its local hash, its encoding, and the hash the
-    # server returned for it, as a client often sends one image with
-    # several prompts.
-    _image: tuple[str, str, str]
+    # The last image: its reference, its encoding, and whether the server
+    # took it, as a client often sends one image with several prompts.
+    _image: tuple[str, str, bool]
     # Whether this client owns its server, set once: _process is briefly
     # None while another request restarts it.
     _private: bool
@@ -106,7 +80,7 @@ class HttpBackend:
         self._https = False
         self._process = None
         self._pipe = None
-        self._image = ("", "", "")
+        self._image = ("", "", False)
         self._private = host is None
         self._closed = False
         if host is None:
@@ -157,7 +131,9 @@ class HttpBackend:
     ) -> None:
         for line in self._stream(path="/api/pull", body={"model": model}):
             if "error" in line:
-                raise _PullError(line["error"], status_code=200)
+                raise _errors.PullError(
+                    line["error"], status_code=200, code=line.get("code")
+                )
             if progress is not None:
                 progress(line)
 
@@ -170,36 +146,39 @@ class HttpBackend:
     def segment(
         self, *, request: _requests.SegmentRequest
     ) -> _requests.SegmentResponse:
-        assert request.image is not None
+        assert not isinstance(request.image, str)
         image: np.ndarray = request.image
         body: dict[str, Any] = request.model_dump(
-            mode="json", exclude={"image", "image_hash"}, exclude_none=True
+            mode="json", exclude={"image"}, exclude_none=True
         )
 
-        def post(**image_fields: str) -> _requests.SegmentResponse:
+        def post(image_field: str) -> _requests.SegmentResponse:
             response = _requests.SegmentResponse.model_validate(
                 self._request(
-                    method="POST", path="/api/segment", body=body | image_fields
+                    method="POST",
+                    path="/api/segment",
+                    body=body | {"image": image_field},
                 )
             )
-            self._image = (key, encoded, response.image_hash)
+            self._image = (ref, encoded, True)
             return response
 
         # Hashing takes a fraction of the time PNG encoding does. Read and
         # written whole, so a concurrent call can't mix up two images.
-        key: str = _json.hash_image(image=image)
-        cached_key, encoded, server_hash = self._image
-        if cached_key != key:
+        ref: str = _json.image_ref(image=image)
+        cached_ref, encoded, sent = self._image
+        if cached_ref != ref:
             encoded = _json.image_ndarray_to_b64data(ndarray=image)
-        elif server_hash:
+        elif sent:
             # Sent before, so the server likely has its embedding; 412 if not,
             # such as for another model or after a restart.
             try:
-                return post(image_hash=server_hash)
-            except ResponseError as e:
-                if e.status_code != 412:
+                return post(ref)
+            except _errors.ResponseError as e:
+                missing: _errors.Reported = _errors.REPORTED[_errors.UnknownImageError]
+                if e.code != missing.code:
                     raise
-        return post(image=encoded)
+        return post(encoded)
 
     def _request(
         self, *, method: str, path: str, body: dict[str, Any] | None = None
@@ -219,8 +198,8 @@ class HttpBackend:
             if not self._private:
                 raise
             error: Exception = e
-        except ResponseError as e:
-            if not self._private or e.status_code != 500:
+        except _errors.ResponseError as e:
+            if not self._private or e.status_code != _errors.INTERNAL.status_code:
                 raise
             error = e
         # The private server crashed, or failed in a way that can leave it
@@ -410,16 +389,18 @@ def _wait(*, process: _Process, timeout: float | None) -> bool:
     return not process.is_alive()
 
 
-def _response_error(*, status_code: int, data: bytes) -> ResponseError:
+def _response_error(*, status_code: int, data: bytes) -> _errors.ResponseError:
+    code: str | None = None
     try:
-        message: str = json.loads(data)["error"]
-    except (ValueError, KeyError, TypeError):
+        body: dict[str, Any] = json.loads(data)
+        message: str = body["error"]
+        code = body.get("code")
+    except (ValueError, KeyError, TypeError, AttributeError):
         message = data.decode(errors="replace")
-    if status_code in (400, 422):
-        return _InvalidRequestError(message, status_code=status_code)
-    if status_code == 404:
-        return _NotFoundError(message, status_code=status_code)
-    return ResponseError(message, status_code=status_code)
+    error_type: type[_errors.ResponseError] = _errors.RESPONSE_ERRORS.get(
+        status_code, _errors.ResponseError
+    )
+    return error_type(message, status_code=status_code, code=code)
 
 
 def _serve_stdio() -> None:

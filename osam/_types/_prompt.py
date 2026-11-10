@@ -5,9 +5,10 @@ import numpy as np
 import numpy.typing as npt
 import pydantic
 
+from ..types._model_info import PromptKind
+
 Box = tuple[float, float, float, float]
 PointLabel = typing.Literal[0, 1]
-PromptKind = typing.Literal["points", "box", "texts", "example_boxes"]
 
 # The models that find every match default these to 0.5, 0.1 and 100.
 THRESHOLDS: Final = frozenset({"iou_threshold", "score_threshold", "max_annotations"})
