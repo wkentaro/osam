@@ -18,6 +18,7 @@ import pytest
 import uvicorn
 
 import osam
+from osam import _errors
 from osam import _http
 from osam import _runtime
 from osam import _server
@@ -313,6 +314,46 @@ def test_failed_pull_raises_runtime_error(monkeypatch: pytest.MonkeyPatch) -> No
         for client in [osam.Client(host=host), in_process]:
             with pytest.raises(RuntimeError, match="Failed to download"):
                 client.pull("efficientsam:10m")
+
+
+def test_failed_download_before_a_load_raises_runtime_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def pull(*args, **kwargs) -> None:
+        raise _errors.DownloadError("Failed to download encoder.onnx")
+
+    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
+    monkeypatch.setattr(model_type, "pull", pull)
+
+    with _serving() as host, osam.Client(in_process=True) as in_process:
+        for client in [osam.Client(host=host), in_process]:
+            for call in [
+                lambda: client.segment("efficientsam:10m", _IMAGE),
+                lambda: client.load("efficientsam:10m"),
+            ]:
+                with pytest.raises(RuntimeError, match="Failed to download") as e:
+                    call()
+                if isinstance(e.value, osam.ResponseError):
+                    assert (e.value.status_code, e.value.code) == (502, "pull_failed")
+
+
+def test_failed_download_does_not_restart_a_private_server(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    process = _backend(client)._process
+    sent: list[str] = []
+
+    def fail(*, path: str, **kwargs: Any) -> Any:
+        sent.append(path)
+        raise _http._response_error(
+            status_code=502, data=b'{"error": "Failed to download encoder.onnx"}'
+        )
+
+    monkeypatch.setattr(_backend(client), "_send", fail)
+    with pytest.raises(RuntimeError, match="Failed to download"):
+        client.load("efficientsam:10m")
+    assert sent == ["/api/load"]  # not sent again
+    assert _backend(client)._process is process
 
 
 def _listening(*, port: int) -> bool:

@@ -17,6 +17,11 @@ class UnknownImageError(LookupError):
     pass
 
 
+class DownloadError(RuntimeError):
+    # A model file that no endpoint served.
+    pass
+
+
 class ResponseError(Exception):
     """An error the server returned, with its HTTP status code and its code,
     such as "model_not_found", which stays the same across releases."""
@@ -42,7 +47,8 @@ class NotFoundError(ResponseError, LookupError):
 
 
 class PullError(ResponseError, RuntimeError):
-    # A pull that failed on the server: a RuntimeError, as in a local call.
+    # A download that failed on the server, in a pull or before a model
+    # loads: a RuntimeError, as in a local call.
     pass
 
 
@@ -59,6 +65,8 @@ REPORTED: Final[dict[type[Exception], Reported]] = {
     UnknownModelError: Reported(status_code=404, code="model_not_found"),
     UnknownImageError: Reported(status_code=412, code="missing_images"),
     ValueError: Reported(status_code=400, code="invalid_request"),
+    # 502, as the host of the model files failed, not osam's server.
+    DownloadError: Reported(status_code=502, code="pull_failed"),
 }
 
 # By status code; any other status is a plain ResponseError. 422 is a request
@@ -67,4 +75,5 @@ RESPONSE_ERRORS: Final[dict[int, type[ResponseError]]] = {
     400: InvalidRequestError,
     404: NotFoundError,
     422: InvalidRequestError,
+    502: PullError,
 }
