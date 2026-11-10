@@ -1418,7 +1418,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "click" },
-    { name = "fastapi" },
+    { name = "fastapi", specifier = ">=0.100" },
     { name = "gdown", specifier = ">=6.4.0" },
     { name = "imgviz", specifier = ">=2.0.0" },
     { name = "loguru" },
@@ -1431,8 +1431,8 @@ requires-dist = [
     { name = "onnxruntime-ep-webgpu", marker = "python_full_version >= '3.11' and extra == 'webgpu'", specifier = ">=0.5" },
     { name = "onnxruntime-gpu", extras = ["cuda", "cudnn"], marker = "python_full_version >= '3.11' and extra == 'gpu'", specifier = ">=1.24.1" },
     { name = "onnxruntime-gpu", extras = ["cuda", "cudnn"], marker = "python_full_version < '3.11' and extra == 'gpu'", specifier = ">=1.23.2,<1.24" },
-    { name = "pillow" },
-    { name = "pydantic" },
+    { name = "pillow", specifier = ">=9.1" },
+    { name = "pydantic", specifier = ">=2" },
     { name = "typing-extensions", specifier = ">=4.4" },
     { name = "uvicorn" },
 ]
