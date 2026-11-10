@@ -30,7 +30,7 @@ def non_maximum_suppression(
     boxes (N, 4) as xmin, ymin, xmax, ymax; scores (N, C), a score per class.
     A box can be kept for more than one class. Return the kept boxes, their
     scores, their classes and their indices into boxes, at most
-    max_num_detections of them.
+    max_num_detections of them, by class and then from the highest score.
     """
     global _non_maximum_suppression_inference_session
     if _non_maximum_suppression_inference_session is None:
@@ -59,7 +59,8 @@ def non_maximum_suppression(
     indices = box_indices
 
     if len(boxes) > max_num_detections:
-        keep_indices = np.argsort(scores)[-max_num_detections:]
+        # The highest scores, still in the order above.
+        keep_indices = np.sort(np.argsort(-scores, kind="stable")[:max_num_detections])
         boxes = boxes[keep_indices]
         scores = scores[keep_indices]
         labels = labels[keep_indices]
