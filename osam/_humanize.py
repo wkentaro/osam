@@ -16,12 +16,16 @@ def naturalsize(*, size: int) -> str:
 def naturaltime(*, dt: datetime.datetime, now: datetime.datetime | None = None) -> str:
     if now is None:
         now = datetime.datetime.now()
-    delta = now - dt
+    # A file time ahead of the clock reads as now, not as "23 hours ago".
+    delta = max(now - dt, datetime.timedelta(0))
+    count: int
+    unit: str
     if delta.days > 0:
-        return f"{delta.days} days ago"
+        count, unit = delta.days, "day"
     elif delta.seconds < 60:
-        return f"{delta.seconds} seconds ago"
+        count, unit = delta.seconds, "second"
     elif delta.seconds < 3600:
-        return f"{delta.seconds // 60} minutes ago"
+        count, unit = delta.seconds // 60, "minute"
     else:
-        return f"{delta.seconds // 3600} hours ago"
+        count, unit = delta.seconds // 3600, "hour"
+    return f"{count} {unit}{'' if count == 1 else 's'} ago"

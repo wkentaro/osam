@@ -28,6 +28,11 @@ def test_naturalsize(size: int, expected: str) -> None:
     "delta, expected",
     [
         (datetime.timedelta(days=2), "2 days ago"),
+        (datetime.timedelta(days=1), "1 day ago"),
+        (datetime.timedelta(hours=1), "1 hour ago"),
+        (datetime.timedelta(minutes=1), "1 minute ago"),
+        (datetime.timedelta(seconds=1), "1 second ago"),
+        (datetime.timedelta(seconds=-5), "0 seconds ago"),
         (datetime.timedelta(hours=23), "23 hours ago"),
         (datetime.timedelta(hours=2), "2 hours ago"),
         (datetime.timedelta(seconds=3599), "59 minutes ago"),
