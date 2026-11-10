@@ -20,6 +20,7 @@ import uvicorn
 import osam
 from osam import _errors
 from osam import _http
+from osam import _registry
 from osam import _runtime
 from osam import _server
 
@@ -287,7 +288,7 @@ def test_raising_from_progress_stops_the_pull(monkeypatch: pytest.MonkeyPatch) -
             progress("encoder.onnx", completed, 1000)
             time.sleep(0.01)
 
-    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
+    model_type = _registry.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(model_type, "pull", pull)
 
     class Stop(Exception):
@@ -307,7 +308,7 @@ def test_failed_pull_raises_runtime_error(monkeypatch: pytest.MonkeyPatch) -> No
     def pull(progress, cancel) -> None:
         raise RuntimeError("Failed to download encoder.onnx")
 
-    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
+    model_type = _registry.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(model_type, "pull", pull)
 
     with _serving() as host, osam.Client(in_process=True) as in_process:
@@ -322,7 +323,7 @@ def test_failed_download_before_a_load_raises_runtime_error(
     def pull(*args, **kwargs) -> None:
         raise _errors.DownloadError("Failed to download encoder.onnx")
 
-    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
+    model_type = _registry.get_model_type_by_name(name="efficientsam:10m")
     monkeypatch.setattr(model_type, "pull", pull)
 
     with _serving() as host, osam.Client(in_process=True) as in_process:
