@@ -69,6 +69,8 @@ class Client:
     also a ResponseError with status_code 404.
     """
 
+    _backend: _Backend
+
     def __init__(
         self,
         host: str | None = None,
@@ -78,7 +80,6 @@ class Client:
         timeout: float | None = None,
         in_process: bool = False,
     ):
-        self._backend: _Backend
         if not in_process:
             self._backend = _http.HttpBackend(
                 host,
