@@ -278,7 +278,9 @@ def run(
     device: types.Device | None,
     json: bool,
 ) -> None:
-    image: np.ndarray = np.asarray(PIL.Image.open(image_path))
+    # RGB, as a palette image's array holds palette indices, and the
+    # visualization draws on three channels.
+    image: np.ndarray = np.asarray(PIL.Image.open(image_path).convert("RGB"))
 
     thresholds: dict = {
         "score_threshold": score_threshold,
