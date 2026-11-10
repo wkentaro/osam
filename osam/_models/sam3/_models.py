@@ -153,12 +153,18 @@ class Sam3(types.Model):
                 if p != "WebGpuExecutionProvider"
             ]
             directory: str = os.environ[_VIDEO_MODELS_ENV]
-            self._video_sessions = {
-                name: onnxruntime.InferenceSession(
-                    os.path.join(directory, f"sam3_{name}.onnx"), providers=providers
-                )
-                for name in _video.MODEL_NAMES
-            }
+            sessions: dict[str, onnxruntime.InferenceSession] = {}
+            for name in _video.MODEL_NAMES:
+                path: str = os.path.join(directory, f"sam3_{name}.onnx")
+                session = onnxruntime.InferenceSession(path, providers=providers)
+                # onnxruntime silently drops a provider it can't use, and the
+                # model reports the image encoder's device, so fail instead of
+                # tracking on another one, at load and in run().
+                if session.get_providers()[0] != providers[0]:
+                    raise RuntimeError(f"{providers[0]} failed to load {path}")
+                session.disable_fallback()
+                sessions[name] = session
+            self._video_sessions = sessions
 
         def get_features(frame: int) -> dict[str, NDArray]:
             # The image encoder's outputs by name, as encode_image keeps them.
