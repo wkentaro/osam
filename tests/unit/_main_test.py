@@ -209,7 +209,10 @@ def test_run_video_passes_include_masks_to_the_request(
     from tests.unit._client_test import _serving
     from tests.unit._server_test import _patch_tracking
 
-    _patch_tracking(monkeypatch=monkeypatch)
+    _patch_tracking(
+        monkeypatch=monkeypatch,
+        model_type=_registry.get_model_type_by_name(name="efficientsam:10m"),
+    )
     video = tmp_path / "video"
     video.mkdir()
     PIL.Image.fromarray(np.zeros((4, 4, 3), np.uint8)).save(video / "0.jpg")
