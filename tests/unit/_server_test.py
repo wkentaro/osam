@@ -19,6 +19,7 @@ from osam import _json
 from osam import _requests
 from osam import _runtime
 from osam import _server
+from osam import _types as types
 
 from . import _fakes
 
@@ -223,9 +224,7 @@ def test_segment_bounds_the_embedding_cache_in_bytes(
             embedding=np.zeros(250, dtype=np.float32),  # 1000 bytes
         )
 
-    _patch_encode_image(monkeypatch=monkeypatch, encode_image=encode_image)
-    model_type = _server._registry.get_model_type_by_name(name="efficientsam:10m")
-    monkeypatch.setattr(model_type, "decode", lambda self, *, embedding, prompt: [])
+    monkeypatch.setattr(runtime.model_type(name="fake"), "encode_image", encode_image)
     monkeypatch.setattr(runtime, "_embedding_cache_bytes", 2500)
     client = TestClient(app)
     refs: list[str] = []
@@ -233,18 +232,14 @@ def test_segment_bounds_the_embedding_cache_in_bytes(
         image = _json.image_ndarray_to_b64data(
             ndarray=np.full((1, 1, 3), value, dtype=np.uint8)
         )
-        response = client.post(
-            "/api/segment", json={"model": "efficientsam:10m", "image": image}
-        )
+        response = client.post("/api/segment", json={"model": "fake", "image": image})
         assert response.status_code == 200, response.text
         refs.append(response.json()["image"])
     assert [ref for _, ref in runtime._embeddings] == refs[2:]
 
     # The newest one stays, even when it alone is over the budget.
     monkeypatch.setattr(runtime, "_embedding_cache_bytes", 1)
-    response = client.post(
-        "/api/segment", json={"model": "efficientsam:10m", "image": refs[3]}
-    )
+    response = client.post("/api/segment", json={"model": "fake", "image": refs[3]})
     assert response.status_code == 200, response.text
     assert [ref for _, ref in runtime._embeddings] == refs[3:]
 
