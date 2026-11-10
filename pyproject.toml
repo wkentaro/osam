@@ -29,14 +29,15 @@ classifiers = [
 ]
 dependencies = [
   "click",
-  # osam.Client runs its own server.
-  "fastapi",
+  # osam.Client runs its own server. 0.100 is the first with pydantic 2.
+  "fastapi>=0.100",
   "gdown>=6.4.0",
   "imgviz>=2.0.0",
   "loguru",
   "numpy",
-  "Pillow",
-  "pydantic",
+  # PIL.Image.Resampling
+  "Pillow>=9.1",
+  "pydantic>=2",
   "typing-extensions>=4.4",
   "uvicorn",
 ]
