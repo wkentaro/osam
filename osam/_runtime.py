@@ -44,6 +44,18 @@ class Runtime:
     # max_loaded_models: when full, the least recently used model unloads first.
     # model_types: the models it runs, by name; tests pass fakes.
 
+    _device: Final[types.Device | None]
+    _max_loaded_models: Final[int]
+    _model_types: Final[Sequence[type[types.Model]]]
+    _lock: threading.Lock
+    # By model name, least recently used first. Written under _lock and
+    # _loaded_lock; ps takes only _loaded_lock, so it doesn't wait for a
+    # running model.
+    _loaded: collections.OrderedDict[str, _Loaded]
+    _loaded_lock: threading.Lock
+    # By model name and image hash, least recently used first; under _lock.
+    _embeddings: collections.OrderedDict[tuple[str, str], types.ImageEmbedding]
+
     def __init__(
         self,
         *,
@@ -57,19 +69,13 @@ class Runtime:
             raise ValueError(
                 f"max_loaded_models must be 1 or more: {max_loaded_models}"
             )
-        self._device: Final = device
-        self._max_loaded_models: Final = max_loaded_models
-        self._model_types: Final = model_types
+        self._device = device
+        self._max_loaded_models = max_loaded_models
+        self._model_types = model_types
         self._lock = threading.Lock()
-        # By model name, least recently used first. Written under _lock and
-        # _loaded_lock; ps takes only _loaded_lock, so it doesn't wait for a
-        # running model.
-        self._loaded: collections.OrderedDict[str, _Loaded] = collections.OrderedDict()
+        self._loaded = collections.OrderedDict()
         self._loaded_lock = threading.Lock()
-        # By model name and image hash, least recently used first; under _lock.
-        self._embeddings: collections.OrderedDict[
-            tuple[str, str], types.ImageEmbedding
-        ] = collections.OrderedDict()
+        self._embeddings = collections.OrderedDict()
 
     def version(self) -> str:
         return __version__

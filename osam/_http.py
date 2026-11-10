@@ -58,6 +58,26 @@ class HttpBackend:
     # this process, or a running osam serve at host. See Client for the
     # arguments.
 
+    _timeout: float | None
+    # The private server's Runtime arguments.
+    _server_settings: dict[str, Any]
+    _lock: threading.Lock
+    # host, port and token of the server, swapped whole on a restart, so a
+    # request never sends one server's token to another's port.
+    _endpoint: tuple[str, int, str | None]
+    _https: bool
+    _process: "_Process | None"
+    # Closing it tells the private server to exit.
+    _pipe: IO[bytes] | multiprocessing.connection.Connection | None
+    # The last image sent: its local hash, its encoding, and the hash the
+    # server returned for it, as a client often sends one image with
+    # several prompts.
+    _image: tuple[str, str, str]
+    # Whether this client owns its server, set once: _process is briefly
+    # None while another request restarts it.
+    _private: bool
+    _closed: bool
+
     def __init__(
         self,
         host: str | None = None,
@@ -66,7 +86,7 @@ class HttpBackend:
         max_loaded_models: int | None = None,
         timeout: float | None = None,
     ):
-        self._timeout: float | None = timeout
+        self._timeout = timeout
         host = host or os.environ.get("OSAM_HOST") or None
         if host is not None and (device, max_loaded_models) != (None, None):
             raise ValueError(
@@ -77,27 +97,18 @@ class HttpBackend:
             raise ValueError(
                 f"max_loaded_models must be 1 or more: {max_loaded_models}"
             )
-        # The private server's Runtime arguments.
-        self._server_settings: dict[str, Any] = {
+        self._server_settings = {
             "device": device,
             "max_loaded_models": max_loaded_models or 1,
         }
         self._lock = threading.Lock()
-        # host, port and token of the server, swapped whole on a restart, so a
-        # request never sends one server's token to another's port.
-        self._endpoint: tuple[str, int, str | None] = ("127.0.0.1", 0, None)
-        self._https: bool = False
-        self._process: _Process | None = None
-        # Closing it tells the private server to exit.
-        self._pipe: IO[bytes] | multiprocessing.connection.Connection | None = None
-        # The last image sent: its local hash, its encoding, and the hash the
-        # server returned for it, as a client often sends one image with
-        # several prompts.
-        self._image: tuple[str, str, str] = ("", "", "")
-        # Whether this client owns its server, set once: _process is briefly
-        # None while another request restarts it.
-        self._private: bool = host is None
-        self._closed: bool = False
+        self._endpoint = ("127.0.0.1", 0, None)
+        self._https = False
+        self._process = None
+        self._pipe = None
+        self._image = ("", "", "")
+        self._private = host is None
+        self._closed = False
         if host is None:
             self._start()
             return

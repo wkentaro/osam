@@ -7,6 +7,9 @@ from osam._types import _model
 
 class _VanishingBlob:
     # A blob that osam rm removes right after its first read.
+
+    _reads: int
+
     def __init__(self) -> None:
         self._reads = 0
 

@@ -124,6 +124,8 @@ def fake_sessions(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
     sessions: list[tuple[str, Any]] = []
 
     class FakeSession:
+        _providers: list[str]
+
         def __init__(self, path: str, sess_options: Any, providers: Any = None) -> None:
             if providers is None:
                 providers = [d.ep_name for d in sess_options.devices]
@@ -326,6 +328,8 @@ def test_partial_fallback_moves_every_session_to_cpu(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class Session:
+        _providers: list[str]
+
         def __init__(self, path: str, providers: list[str]) -> None:
             self._providers = providers
 
