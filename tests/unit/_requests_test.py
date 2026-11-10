@@ -56,3 +56,11 @@ def test_segment_request_rejects_unsupported_image_arrays(
         _requests.SegmentRequest.model_validate(
             {"model": "sam2:latest", "image": image}
         )
+
+
+@pytest.mark.parametrize(
+    ("value", "seconds"),
+    [(300, 300), ("10", 10), ("5m", 300), ("1h30m", 5400), ("-1s", -1)],
+)
+def test_parse_duration(value, seconds) -> None:
+    assert _requests._parse_duration(value) == seconds
