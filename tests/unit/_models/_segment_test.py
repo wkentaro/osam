@@ -70,11 +70,49 @@ def test_segment_point_to_mask(model: str) -> None:
     assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
 
 
+@pytest.mark.parametrize("model", ["sam2:tiny"])
+def test_segment_box_to_mask_sam2(model: str) -> None:
+    annotations = _segment(
+        model=model,
+        prompt=types.Prompt(
+            box=(1233, 376, 1649, 691),
+        ),
+    )
+
+    assert len(annotations) == 1
+    for annotation in annotations:
+        assert annotation.text is None
+        assert annotation.score is None
+        assert annotation.mask is not None
+        assert annotation.mask.dtype == bool
+        assert annotation.bounding_box is not None
+        bb = annotation.bounding_box
+        assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
+
+
+def test_segment_negative_box_rejected_by_sam2() -> None:
+    with pytest.raises(ValueError, match="takes box, points, not example_boxes"):
+        _segment(
+            model="sam2:tiny",
+            prompt=types.Prompt(
+                example_boxes=[(450, 551, 1059, 1421)], example_box_labels=[0]
+            ),
+        )
+
+
+@pytest.mark.extra  # yoloworld is not a default test model
+def test_segment_box_rejected_by_yoloworld() -> None:
+    with pytest.raises(ValueError, match="takes texts, not box"):
+        _segment(model="yoloworld", prompt=types.Prompt(box=(450, 551, 1059, 1421)))
+
+
+# The tests below run SAM3, after the YOLO-World case of the first, so that it
+# loads once.
 @pytest.mark.parametrize(
     "model, has_mask",
     [
-        ("sam3:latest", True),
         pytest.param("yoloworld:latest", False, marks=pytest.mark.extra),
+        ("sam3:latest", True),
     ],
 )
 def test_segment_text_to_bounding_box(
@@ -103,26 +141,6 @@ def test_segment_text_to_bounding_box(
             )
         else:
             assert annotation.mask is None
-
-
-@pytest.mark.parametrize("model", ["sam2:tiny"])
-def test_segment_box_to_mask_sam2(model: str) -> None:
-    annotations = _segment(
-        model=model,
-        prompt=types.Prompt(
-            box=(1233, 376, 1649, 691),
-        ),
-    )
-
-    assert len(annotations) == 1
-    for annotation in annotations:
-        assert annotation.text is None
-        assert annotation.score is None
-        assert annotation.mask is not None
-        assert annotation.mask.dtype == bool
-        assert annotation.bounding_box is not None
-        bb = annotation.bounding_box
-        assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
 
 
 @pytest.mark.extra
@@ -204,22 +222,6 @@ def test_segment_max_annotations_sam3(
 
     [annotation] = annotations
     assert annotation.score is not None and annotation.score > 0.95
-
-
-def test_segment_negative_box_rejected_by_sam2() -> None:
-    with pytest.raises(ValueError, match="takes box, points, not example_boxes"):
-        _segment(
-            model="sam2:tiny",
-            prompt=types.Prompt(
-                example_boxes=[(450, 551, 1059, 1421)], example_box_labels=[0]
-            ),
-        )
-
-
-@pytest.mark.extra  # yoloworld is not a default test model
-def test_segment_box_rejected_by_yoloworld() -> None:
-    with pytest.raises(ValueError, match="takes texts, not box"):
-        _segment(model="yoloworld", prompt=types.Prompt(box=(450, 551, 1059, 1421)))
 
 
 def test_segment_point_to_mask_sam3(
