@@ -22,7 +22,7 @@ def tokenize(
                 tokens = tokens[:context_length]
                 tokens[-1] = eot_token
             else:
-                raise RuntimeError(
+                raise ValueError(
                     f"Input {texts[i]} is too long for context length {context_length}"
                 )
         result[i, : len(tokens)] = tokens

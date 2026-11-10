@@ -1,7 +1,9 @@
 import types
 
 import numpy as np
+import pytest
 
+from osam import _types
 from osam._models import yoloworld
 
 
@@ -39,3 +41,31 @@ def test_decode_maps_boxes_back_from_the_embedding() -> None:
     assert bb is not None
     assert (bb.xmin, bb.ymin, bb.xmax, bb.ymax) == (0, 0, 10, 9)
     assert annotation.text == "anything"
+
+
+def _model_scoring(*, scores: list[float]) -> yoloworld.YoloWorldXL:
+    model = yoloworld.YoloWorldXL.__new__(yoloworld.YoloWorldXL)
+    model._inference_sessions = {
+        "textual": types.SimpleNamespace(run=lambda *_: [np.ones((2, 4), np.float32)]),
+        "yolo": types.SimpleNamespace(
+            run=lambda **_: [
+                np.array([[scores]], np.float32),
+                np.array([[[0.0, 160.0, 320.0, 480.0]]], np.float32),
+            ]
+        ),
+    }
+    return model
+
+
+def test_decode_drops_the_padding_class() -> None:
+    # The last score column is the " " padding text, which no one asked for.
+    model = _model_scoring(scores=[0.0, 0.9])
+    embedding = model.encode_image(image=np.zeros((10, 20, 3), np.uint8))
+    assert model.decode(embedding=embedding, prompt=_types.Prompt(texts=["dog"])) == []
+
+
+def test_decode_rejects_a_text_past_the_token_limit() -> None:
+    model = _model_scoring(scores=[0.9, 0.0])
+    embedding = model.encode_image(image=np.zeros((10, 20, 3), np.uint8))
+    with pytest.raises(ValueError, match="too long"):
+        model.decode(embedding=embedding, prompt=_types.Prompt(texts=["dog " * 100]))
