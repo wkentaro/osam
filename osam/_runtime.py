@@ -44,9 +44,13 @@ class _Track:
     @property
     def nbytes(self) -> int:
         # With about 128 bytes a frame for the lists and its reference in the
-        # key, which holds the actions by digest, so long histories stay small.
+        # key, which holds the actions by digest, so long histories stay small,
+        # and about 1200 bytes an annotation besides its mask's pixels, so many
+        # small masks count too.
         return 128 * len(self.frames) + sum(
-            0 if a.mask is None else a.mask.nbytes for f in self.frames for a in f
+            1200 + (0 if a.mask is None else a.mask.nbytes)
+            for f in self.frames
+            for a in f
         )
 
 

@@ -490,7 +490,7 @@ def test_track_bounds_its_results_with_long_histories(
     monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
 ) -> None:
     _patch_tracking(monkeypatch=monkeypatch, model_type=runtime.model_type(name="fake"))
-    monkeypatch.setattr(runtime, "_track_cache_bytes", 4096)
+    monkeypatch.setattr(runtime, "_track_cache_bytes", 16384)
     client = TestClient(app)
     actions: list[dict] = [
         {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
@@ -512,5 +512,10 @@ def test_track_bounds_its_results_with_long_histories(
     # Each result costs its frames, not its actions, which the key holds by
     # digest.
     assert 1 < len(runtime._tracks) < 40
-    assert sum(track.nbytes for track in runtime._tracks.values()) <= 4096
+    assert sum(track.nbytes for track in runtime._tracks.values()) <= 16384
+    # An annotation costs more than its mask's few pixels.
+    assert all(
+        track.nbytes > 1024 * sum(len(f) for f in track.frames) > 0
+        for track in runtime._tracks.values()
+    )
     assert all(len(actions) == 64 for _, actions in runtime._tracks)
