@@ -3,10 +3,14 @@ import math
 
 
 def naturalsize(*, size: int) -> str:
+    if size == 0:
+        return "0B"
     base = 1024
     prefixes = ["B", "KB", "MB", "GB", "TB", "PB"]
-    power = min(int(math.log(size, base)), len(prefixes) - 1) if size else 0
-    return f"{size / base**power:.2f} {prefixes[power]}"
+    power = int(math.log(size, base))
+    prefix = prefixes[power]
+    size /= base**power
+    return f"{size:.2f} {prefix}"
 
 
 def naturaltime(*, dt: datetime.datetime, now: datetime.datetime | None = None) -> str:
