@@ -16,11 +16,11 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: extractions/setup-just@4a174aa1487e2bcb3f86a8fe24a05361a4f4fff1
         with:
           just-version: 1.58.0
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
@@ -36,11 +36,11 @@ jobs:
       matrix:
         python-version: ['3.10']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: extractions/setup-just@4a174aa1487e2bcb3f86a8fe24a05361a4f4fff1
         with:
           just-version: 1.58.0
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
@@ -67,11 +67,11 @@ jobs:
             # windows filesystem cannot handle parallel tests well
             pytest-args: -n 0 -m 'not extra'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: extractions/setup-just@4a174aa1487e2bcb3f86a8fe24a05361a4f4fff1
         with:
           just-version: 1.58.0
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
