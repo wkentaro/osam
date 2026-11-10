@@ -167,7 +167,9 @@ def test_unreachable_host_reported_in_one_line():
         env={**os.environ, "OSAM_HOST": "127.0.0.1:1"},
     )
     assert result.returncode == 1
-    assert result.stderr.startswith("Error: can't reach 127.0.0.1:1")
+    # onnxruntime can print device-discovery warnings first, as it does on
+    # GitHub's runners from 1.24.
+    assert result.stderr.splitlines()[-1].startswith("Error: can't reach 127.0.0.1:1")
     assert "Traceback" not in result.stderr
 
 
@@ -177,6 +179,7 @@ def test_failed_server_start_reported_in_one_line(tmp_path: pathlib.Path):
     env.pop("OSAM_HOST", None)
     result = subprocess.run(["osam", "list"], capture_output=True, text=True, env=env)
     assert result.returncode == 1
-    assert result.stderr == (
-        "Error: osam server failed to start: ImportError: broken uvicorn\n"
+    assert result.stderr.splitlines()[-1] == (
+        "Error: osam server failed to start: ImportError: broken uvicorn"
     )
+    assert "Traceback" not in result.stderr
