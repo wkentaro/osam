@@ -68,8 +68,6 @@ webgpu = [
   "onnxruntime-ep-webgpu>=0.5; python_version >= '3.11'",
   "onnx>=1.17.0; sys_platform == 'darwin' and python_version >= '3.11'",
 ]
-# Kept so `pip install osam[serve]` still resolves; the server is built in.
-serve = []
 
 [tool.uv]
 conflicts = [

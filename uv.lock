@@ -1436,7 +1436,7 @@ requires-dist = [
     { name = "typing-extensions", specifier = ">=4.4" },
     { name = "uvicorn" },
 ]
-provides-extras = ["cpu", "gpu", "serve", "webgpu"]
+provides-extras = ["cpu", "gpu", "webgpu"]
 
 [package.metadata.requires-dev]
 dev = [
