@@ -9,7 +9,7 @@ from osam._humanize import naturaltime
 @pytest.mark.parametrize(
     "size, expected",
     [
-        (0, "0B"),
+        (0, "0.00 B"),
         (1, "1.00 B"),
         (1023, "1023.00 B"),
         (1024, "1.00 KB"),
@@ -18,6 +18,7 @@ from osam._humanize import naturaltime
         (1024**3, "1.00 GB"),
         (1024**4, "1.00 TB"),
         (1024**5, "1.00 PB"),
+        (1024**6, "1024.00 PB"),
     ],
 )
 def test_naturalsize(size: int, expected: str) -> None:
@@ -28,6 +29,11 @@ def test_naturalsize(size: int, expected: str) -> None:
     "delta, expected",
     [
         (datetime.timedelta(days=2), "2 days ago"),
+        (datetime.timedelta(days=1), "1 day ago"),
+        (datetime.timedelta(hours=1), "1 hour ago"),
+        (datetime.timedelta(minutes=1), "1 minute ago"),
+        (datetime.timedelta(seconds=1), "1 second ago"),
+        (datetime.timedelta(seconds=-5), "0 seconds ago"),
         (datetime.timedelta(hours=23), "23 hours ago"),
         (datetime.timedelta(hours=2), "2 hours ago"),
         (datetime.timedelta(seconds=3599), "59 minutes ago"),
