@@ -162,7 +162,7 @@ def test_registered_models_have_immutable_license_metadata() -> None:
     revision_pattern = re.compile(r"/(?:blob|tree)/[0-9a-f]{40}(?:/|$)")
 
     for model_type in _registry.registered_model_types:
-        metadata = _registry.get_model_metadata(name=model_type.name)
+        metadata = model_type.metadata
 
         assert metadata.license_name
         assert metadata.license_url.startswith("https://")
@@ -172,7 +172,7 @@ def test_registered_models_have_immutable_license_metadata() -> None:
 
 
 def test_yoloworld_metadata_points_to_artifact_provenance() -> None:
-    metadata = _registry.get_model_metadata(name="yoloworld")
+    metadata = _registry.get_model_type_by_name(name="yoloworld").metadata
 
     assert metadata.license_spdx == "GPL-3.0-only"
     url_prefix = "https://github.com/wkentaro/yolo-world-onnx/blob/"
