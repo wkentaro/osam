@@ -290,7 +290,8 @@ same minor version of osam. Errors from the server raise `osam.ResponseError`.
 a private server, so a hung model stops.
 `client.pull(model, progress=...)` calls `progress` with each line; raising
 from it, such as when the user cancels, stops the download. A download that
-fails raises `RuntimeError`.
+fails raises `RuntimeError`, from `pull` and from a `segment` or `load` that
+has to download the model first.
 
 `osam.Client(in_process=True)` runs models in your own process instead, with
 no server, and takes the same calls. `device`, `max_loaded_models` and

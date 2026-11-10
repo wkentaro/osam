@@ -148,7 +148,10 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
                 runtime.pull(model=model_type.name, progress=progress, cancel=cancel)
                 last: dict[str, Any] = {"status": "success"}
             except Exception as e:
-                last = {"error": str(e), "code": "pull_failed"}
+                last = {
+                    "error": str(e),
+                    "code": _errors.REPORTED[_errors.DownloadError].code,
+                }
             # Through the same queue, so it follows every progress line.
             loop.call_soon_threadsafe(lines.put_nowait, last)
 
