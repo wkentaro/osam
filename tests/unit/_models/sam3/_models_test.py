@@ -141,3 +141,37 @@ def test_decode_finds_objects_for_each_text() -> None:
         ("car", pytest.approx(0.9)),
         ("dog", pytest.approx(0.5)),
     ]
+
+
+def test_encode_image_fetches_only_the_outputs_decoders_read() -> None:
+    requested: list[list[str]] = []
+
+    def run(output_names: list[str], inputs: dict) -> list[np.ndarray]:
+        requested.append(output_names)
+        return [
+            np.full((1, 1, 1, 1), index, np.float32)
+            for index in range(len(output_names))
+        ]
+
+    model = Sam3.__new__(Sam3)
+    model._inference_sessions = {"image_encoder": pytypes.SimpleNamespace(run=run)}
+
+    embedding = model.encode_image(image=np.zeros((4, 6, 3), np.uint8))
+
+    [output_names] = requested
+    assert "vision_pos_enc_0" not in output_names
+    assert "vision_pos_enc_1" not in output_names
+    # Each output lands in the field its decoder reads it from.
+    by_name = dict(zip(output_names, range(len(output_names))))
+    assert embedding.embedding.item() == by_name["backbone_fpn_0"]
+    assert [feature.item() for feature in embedding.extra_features] == [
+        by_name[name]
+        for name in [
+            "backbone_fpn_1",
+            "backbone_fpn_2",
+            "vision_pos_enc_2",
+            "image_embeddings",
+            "high_res_features1",
+            "high_res_features2",
+        ]
+    ]

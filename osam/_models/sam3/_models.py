@@ -57,27 +57,28 @@ class Sam3(types.Model):
             2, 0, 1
         )  # HWC → CHW
 
-        outputs = self._inference_sessions["image_encoder"].run(
-            None, {"image": image_input}
-        )
-
-        vision_pos_enc_2: NDArray[np.float32] = cast(
-            NDArray[np.float32], outputs[2]
-        ).squeeze(axis=0)
-        backbone_fpn_0: NDArray[np.float32] = cast(
-            NDArray[np.float32], outputs[3]
-        ).squeeze(axis=0)
-        backbone_fpn_1: NDArray[np.float32] = cast(
-            NDArray[np.float32], outputs[4]
-        ).squeeze(axis=0)
-        backbone_fpn_2: NDArray[np.float32] = cast(
-            NDArray[np.float32], outputs[5]
-        ).squeeze(axis=0)
-
-        # image_embeddings, high_res_features1, high_res_features2 for points
-        point_features: list[NDArray[np.float32]] = [
-            cast(NDArray[np.float32], output).squeeze(axis=0) for output in outputs[6:9]
+        # By name, without vision_pos_enc_0 and vision_pos_enc_1: 106 MB of
+        # constants that no decoder reads, copied from the GPU on every run.
+        output_names: list[str] = [
+            "vision_pos_enc_2",
+            "backbone_fpn_0",
+            "backbone_fpn_1",
+            "backbone_fpn_2",
+            # for points
+            "image_embeddings",
+            "high_res_features1",
+            "high_res_features2",
         ]
+        outputs = self._inference_sessions["image_encoder"].run(
+            output_names, {"image": image_input}
+        )
+        (
+            vision_pos_enc_2,
+            backbone_fpn_0,
+            backbone_fpn_1,
+            backbone_fpn_2,
+            *point_features,
+        ) = (cast(NDArray[np.float32], output).squeeze(axis=0) for output in outputs)
 
         return types.ImageEmbedding(
             original_height=original_height,
