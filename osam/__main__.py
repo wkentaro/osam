@@ -480,15 +480,22 @@ def _track(
     json: bool,
 ) -> None:
     # Frames in name order, numbers by value, so frame_2 comes before frame_10.
+    # Only images, so a .DS_Store or a label file beside the frames is no frame.
+    extensions: dict[str, str] = PIL.Image.registered_extensions()
     paths: list[pathlib.Path] = sorted(
-        (p for p in pathlib.Path(video_dir).iterdir() if p.is_file()),
+        (
+            p
+            for p in pathlib.Path(video_dir).iterdir()
+            if p.is_file() and p.suffix.lower() in extensions
+        ),
         key=lambda p: [
             int(part) if part.isdigit() else part for part in re.split(r"(\d+)", p.name)
         ],
     )
     if not paths:
         raise click.UsageError(f"{video_dir} has no frames")
-    if output_dir is not None and len({p.stem for p in paths}) < len(paths):
+    # Without case, as a.png and A.png are one file on macOS and Windows.
+    if output_dir is not None and len({p.stem.casefold() for p in paths}) < len(paths):
         raise click.UsageError(
             f"{video_dir} has frames of the same name, which -o would write to "
             "one file"

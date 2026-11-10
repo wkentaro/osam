@@ -153,6 +153,8 @@ def test_run_video_writes_a_png_per_frame(
     video.mkdir()
     for i in [10, 2, 1]:  # name order takes 2 before 10
         PIL.Image.fromarray(np.full((4, 4, 3), i, np.uint8)).save(video / f"{i}.jpg")
+    for name in [".DS_Store", "1.json"]:  # files beside the frames are no frames
+        (video / name).write_text("{}")
     out = tmp_path / "out"
     with _serving() as host:
         monkeypatch.setenv("OSAM_HOST", host)
@@ -176,13 +178,19 @@ def test_run_video_writes_a_png_per_frame(
     assert result.exit_code == 2
     assert "--video needs -o" in result.output
 
-    PIL.Image.fromarray(np.zeros((4, 4, 3), np.uint8)).save(video / "1.png")
-    result = CliRunner().invoke(
-        __main__.run,
-        ["efficientsam:10m", "--video", str(video), "--point", "0,0", "-o", str(out)],
-    )
-    assert result.exit_code == 2
-    assert "same name" in result.output
+    # Also without case: a.jpg and A.png write one file on macOS and Windows.
+    for names in [["1.png"], ["a.jpg", "A.png"]]:
+        for name in names:
+            PIL.Image.fromarray(np.zeros((4, 4, 3), np.uint8)).save(video / name)
+        result = CliRunner().invoke(
+            __main__.run,
+            ["efficientsam:10m", "--video", str(video), "--point", "0,0"]
+            + ["-o", str(out)],
+        )
+        assert result.exit_code == 2
+        assert "same name" in result.output
+        for name in names:
+            (video / name).unlink()
 
 
 def test_an_object_keeps_its_color_when_an_earlier_one_leaves() -> None:
