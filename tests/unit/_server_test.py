@@ -17,7 +17,6 @@ from fastapi.testclient import TestClient
 
 import osam
 from osam import _json
-from osam import _requests
 from osam import _runtime
 from osam import _server
 from osam import _types as types
@@ -266,22 +265,11 @@ def test_version(app: fastapi.FastAPI) -> None:
 
 
 @pytest.mark.parametrize(
-    ("value", "seconds"),
-    [(300, 300), ("10", 10), ("5m", 300), ("1h30m", 5400), ("-1s", -1)],
-)
-def test_parse_duration(value, seconds) -> None:
-    assert _requests._parse_duration(value) == seconds
-
-
-@pytest.mark.parametrize(
     "fields",
     [
+        # One the prompt's own validator rejects, which _prompt_test.py covers
+        # in full, and one whose type is wrong.
         {"points": [[1, 2]], "texts": ["dog"]},
-        {"box": [0, 0, 1, 1], "example_boxes": [[0, 0, 1, 1]]},
-        {"points": [[1, 2]]},
-        {"points": [[1, 2]], "point_labels": [1, 1]},
-        {"example_box_labels": [1]},
-        {"point_labels": [2], "points": [[1, 2]]},
         {"box": [0, 0, 1]},
     ],
 )

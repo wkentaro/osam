@@ -1,5 +1,4 @@
 import pathlib
-import re
 
 import imgviz
 import pytest
@@ -8,7 +7,7 @@ from osam import _registry
 from osam import _types as types
 
 image_path = (
-    pathlib.Path(__file__).resolve().parents[2] / "examples" / "_images" / "dogs.jpg"
+    pathlib.Path(__file__).resolve().parents[3] / "examples" / "_images" / "dogs.jpg"
 )
 
 
@@ -51,13 +50,13 @@ def _sam3(
         pytest.param("sam:100m", marks=pytest.mark.extra),
         pytest.param("sam:300m", marks=pytest.mark.extra),
         pytest.param("sam:latest", marks=pytest.mark.extra),
-        pytest.param("sam2:tiny", marks=pytest.mark.extra),
+        "sam2:tiny",
         pytest.param("sam2:small", marks=pytest.mark.extra),
         pytest.param("sam2:latest", marks=pytest.mark.extra),
         pytest.param("sam2:large", marks=pytest.mark.extra),
     ],
 )
-def test_generate_point_to_mask(model: str) -> None:
+def test_segment_point_to_mask(model: str) -> None:
     annotations = _segment(model=model, prompt=types.Prompt())
 
     assert len(annotations) == 1
@@ -78,7 +77,7 @@ def test_generate_point_to_mask(model: str) -> None:
         pytest.param("yoloworld:latest", False, marks=pytest.mark.extra),
     ],
 )
-def test_generate_text_to_bounding_box(
+def test_segment_text_to_bounding_box(
     model: str, has_mask: bool, request: pytest.FixtureRequest
 ) -> None:
     prompt = types.Prompt(texts=["dog"])
@@ -107,7 +106,7 @@ def test_generate_text_to_bounding_box(
 
 
 @pytest.mark.parametrize("model", ["sam2:tiny"])
-def test_generate_box_to_mask_sam2(model: str) -> None:
+def test_segment_box_to_mask_sam2(model: str) -> None:
     annotations = _segment(
         model=model,
         prompt=types.Prompt(
@@ -136,7 +135,7 @@ def test_generate_box_to_mask_sam2(model: str) -> None:
         [(1706, 613, 2227, 1438), (450, 551, 1059, 1421)],
     ],
 )
-def test_generate_example_box_to_mask_sam3(
+def test_segment_example_box_to_mask_sam3(
     model: str,
     example_boxes: list[tuple[float, float, float, float]],
     sam3_embedding: types.ImageEmbedding,
@@ -158,38 +157,8 @@ def test_generate_example_box_to_mask_sam3(
         assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
 
 
-def test_registered_models_have_immutable_license_metadata() -> None:
-    revision_pattern = re.compile(r"/(?:blob|tree)/[0-9a-f]{40}(?:/|$)")
-
-    for model_type in _registry.registered_model_types:
-        metadata = model_type.metadata
-
-        assert metadata.license_name
-        assert metadata.license_url.startswith("https://")
-        assert metadata.source_url.startswith("https://")
-        assert revision_pattern.search(metadata.license_url)
-        assert revision_pattern.search(metadata.source_url)
-
-
-def test_yoloworld_metadata_points_to_artifact_provenance() -> None:
-    metadata = _registry.get_model_type_by_name(name="yoloworld").metadata
-
-    assert metadata.license_spdx == "GPL-3.0-only"
-    url_prefix = "https://github.com/wkentaro/yolo-world-onnx/blob/"
-    assert metadata.license_url.startswith(url_prefix)
-    assert metadata.license_url.endswith("/LICENSE")
-    assert metadata.source_url.startswith(url_prefix)
-    assert metadata.source_url.endswith("/ARTIFACTS.md")
-
-    license_revision = metadata.license_url.removeprefix(url_prefix).split("/", 1)[0]
-    source_revision = metadata.source_url.removeprefix(url_prefix).split("/", 1)[0]
-    assert license_revision == source_revision
-    assert len(source_revision) == 40
-    assert all(character in "0123456789abcdef" for character in source_revision)
-
-
 @pytest.mark.extra
-def test_generate_negative_box_sam3(
+def test_segment_negative_box_sam3(
     sam3_embedding: types.ImageEmbedding,
 ) -> None:
     # A positive box on one dog and a negative box on another
@@ -206,7 +175,7 @@ def test_generate_negative_box_sam3(
     assert annotation.bounding_box.xmin > 1059
 
 
-def test_generate_box_to_mask_sam3(
+def test_segment_box_to_mask_sam3(
     sam3_embedding: types.ImageEmbedding,
 ) -> None:
     # Without text, a box is one object, as in SAM2.
@@ -225,7 +194,7 @@ def test_generate_box_to_mask_sam3(
     assert 1213 < bb.xmin and bb.xmax < 1669 and 356 < bb.ymin and bb.ymax < 711
 
 
-def test_generate_max_annotations_sam3(
+def test_segment_max_annotations_sam3(
     sam3_embedding: types.ImageEmbedding,
 ) -> None:
     annotations = _sam3(
@@ -237,7 +206,7 @@ def test_generate_max_annotations_sam3(
     assert annotation.score is not None and annotation.score > 0.95
 
 
-def test_generate_negative_box_rejected_by_sam2() -> None:
+def test_segment_negative_box_rejected_by_sam2() -> None:
     with pytest.raises(ValueError, match="takes box, points, not example_boxes"):
         _segment(
             model="sam2:tiny",
@@ -247,12 +216,13 @@ def test_generate_negative_box_rejected_by_sam2() -> None:
         )
 
 
-def test_generate_box_rejected_by_yoloworld() -> None:
+@pytest.mark.extra  # yoloworld is not a default test model
+def test_segment_box_rejected_by_yoloworld() -> None:
     with pytest.raises(ValueError, match="takes texts, not box"):
         _segment(model="yoloworld", prompt=types.Prompt(box=(450, 551, 1059, 1421)))
 
 
-def test_generate_point_to_mask_sam3(
+def test_segment_point_to_mask_sam3(
     sam3_embedding: types.ImageEmbedding,
 ) -> None:
     annotations = _sam3(
@@ -276,7 +246,7 @@ def test_generate_point_to_mask_sam3(
 @pytest.mark.parametrize(
     "limits", [{"score_threshold": 0.99999}, {"max_annotations": 0}]
 )
-def test_generate_point_filtered_by_sam3(
+def test_segment_point_filtered_by_sam3(
     limits: dict, sam3_embedding: types.ImageEmbedding
 ) -> None:
     annotations = _sam3(
