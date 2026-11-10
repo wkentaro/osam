@@ -62,6 +62,8 @@ class _YoloWorld(types.Model):
             },
         )
         scores = cast(NDArray[np.float32], yolo_outputs[0])[0]
+        # The last class is the " " padding text, which no one asked for.
+        scores = scores[:, : len(texts)]
         bboxes = cast(NDArray[np.float32], yolo_outputs[1])[0]
         #
         iou_threshold = 0.5 if prompt.iou_threshold is None else prompt.iou_threshold
