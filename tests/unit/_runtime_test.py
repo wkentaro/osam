@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from typing import Final
 
 import numpy as np
+import onnxruntime
 import pytest
 
 from osam import _registry
@@ -225,3 +226,15 @@ def test_keep_alive_frees_the_model_before_another_load(
     while not locked_when_freed and time.monotonic() < deadline:
         time.sleep(0.01)
     assert locked_when_freed == [True]
+
+
+def test_unavailable_device_raises_when_created(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        onnxruntime, "get_available_providers", lambda: ["CPUExecutionProvider"]
+    )
+    with pytest.raises(RuntimeError, match="CUDAExecutionProvider is unavailable"):
+        _runtime.Runtime(device="cuda", model_types=[])
+    with pytest.raises(ValueError, match="unknown device"):
+        _runtime.Runtime(device="gpu", model_types=[])  # type: ignore[arg-type]

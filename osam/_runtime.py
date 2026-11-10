@@ -16,6 +16,7 @@ from loguru import logger
 
 from . import __version__
 from . import _json
+from . import _onnx
 from . import _registry
 from . import _types as types
 from ._requests import LoadRequest
@@ -65,6 +66,10 @@ class Runtime:
     ):
         if device not in (None, *typing.get_args(types.Device)):
             raise ValueError(f"unknown device {device!r}")
+        if device is not None:
+            # At start, not on the first load: a private server then fails to
+            # start with one error, instead of answering 500.
+            _onnx.device_providers(device=device)
         if max_loaded_models < 1:
             raise ValueError(
                 f"max_loaded_models must be 1 or more: {max_loaded_models}"

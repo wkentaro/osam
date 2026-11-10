@@ -12,6 +12,7 @@ from typing import Any
 from typing import Final
 
 import numpy as np
+import onnxruntime
 import PIL.Image
 import pytest
 import uvicorn
@@ -211,6 +212,16 @@ def test_failed_start_reported_without_traceback(
     monkeypatch.setenv("PYTHONPATH", str(tmp_path))
     with pytest.raises(RuntimeError, match="failed to start: ImportError: broken"):
         osam.Client().version()
+    assert "Traceback" not in capfd.readouterr().err
+
+
+def test_unavailable_device_fails_at_start(capfd: pytest.CaptureFixture[str]) -> None:
+    if "CUDAExecutionProvider" in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
+        pytest.skip("CUDA is available")
+    kwargs_list: list[dict[str, Any]] = [{}, {"in_process": True}]
+    for kwargs in kwargs_list:
+        with pytest.raises(RuntimeError, match="CUDAExecutionProvider is unavailable"):
+            osam.Client(device="cuda", **kwargs)
     assert "Traceback" not in capfd.readouterr().err
 
 
