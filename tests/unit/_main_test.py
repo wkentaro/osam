@@ -1,4 +1,7 @@
+import os
 import pathlib
+import subprocess
+import sys
 import types
 import typing
 from typing import Any
@@ -100,3 +103,18 @@ def test_run_converts_the_image_to_rgb(
         assert result.exit_code == 0, result.output
         np.testing.assert_array_equal(received.pop(), rgb)
         assert result.stdout_bytes.startswith(b"\x89PNG")
+
+
+def test_log_file_has_no_color_codes(tmp_path: pathlib.Path) -> None:
+    # A subprocess: the cli group sets up logging once per process.
+    env = {**os.environ, "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+    result = subprocess.run(
+        [sys.executable, "-m", "osam", "help", "nosuch"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    log: str = (tmp_path / ".cache/osam/osam.log").read_text()
+    assert "Unknown subcommand 'nosuch'" in log
+    assert "\x1b[" not in log

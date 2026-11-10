@@ -52,9 +52,7 @@ def cli():
         diagnose=False,
     )
     os.makedirs(os.path.expanduser("~/.cache/osam"), exist_ok=True)
-    logger.add(
-        os.path.expanduser("~/.cache/osam/osam.log"), colorize=True, level="DEBUG"
-    )
+    logger.add(os.path.expanduser("~/.cache/osam/osam.log"), level="DEBUG")
 
 
 @cli.command(help="Help about any command")
