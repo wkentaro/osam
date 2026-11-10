@@ -43,7 +43,3 @@ def get_model_type_by_name(
     else:
         raise UnknownModelError(f"Model {name!r} not found.")
     return cls
-
-
-def get_model_metadata(*, name: str) -> types.ModelMetadata:
-    return get_model_type_by_name(name=name).metadata
