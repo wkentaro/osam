@@ -33,7 +33,7 @@ test *pytest_args="--numprocesses=auto":
 
 # Run tests with coverage
 coverage:
-    uv run pytest -v tests/ --numprocesses=auto --cov=osam --cov-report=term-missing
+    uv run pytest -v --dist loadgroup tests/ --numprocesses=auto --cov=osam --cov-report=term-missing
 
 # Prepare a release
 [script]
