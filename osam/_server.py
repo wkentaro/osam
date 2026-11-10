@@ -19,6 +19,7 @@ import starlette.exceptions
 import uvicorn
 
 from . import __version__
+from . import _errors
 from . import _registry
 from . import _runtime
 from . import _types as types
@@ -49,21 +50,11 @@ def _error(
     *,
     message: str,
     status_code: int,
-    code: str | None = None,
+    code: str,
     headers: dict[str, str] | None = None,
 ) -> fastapi.responses.JSONResponse:
-    CODES: Final = {
-        400: "invalid_request",
-        404: "not_found",
-        405: "method_not_allowed",
-        412: "missing_images",
-        422: "invalid_request",
-    }
-
     return fastapi.responses.JSONResponse(
-        {"error": message, "code": code or CODES.get(status_code, "internal_error")},
-        status_code=status_code,
-        headers=headers,
+        {"error": message, "code": code}, status_code=status_code, headers=headers
     )
 
 
@@ -87,29 +78,38 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
         return await asyncio.get_running_loop().run_in_executor(worker, call)
 
     # Starlette's base class also covers routing errors, such as an unknown path.
+    ROUTING_CODES: Final = {404: "not_found", 405: "method_not_allowed"}
     app.add_exception_handler(
         starlette.exceptions.HTTPException,
         lambda request, exc: _error(
-            message=exc.detail, status_code=exc.status_code, headers=exc.headers
+            message=exc.detail,
+            status_code=exc.status_code,
+            code=ROUTING_CODES.get(exc.status_code, _errors.INTERNAL.code),
+            headers=exc.headers,
         ),
     )
     # Anything else is a 500, still in that shape; uvicorn logs the traceback.
     app.add_exception_handler(
         Exception,
         lambda request, exc: _error(
-            message=str(exc) or type(exc).__name__, status_code=500
+            message=str(exc) or type(exc).__name__,
+            status_code=_errors.INTERNAL.status_code,
+            code=_errors.INTERNAL.code,
         ),
     )
-    app.add_exception_handler(
-        _registry.UnknownModelError,
-        lambda request, exc: _error(
-            message=str(exc), status_code=404, code="model_not_found"
-        ),
-    )
+    for error_type, reported in _errors.REPORTED.items():
+        app.add_exception_handler(
+            error_type,
+            lambda request, exc, reported=reported: _error(
+                message=str(exc), status_code=reported.status_code, code=reported.code
+            ),
+        )
     app.add_exception_handler(
         fastapi.exceptions.RequestValidationError,
         lambda request, exc: _error(
-            message=_describe_validation_errors(errors=exc.errors()), status_code=422
+            message=_describe_validation_errors(errors=exc.errors()),
+            status_code=422,
+            code=_errors.REPORTED[ValueError].code,
         ),
     )
 
@@ -173,12 +173,7 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
 
     @app.post("/api/segment", response_model=SegmentResponse)
     async def segment(request: SegmentRequest) -> SegmentResponse:
-        try:
-            return await run(call=functools.partial(runtime.segment, request=request))
-        except _runtime.UnknownImageError as e:
-            raise fastapi.HTTPException(412, str(e))
-        except ValueError as e:
-            raise fastapi.HTTPException(400, str(e))
+        return await run(call=functools.partial(runtime.segment, request=request))
 
     @app.post("/api/load")
     async def load(request: LoadRequest) -> None:

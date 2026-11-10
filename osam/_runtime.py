@@ -14,17 +14,13 @@ from typing import Final
 from loguru import logger
 
 from . import __version__
+from . import _errors
 from . import _json
 from . import _registry
 from . import _types as types
 from ._requests import LoadRequest
 from ._requests import SegmentRequest
 from ._requests import SegmentResponse
-
-
-class UnknownImageError(LookupError):
-    # An image_hash whose embedding the runtime doesn't have.
-    pass
 
 
 @dataclasses.dataclass
@@ -161,7 +157,7 @@ class Runtime:
         if request.image is None and embedding is None:
             # Before loading the model, which a retry with the image would
             # otherwise load a second time after keep_alive 0 unloads it.
-            raise UnknownImageError(
+            raise _errors.UnknownImageError(
                 f"no embedding for image {image_hash}; send the image"
             )
         model: types.Model = self._load(model_name=model_type.name)

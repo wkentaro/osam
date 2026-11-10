@@ -464,3 +464,15 @@ def test_uvicorn_server_logs_to_the_osam_log(
         handler.close()
     log: pathlib.Path = tmp_path / ".cache/osam/osam.log"
     assert "model crashed" in log.read_text()
+
+
+def test_a_value_error_is_a_400_on_every_route(
+    app: fastapi.FastAPI, runtime: _runtime.Runtime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(**kwargs) -> None:
+        raise ValueError("no such thing")
+
+    monkeypatch.setattr(runtime, "load", fail)
+    response = TestClient(app).post("/api/load", json={"model": "efficientsam:10m"})
+    assert response.status_code == 400
+    assert response.json() == {"error": "no such thing", "code": "invalid_request"}

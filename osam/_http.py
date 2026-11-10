@@ -21,38 +21,10 @@ import numpy as np
 from loguru import logger
 
 from . import __version__
+from . import _errors
 from . import _json
 from . import _requests
 from . import types
-
-
-class ResponseError(Exception):
-    """An error the server returned, with its HTTP status code and its code,
-    such as "model_not_found", which stays the same across releases."""
-
-    status_code: int
-    code: str | None
-
-    def __init__(self, message: str, status_code: int, code: str | None = None):
-        super().__init__(message)
-        self.status_code = status_code
-        self.code = code
-
-
-class _InvalidRequestError(ResponseError, ValueError):
-    # A request the server rejected, with 400 or 422, such as a prompt that
-    # mixes one object with every match: a ValueError, as in a local call.
-    pass
-
-
-class _NotFoundError(ResponseError, LookupError):
-    # A 404, such as an unknown model: a LookupError, as in a local call.
-    pass
-
-
-class _PullError(ResponseError, RuntimeError):
-    # A pull that failed on the server: a RuntimeError, as in a local call.
-    pass
 
 
 # HttpBackend.list shadows list inside the class, hence builtins.list there.
@@ -149,7 +121,9 @@ class HttpBackend:
     ) -> None:
         for line in self._stream(path="/api/pull", body={"model": model}):
             if "error" in line:
-                raise _PullError(line["error"], status_code=200, code=line.get("code"))
+                raise _errors.PullError(
+                    line["error"], status_code=200, code=line.get("code")
+                )
             if progress is not None:
                 progress(line)
 
@@ -188,8 +162,9 @@ class HttpBackend:
             # such as for another model or after a restart.
             try:
                 return post(image_hash=server_hash)
-            except ResponseError as e:
-                if e.status_code != 412:
+            except _errors.ResponseError as e:
+                missing: _errors.Reported = _errors.REPORTED[_errors.UnknownImageError]
+                if e.status_code != missing.status_code:
                     raise
         return post(image=encoded)
 
@@ -211,8 +186,8 @@ class HttpBackend:
             if not self._private:
                 raise
             error: Exception = e
-        except ResponseError as e:
-            if not self._private or e.status_code != 500:
+        except _errors.ResponseError as e:
+            if not self._private or e.status_code != _errors.INTERNAL.status_code:
                 raise
             error = e
         # The private server crashed, or failed in a way that can leave it
@@ -402,7 +377,7 @@ def _wait(*, process: _Process, timeout: float | None) -> bool:
     return not process.is_alive()
 
 
-def _response_error(*, status_code: int, data: bytes) -> ResponseError:
+def _response_error(*, status_code: int, data: bytes) -> _errors.ResponseError:
     code: str | None = None
     try:
         body: dict[str, Any] = json.loads(data)
@@ -410,11 +385,10 @@ def _response_error(*, status_code: int, data: bytes) -> ResponseError:
         code = body.get("code")
     except (ValueError, KeyError, TypeError, AttributeError):
         message = data.decode(errors="replace")
-    if status_code in (400, 422):
-        return _InvalidRequestError(message, status_code=status_code, code=code)
-    if status_code == 404:
-        return _NotFoundError(message, status_code=status_code, code=code)
-    return ResponseError(message, status_code=status_code, code=code)
+    error_type: type[_errors.ResponseError] = _errors.RESPONSE_ERRORS.get(
+        status_code, _errors.ResponseError
+    )
+    return error_type(message, status_code=status_code, code=code)
 
 
 def _serve_stdio() -> None:
