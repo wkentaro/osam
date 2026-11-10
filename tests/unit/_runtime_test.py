@@ -138,6 +138,19 @@ def test_two_models_stay_loaded(
         assert _running(runtime=full) == ["b:1"]
 
 
+def test_load_does_not_pull_a_model_already_on_disk(
+    monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
+) -> None:
+    b = runtime.model_type(name="b:1")
+
+    def pulled(*args, **kwargs) -> None:
+        raise AssertionError("pulled")
+
+    monkeypatch.setattr(b, "pull", pulled)
+    _segment(runtime=runtime, model="b:1")
+    assert _running(runtime=runtime) == ["b:1"]
+
+
 def test_failed_load_unloads_the_others_and_retries(
     monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
 ) -> None:
@@ -149,6 +162,7 @@ def test_failed_load_unloads_the_others_and_retries(
 
     # A failed download unloads nothing.
     with monkeypatch.context() as patch:
+        patch.setattr(b, "get_size", classmethod(lambda cls: None))
         patch.setattr(b, "pull", offline)
         with pytest.raises(OSError, match="unreachable"):
             _segment(runtime=runtime, model="b:1")

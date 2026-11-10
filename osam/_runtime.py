@@ -196,8 +196,10 @@ class Runtime:
                 self._loaded.move_to_end(model_name)
             return self._loaded[model_name].model
         model_type: type[types.Model] = self.model_type(name=model_name)
-        # Before unloading anything, so a failed download leaves the others loaded.
-        model_type.pull()
+        # Before unloading anything, so a failed download leaves the others
+        # loaded. Files already on disk are verified once, when the model loads.
+        if model_type.get_size() is None:
+            model_type.pull()
         while len(self._loaded) >= self._max_loaded_models:
             self._unload(model_name=next(iter(self._loaded)))
         model: types.Model | None = None
