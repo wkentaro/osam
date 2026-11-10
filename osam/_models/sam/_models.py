@@ -78,7 +78,7 @@ class Sam(SamBase):
         scaled_image: npt.NDArray = np.asarray(
             PIL.Image.fromarray(image).resize(
                 (new_width, new_height),
-                resample=PIL.Image.BILINEAR,  # type: ignore[attr-defined]
+                resample=PIL.Image.Resampling.BILINEAR,
             )
         )
         input_: npt.NDArray[np.float32] = (
@@ -151,7 +151,7 @@ class Sam(SamBase):
         }
 
         masks, _, _ = self._inference_sessions["decoder"].run(None, decoder_inputs)
-        masks = cast(npt.NDArray[np.bool_], masks)
+        masks = cast(npt.NDArray[np.float32], masks)
         mask: npt.NDArray[np.bool_] = masks[0, 0] > 0.0  # (1, 1, H, W) -> (H, W)
         return mask
 

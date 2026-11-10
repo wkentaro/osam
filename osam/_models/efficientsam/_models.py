@@ -57,7 +57,7 @@ class EfficientSam(SamBase):
         }
 
         masks, _, _ = self._inference_sessions["decoder"].run(None, decoder_inputs)
-        masks = cast(npt.NDArray[np.bool_], masks)
+        masks = cast(npt.NDArray[np.float32], masks)
         mask: npt.NDArray[np.bool_] = (
             masks[0, 0, 0, :, :] > 0
         )  # (1, 1, 3, H, W) -> (H, W)

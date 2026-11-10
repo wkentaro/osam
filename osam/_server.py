@@ -18,7 +18,6 @@ import pydantic
 import starlette.exceptions
 import uvicorn
 
-from . import __version__
 from . import _errors
 from . import _runtime
 from . import _types as types
@@ -69,7 +68,7 @@ def _describe_validation_errors(*, errors: Sequence[Any]) -> str:
 def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
     # The routes of osam serve, running models on runtime, which the caller
     # closes.
-    app = fastapi.FastAPI(title="osam", version=__version__)
+    app = fastapi.FastAPI(title="osam", version=runtime.version())
     # Every call runs on one thread, in order, as the runtime runs one at a time.
     # Queued requests wait here instead of holding FastAPI's thread pool, so other
     # routes stay free. Its idle thread exits once the app is garbage collected.
@@ -132,7 +131,7 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
 
     @app.get("/api/version")
     def version() -> Version:
-        return Version(version=__version__)
+        return Version(version=runtime.version())
 
     @app.get("/api/models")
     def list_models() -> ModelList:
