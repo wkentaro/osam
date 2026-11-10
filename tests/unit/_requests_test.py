@@ -3,6 +3,7 @@ import io
 
 import numpy as np
 import PIL.Image
+import pytest
 
 from osam import _requests
 
@@ -35,3 +36,23 @@ def test_segment_request_converts_images_to_rgb() -> None:
     gray = np.array([[0, 128, 255]], dtype=np.uint8)
     request = _requests.SegmentRequest(model="sam2:latest", image=gray)
     np.testing.assert_array_equal(request.image, np.dstack([gray] * 3))
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        np.zeros((2, 3, 3), dtype=np.float64),
+        np.zeros((2, 3), dtype=np.uint16),
+        np.zeros((2, 3), dtype=bool),
+        np.zeros((2, 3, 1), dtype=np.uint8),
+        np.zeros((2, 3, 2), dtype=np.uint8),
+        np.zeros(5, dtype=np.uint8),
+    ],
+)
+def test_segment_request_rejects_unsupported_image_arrays(
+    image: np.ndarray,
+) -> None:
+    with pytest.raises(ValueError, match="image must be"):
+        _requests.SegmentRequest.model_validate(
+            {"model": "sam2:latest", "image": image}
+        )

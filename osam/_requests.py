@@ -82,12 +82,17 @@ class SegmentRequest(types.Prompt):
         # RGB here, before the image is hashed.
         if isinstance(image, str):
             return _json.image_b64data_to_ndarray(b64data=image, mode="RGB")
-        if (
-            isinstance(image, np.ndarray)
-            and image.dtype == np.uint8
-            and (image.ndim == 2 or (image.ndim == 3 and image.shape[2] == 4))
+        if not isinstance(image, np.ndarray):
+            return image  # pydantic rejects it
+        if image.dtype == np.uint8 and (
+            image.ndim == 2 or (image.ndim == 3 and image.shape[2] == 4)
         ):
             return np.asarray(PIL.Image.fromarray(image).convert("RGB"))
+        if image.dtype != np.uint8 or image.ndim != 3 or image.shape[2] != 3:
+            raise ValueError(
+                "image must be a uint8 array of shape (H, W, 3), (H, W, 4) or "
+                f"(H, W): got {image.dtype} {image.shape}"
+            )
         return image
 
     @pydantic.model_validator(mode="after")
