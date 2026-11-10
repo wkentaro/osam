@@ -1,3 +1,4 @@
+import os
 from typing import Final
 
 import pytest
@@ -9,6 +10,9 @@ import osam._registry
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "extra: marks tests as extra")
+    # A developer's OSAM_HOST would point the clients and the CLI under test at
+    # their server. Here, as module-scoped fixtures start before monkeypatch.
+    os.environ.pop("OSAM_HOST", None)
 
     if config.option.collectonly:
         return
