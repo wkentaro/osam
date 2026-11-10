@@ -144,27 +144,20 @@ class Sam3(types.Model):
         width: int,
     ) -> Timeline:
         if self._video_sessions is None:
-            # On the image encoder's device. ponytail: WebGPU's plugin provider
-            # needs add_provider_for_devices, so the video models fall back to
-            # CPU there.
-            providers: list[str] = [
-                p
-                for p in self._inference_sessions["image_encoder"].get_providers()
-                if p != "WebGpuExecutionProvider"
-            ]
+            # On the image encoder's device, which the model reports: a video
+            # model that can't load or run there fails instead of tracking on
+            # another one.
+            providers: list[str] = list(
+                self._inference_sessions["image_encoder"].get_providers()
+            )
             directory: str = os.environ[_VIDEO_MODELS_ENV]
-            sessions: dict[str, onnxruntime.InferenceSession] = {}
-            for name in _video.MODEL_NAMES:
-                path: str = os.path.join(directory, f"sam3_{name}.onnx")
-                session = onnxruntime.InferenceSession(path, providers=providers)
-                # onnxruntime silently drops a provider it can't use, and the
-                # model reports the image encoder's device, so fail instead of
-                # tracking on another one, at load and in run().
-                if session.get_providers()[0] != providers[0]:
-                    raise RuntimeError(f"{providers[0]} failed to load {path}")
-                session.disable_fallback()
-                sessions[name] = session
-            self._video_sessions = sessions
+            self._video_sessions = {
+                name: _onnx.create_device_session(
+                    path=os.path.join(directory, f"sam3_{name}.onnx"),
+                    providers=providers,
+                )
+                for name in _video.MODEL_NAMES
+            }
 
         def get_features(frame: int) -> dict[str, NDArray]:
             # The image encoder's outputs by name, as encode_image keeps them.

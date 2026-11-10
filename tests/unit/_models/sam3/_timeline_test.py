@@ -94,31 +94,37 @@ def test_replay_gives_the_same_result() -> None:
     assert replayed.done.result == removed.done.result
 
 
-class _CpuSession:
-    # A session whose provider onnxruntime dropped, leaving the CPU.
-    def __init__(self, path: str, providers: list[str]) -> None:
-        pass
+class _Session:
+    _provider: str
+
+    def __init__(self, *, provider: str) -> None:
+        self._provider = provider
 
     def get_providers(self) -> list[str]:
-        return ["CPUExecutionProvider"]
+        return [self._provider, "CPUExecutionProvider"]
 
 
+@pytest.mark.parametrize(
+    "provider", ["CUDAExecutionProvider", "WebGpuExecutionProvider"]
+)
 def test_video_models_fail_off_the_image_encoders_device(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, provider: str
 ) -> None:
+    from osam import _onnx
     from osam._models.sam3 import _models
 
-    class _CudaSession(_CpuSession):
-        def get_providers(self) -> list[str]:
-            return ["CUDAExecutionProvider", "CPUExecutionProvider"]
-
+    # onnxruntime dropped the provider, leaving the CPU.
+    monkeypatch.setattr(
+        _onnx,
+        "_create_session",
+        lambda path, providers: _Session(provider="CPUExecutionProvider"),
+    )
     monkeypatch.setenv("OSAM_SAM3_VIDEO_MODELS", "/models")
-    monkeypatch.setattr(_models.onnxruntime, "InferenceSession", _CpuSession)
     model = _models.Sam3.__new__(_models.Sam3)
-    model._inference_sessions = {"image_encoder": _CudaSession("", [])}  # type: ignore[invalid-assignment]
-    with pytest.raises(RuntimeError, match="CUDAExecutionProvider failed to load"):
+    model._inference_sessions = {"image_encoder": _Session(provider=provider)}
+    with pytest.raises(RuntimeError, match=f"{provider} failed to load"):
         model.new_timeline(
-            get_embedding=lambda frame: None,  # type: ignore[arg-type]
+            get_embedding=lambda frame: None,
             num_frames=1,
             height=4,
             width=4,
