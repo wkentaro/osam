@@ -106,7 +106,7 @@ def test_run_converts_the_image_to_rgb(
 
 
 def test_log_file_has_no_color_codes(tmp_path: pathlib.Path) -> None:
-    # A subprocess: the cli group sets up logging once per process.
+    # A subprocess, as the cli group replaces this process's log handlers.
     env = {**os.environ, "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
     result = subprocess.run(
         [sys.executable, "-m", "osam", "help", "nosuch"],
@@ -118,3 +118,19 @@ def test_log_file_has_no_color_codes(tmp_path: pathlib.Path) -> None:
     log: str = (tmp_path / ".cache/osam/osam.log").read_text()
     assert "Unknown subcommand 'nosuch'" in log
     assert "\x1b[" not in log
+
+
+def test_cli_runs_twice_in_one_process(tmp_path: pathlib.Path) -> None:
+    # A subprocess, as the cli group replaces this process's log handlers.
+    env = {**os.environ, "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
+    script = (
+        "from click.testing import CliRunner\n"
+        "from osam.__main__ import cli\n"
+        "for _ in range(2):\n"
+        "    result = CliRunner().invoke(cli, ['help'])\n"
+        "    assert result.exit_code == 0, repr(result.exception)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, env=env
+    )
+    assert result.returncode == 0, result.stderr
