@@ -42,8 +42,7 @@ class _Backend(Protocol):
         self, *, request: _requests.SegmentRequest
     ) -> _requests.SegmentResponse: ...
 
-    def track(self, *, request: _requests.TrackRequest) -> types.TrackResponse:
-        ...
+    def track(self, *, request: _requests.TrackRequest) -> types.TrackResponse: ...
 
 
 # Client.list shadows list inside the class, hence builtins.list there.

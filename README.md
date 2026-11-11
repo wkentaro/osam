@@ -307,12 +307,18 @@ annotations and `done`. Each edit passes the `done.result` it was made on as
 server lacks.
 
 ```python
-response = client.track("sam3", frames, [{"type": "prompt", "frame": 0, "texts": ["person"]}])
+response = client.track(
+    "sam3", frames, [{"type": "prompt", "frame": 0, "texts": ["person"]}]
+)
 first = response.done.objects[0].object_id
-response = client.track("sam3", frames, [
-    {"type": "prompt", "frame": 0, "texts": ["person"]},
-    {"type": "remove", "object_id": first, "base": response.done.result},
-])
+response = client.track(
+    "sam3",
+    frames,
+    [
+        {"type": "prompt", "frame": 0, "texts": ["person"]},
+        {"type": "remove", "object_id": first, "base": response.done.result},
+    ],
+)
 ```
 
 ### HTTP
