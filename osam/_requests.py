@@ -136,8 +136,7 @@ class TrackRequest(pydantic.BaseModel):
     )
     actions: list[types.Action] = pydantic.Field(
         min_length=1,
-        description="Every action the user has taken, in order, starting with "
-        "a prompt",
+        description="Every action the user has taken, in order, starting with a prompt",
     )
     first_frame: int = pydantic.Field(default=0, ge=0)
     last_frame: int | None = pydantic.Field(

@@ -161,7 +161,7 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
     monkeypatch.setattr(_onnx, "_webgpu_device", lambda: None)
     Sam3(device="coreml")
 
-    blob = Sam3._device_blobs(device="coreml")["image_encoder"]
+    blobs = Sam3._device_blobs(device="coreml")
     coreml = [
         (path, providers[0][1]["ModelCacheDirectory"])
         for path, providers in fake_sessions
@@ -169,13 +169,18 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
     ]
     assert coreml == [
         (
-            f"{blob.path}.t",
-            os.path.join(blob.coreml_cache_path, onnxruntime.__version__),
+            f"{blobs[key].path}.t",
+            os.path.join(blobs[key].coreml_cache_path, onnxruntime.__version__),
         )
+        for key in ("image_encoder", "memory_attention_fixed")
     ]
     # Without a WebGPU adapter, the others run on the CPU.
     disabled = [p for p, providers in fake_sessions if providers == "fallback disabled"]
-    assert disabled == ["CoreMLExecutionProvider"] + ["CPUExecutionProvider"] * 3
+    assert disabled == [
+        "CoreMLExecutionProvider",
+        *["CPUExecutionProvider"] * 6,
+        "CoreMLExecutionProvider",
+    ]
 
 
 def test_device_unavailable_raises(
