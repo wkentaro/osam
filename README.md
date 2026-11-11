@@ -102,7 +102,7 @@ Median of 5 runs after a warm-up, excluding model loading.
 | SAM2 Small | 651 | 74 | 121 | 2119 | 320 | 279 |
 | SAM2 BasePlus | 1237 | 104 | 179 | 2923 | 570 | 494 |
 | SAM2 Large | 2414 | 151 | 319 | 7596 | 1281 | 1109 |
-| SAM3 | 6563 | 347 | 741 | 15341 | 2466 | 3691 |
+| SAM3 | 8431 | 197 | 616 | 16425 | 1163 | 2390 |
 | EfficientSAM 10M | 399 | 55 | 253 | 781 | fails to load | 322 |
 | EfficientSAM 30M | 948 | 74 | 448 | 1767 | fails to load | 664 |
 | YOLO-World XL | — | — | — | — | fails to load | — |
@@ -121,14 +121,14 @@ encoding.
 | SAM2 Small | 44 | 17 | 74 | 58 | 61 | 28 |
 | SAM2 BasePlus | 50 | 17 | 69 | 51 | 65 | 28 |
 | SAM2 Large | 43 | 17 | 87 | 48 | 60 | 29 |
-| SAM3 | 1162 | 74 | 203 | 1519 | 376 | 604 |
+| SAM3 | 1085 | 33 | 99 | 1320 | 333 | 320 |
 | EfficientSAM 10M | 45 | 16 | 51 | 34 | fails to load | 27 |
 | EfficientSAM 30M | 46 | 15 | 56 | 35 | fails to load | 27 |
 | YOLO-World XL | 774 | 42 | 100 | 1829 | fails to load | 237 |
 
 Measured on `examples/_images/dogs.jpg` (2560x1600) with onnxruntime 1.23.2
 (onnxruntime-gpu 1.31.1 for CUDA; onnxruntime 1.30.0 and onnxruntime-ep-webgpu
-0.5.0 for WebGPU, on Vulkan and Metal).
+0.5.0 for WebGPU, on Vulkan and Metal, and for SAM3 on CoreML).
 Run `python examples/benchmark.py --device cpu --device cuda` to measure on
 your machine. Its New image column is image encoding plus the model's default
 prompt.
@@ -166,9 +166,11 @@ client = osam.Client(device="cuda")
 ```
 
 `cpu`, `cuda`, `coreml` and `webgpu` are supported. An unavailable device raises an
-error instead of falling back to CPU. With `coreml`, SAM3 runs its point
-decoder on CPU and the rest on CoreML. On Apple silicon, SAM3 encodes an image
-faster on CoreML than on WebGPU, but its first CoreML load takes about 40 s.
+error instead of falling back to CPU. With `coreml`, SAM3 runs its image
+encoder on CoreML and the rest on WebGPU when `osam[webgpu]` finds a GPU,
+otherwise on CPU. On Apple silicon, SAM3 encodes an image twice as fast on
+CoreML as on WebGPU, but its first CoreML load compiles the encoder into a
+1.8 GB cache.
 
 Without a device, inference runs on CUDA when the installed onnxruntime has it,
 then on WebGPU when `osam[webgpu]` finds a GPU, otherwise on CPU. A session that
