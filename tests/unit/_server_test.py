@@ -76,7 +76,7 @@ def test_pull_streams_progress(
 ) -> None:
     model_type = runtime.model_type(name="fake")
 
-    def pull(progress, cancel):
+    def pull(device, progress, cancel):
         progress("encoder.onnx", 1, 2)
         progress("encoder.onnx", 2, 2)
 
@@ -90,7 +90,7 @@ def test_pull_streams_progress(
         {"status": "success"},
     ]
 
-    def fail(progress, cancel):
+    def fail(device, progress, cancel):
         raise RuntimeError("disk full")
 
     monkeypatch.setattr(model_type, "pull", fail)

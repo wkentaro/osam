@@ -146,7 +146,9 @@ def fake_sessions(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
         "get_available_providers",
         lambda: ["CoreMLExecutionProvider", "CPUExecutionProvider"],
     )
-    monkeypatch.setattr(_model.Model, "pull", classmethod(lambda cls: None))
+    monkeypatch.setattr(
+        _model.Model, "pull", classmethod(lambda cls, device=None: None)
+    )
     return sessions
 
 
@@ -156,8 +158,10 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
     from osam._models.sam3._models import Sam3
 
     monkeypatch.setattr(_onnx, "_coreml_model", lambda blob: f"{blob.path}.t")
+    monkeypatch.setattr(_onnx, "_webgpu_device", lambda: None)
     Sam3(device="coreml")
 
+    blob = Sam3._device_blobs(device="coreml")["image_encoder"]
     coreml = [
         (path, providers[0][1]["ModelCacheDirectory"])
         for path, providers in fake_sessions
@@ -165,18 +169,13 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
     ]
     assert coreml == [
         (
-            f"{Sam3._blobs[key].path}.t",
-            os.path.join(Sam3._blobs[key].coreml_cache_path, onnxruntime.__version__),
+            f"{blob.path}.t",
+            os.path.join(blob.coreml_cache_path, onnxruntime.__version__),
         )
-        for key in ("image_encoder", "language_encoder", "decoder")
     ]
+    # Without a WebGPU adapter, the others run on the CPU.
     disabled = [p for p, providers in fake_sessions if providers == "fallback disabled"]
-    assert disabled == [
-        "CoreMLExecutionProvider",
-        "CoreMLExecutionProvider",
-        "CoreMLExecutionProvider",
-        "CPUExecutionProvider",
-    ]
+    assert disabled == ["CoreMLExecutionProvider"] + ["CPUExecutionProvider"] * 3
 
 
 def test_device_unavailable_raises(
@@ -263,7 +262,9 @@ def test_device_webgpu_runs_every_blob_on_webgpu(
     Sam3(device="webgpu")
 
     disabled = [p for p, providers in fake_sessions if providers == "fallback disabled"]
-    assert disabled == ["WebGpuExecutionProvider"] * len(Sam3._blobs)
+    assert disabled == ["WebGpuExecutionProvider"] * len(
+        Sam3._device_blobs(device="webgpu")
+    )
 
 
 def test_device_webgpu_unavailable_raises(
@@ -308,7 +309,9 @@ def test_resolve_providers_without_webgpu_plugin_is_cpu(
 
 
 def test_model_device_reports_the_picked_device(
-    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any]
+    monkeypatch: pytest.MonkeyPatch,
+    fake_webgpu: list[Any],
+    fake_sessions: list[tuple[str, Any]],
 ) -> None:
     from osam._models.sam3._models import Sam3
 
@@ -321,7 +324,12 @@ def test_model_device_reports_the_picked_device(
     monkeypatch.setattr(
         ort.InferenceSession, "get_providers", lambda self: ["CPUExecutionProvider"]
     )
+    fake_sessions.clear()
     assert Sam3().device == "cpu"
+    # It reloads with the files that run fastest on the CPU.
+    cpu = [blob.path for blob in Sam3._device_blobs(device="cpu").values()]
+    loaded = [path for path, p in fake_sessions if p != "fallback disabled"]
+    assert loaded[-len(cpu) :] == cpu
 
 
 def test_partial_fallback_moves_every_session_to_cpu(
@@ -488,7 +496,9 @@ def test_device_webgpu_runs_on_software_when_requested(
     Sam3(device="webgpu")
 
     disabled = [p for p, providers in fake_sessions if providers == "fallback disabled"]
-    assert disabled == ["WebGpuExecutionProvider"] * len(Sam3._blobs)
+    assert disabled == ["WebGpuExecutionProvider"] * len(
+        Sam3._device_blobs(device="webgpu")
+    )
 
 
 @pytest.mark.parametrize("supported", [False, True])
@@ -585,6 +595,38 @@ def test_windows_unsupported_hardware_can_be_explicitly_requested(
     Sam3(device="webgpu")
     assert [
         p for p, providers in fake_sessions if providers == "fallback disabled"
-    ] == ["WebGpuExecutionProvider"] * len(Sam3._blobs)
+    ] == ["WebGpuExecutionProvider"] * len(Sam3._device_blobs(device="webgpu"))
     monkeypatch.setenv("OSAM_ONNX_PROVIDERS", "WebGpuExecutionProvider")
     assert resolve_providers() == ["WebGpuExecutionProvider"]
+
+
+def test_run_on_device_keeps_gpu_outputs_on_the_gpu() -> None:
+    from unittest import mock
+
+    import numpy as np
+
+    from osam import _types as types
+
+    image = np.zeros(1, np.float32)
+    session = mock.Mock()
+    session.get_providers.return_value = ["CPUExecutionProvider"]
+    session.run.return_value = [np.ones(1)]
+    assert _onnx.run_on_device(session=session, names=["a"], inputs={"x": image}) == [
+        np.ones(1)
+    ]
+    session.io_binding.assert_not_called()
+
+    # On a GPU, the outputs stay there, and OrtValue inputs bind as they are.
+    feature = onnxruntime.OrtValue.ortvalue_from_numpy(np.zeros((2, 3), np.float32))
+    session.get_providers.return_value = ["CUDAExecutionProvider"]
+    binding = session.io_binding.return_value
+    _onnx.run_on_device(session=session, names=["a"], inputs={"x": image, "f": feature})
+    binding.bind_cpu_input.assert_called_once_with("x", image)
+    binding.bind_ortvalue_input.assert_called_once_with("f", feature)
+    binding.bind_output.assert_called_once_with("a", "cuda")
+
+    # The embedding cache counts an OrtValue's bytes as an array's.
+    embedding = types.ImageEmbedding(
+        original_height=1, original_width=1, embedding=feature
+    )
+    assert embedding.nbytes == 24

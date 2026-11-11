@@ -101,7 +101,6 @@ def test_decode_finds_objects_for_each_text() -> None:
         run=lambda *_: [
             np.ones((1, 32), bool),
             np.zeros((32, 1, 8), np.float32),
-            np.zeros((1, 8), np.float32),  # the real encoder has more outputs
         ]
     )
     # The first run, for "car", finds two objects; the second, for "dog", one.
@@ -154,7 +153,11 @@ def test_encode_image_fetches_only_the_outputs_decoders_read() -> None:
         ]
 
     model = Sam3.__new__(Sam3)
-    model._inference_sessions = {"image_encoder": pytypes.SimpleNamespace(run=run)}
+    model._inference_sessions = {
+        "image_encoder": pytypes.SimpleNamespace(
+            run=run, get_providers=lambda: ["CPUExecutionProvider"]
+        )
+    }
 
     embedding = model.encode_image(image=np.zeros((4, 6, 3), np.uint8))
 
@@ -175,3 +178,26 @@ def test_encode_image_fetches_only_the_outputs_decoders_read() -> None:
             "high_res_features2",
         ]
     ]
+
+
+@pytest.mark.parametrize(
+    "device, ort_version, expected",
+    [
+        ("cpu", (1, 30), "image_encoder"),
+        ("cuda", (1, 30), "image_encoder_fused_fp16"),
+        ("webgpu", (1, 30), "image_encoder_fused_fp16"),
+        ("coreml", (1, 30), "image_encoder_fp16"),
+        ("coreml", (1, 23), "image_encoder"),
+    ],
+)
+def test_file_runs_fastest_on_the_device(
+    monkeypatch: pytest.MonkeyPatch,
+    device: str,
+    ort_version: tuple[int, int],
+    expected: str,
+) -> None:
+    from osam._models.sam3 import _models
+
+    monkeypatch.setattr(_models, "_ORT_VERSION", ort_version)
+    assert _models._file(name="image_encoder", device=device) == expected
+    assert _models._file(name="decoder", device="cpu") == "decoder"

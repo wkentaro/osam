@@ -57,7 +57,7 @@ class _YoloWorld(types.Model):
         yolo_outputs = self._inference_sessions["yolo"].run(
             output_names=["scores", "boxes"],
             input_feed={
-                "images": embedding.embedding[None],
+                "images": cast(NDArray[np.float32], embedding.embedding)[None],
                 "text_features": text_features[None],
             },
         )

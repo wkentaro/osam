@@ -1,47 +1,103 @@
+from typing import Final
 from typing import cast
 
 import numpy as np
+import onnxruntime
 import PIL.Image
 from loguru import logger
 from numpy.typing import NDArray
 from typing_extensions import override
 
+from osam import _onnx
 from osam import _types as types
 
 from .._clip import tokenize
+
+# sam3-onnx's models, by file name without the sam3_ prefix and .onnx.
+_FILES: Final[dict[str, types.Blob]] = {
+    "image_encoder": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_image_encoder.onnx",
+        hash="sha256:7431ce5878b54885a59a48af08739de927793d0c9e8acc368924b2b7b1e919da",
+    ),
+    "image_encoder_fp16": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_image_encoder_fp16.onnx",
+        hash="sha256:42db5e7c65f18c536f35e14c591fdb9ffeb6f24339add59043763afde9a7fda5",
+    ),
+    "image_encoder_fused_fp16": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_image_encoder_fused_fp16.onnx",
+        hash="sha256:9bb34ce7774c13b36510db4a4c32b15b9b38b6f0439a0d8a4245ac1b20f32708",
+    ),
+    "language_encoder": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_language_encoder.onnx",
+        hash="sha256:1f92c701be59c060182cc62ea5653e4c4c3cfc4a13835ea9db6d669267ecd063",
+    ),
+    "language_encoder_fp16": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_language_encoder_fp16.onnx",
+        hash="sha256:7cec8f527d75461e3f0c2e97134d38d9f57194929b8f5a3e81f03555aaab1588",
+    ),
+    "decoder": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_decoder.onnx",
+        hash="sha256:0a5e517a950abbe42133a8f57b9d16184a939803fe249014afb7e02472ebd20e",
+    ),
+    "decoder_fp16": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_decoder_fp16.onnx",
+        hash="sha256:b5a24f389bdaee26257ba71946a52f629ff1369e47ee8a1f3e2aa14922bb67f3",
+    ),
+    "point_decoder": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_point_decoder.onnx",
+        hash="sha256:b216df022f3767a1d9c3252902368a653ba9a2a14be3db7f85720dd27cabdd61",
+    ),
+    "point_decoder_fp16": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_point_decoder_fp16.onnx",
+        hash="sha256:92ad10439ac5fb86d1a2cfa603e8ed34000b079d2d6eab0cef50297193fb7825",
+    ),
+}
+
+
+_ORT_VERSION: Final = tuple(int(v) for v in onnxruntime.__version__.split(".")[:2])
+
+
+def _file(*, name: str, device: str) -> str:
+    # The copy of a model that runs fastest on a session's device: float16 on
+    # a GPU, which runs it up to twice as fast, and float32 on the CPU, which
+    # lacks float16 kernels. On CUDA and WebGPU, the image encoder's attention
+    # runs as onnxruntime's MultiHeadAttention, which CoreML takes minutes to
+    # compile. onnxruntime before 1.24, the last on Python 3.10, runs the
+    # float16 image encoder 10 times as slow as float32 on CoreML.
+    if device == "cpu" or (device == "coreml" and _ORT_VERSION < (1, 24)):
+        return name
+    if name == "image_encoder" and device in ("cuda", "webgpu"):
+        return f"{name}_fused_fp16"
+    return f"{name}_fp16"
 
 
 class Sam3(types.Model):
     name = "sam3:latest"
     metadata = types.ModelMetadata(
         license_name="SAM License",
-        license_url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/blob/40ffee63eb38bc3779318319bf81e9db06687d91/LICENSE",
-        source_url="https://github.com/wkentaro/sam3-onnx/tree/f921702fb17fe6f0c6dd054519df71a1c407b142",
+        license_url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/blob/a800a982cf32ace0638ffa16b86c742ff152796b/LICENSE",
+        source_url="https://github.com/wkentaro/sam3-onnx/tree/2ad7d5be6c5e53a32572026c94054ea2bee0294c",
     )
 
     prompt_kinds = frozenset({"points", "box", "texts", "example_boxes"})
 
-    # CoreML can't load the point decoder: its point_coords dimension is unbounded.
-    _coreml_blobs = frozenset({"image_encoder", "language_encoder", "decoder"})
+    _blobs = _FILES
 
-    _blobs = {
-        "image_encoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_image_encoder.onnx",
-            hash="sha256:c6b984d95ca7ca0564356253b92ee30287188cfffab5d4f87709b79d5d9aa6c8",
-        ),
-        "language_encoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_language_encoder.onnx",
-            hash="sha256:7868036ee14bb4f09672849c86d6fd5df43f06f089089a99fc2665cb0e84fc26",
-        ),
-        "decoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_decoder.onnx",
-            hash="sha256:b4f3588d299611546d9aeb1abf2cf4651a78c7cc021668f379d211b80db1cba3",
-        ),
-        "point_decoder": types.Blob(
-            url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_point_decoder.onnx",
-            hash="sha256:410871f485362f7b6762e890a3a3ee1619cbc6ae07f7c0e7c88fd319c37a09bb",
-        ),
-    }
+    # CoreML runs the image encoder 3 times as fast as WebGPU does. It takes
+    # 11 s to compile the decoder for 140 ms less per run, and can't load the
+    # point decoder, whose point_coords dimension is unbounded.
+    _coreml_blobs = frozenset({"image_encoder"})
+
+    @classmethod
+    @override
+    def _device_blobs(cls, *, device: str) -> dict[str, types.Blob]:
+        blobs: dict[str, types.Blob] = {}
+        for name in ("image_encoder", "language_encoder", "decoder", "point_decoder"):
+            session: str = _onnx.session_device(
+                device=device, coreml=name in cls._coreml_blobs
+            )
+            blobs[name] = _FILES[_file(name=name, device=session)]
+        return blobs
 
     @override
     def encode_image(self, *, image: NDArray[np.uint8]) -> types.ImageEmbedding:
@@ -69,16 +125,18 @@ class Sam3(types.Model):
             "high_res_features1",
             "high_res_features2",
         ]
-        outputs = self._inference_sessions["image_encoder"].run(
-            output_names, {"image": image_input}
-        )
+        # With the batch dimension the decoders take.
         (
             vision_pos_enc_2,
             backbone_fpn_0,
             backbone_fpn_1,
             backbone_fpn_2,
             *point_features,
-        ) = (cast(NDArray[np.float32], output).squeeze(axis=0) for output in outputs)
+        ) = _onnx.run_on_device(
+            session=self._inference_sessions["image_encoder"],
+            names=output_names,
+            inputs={"image": image_input},
+        )
 
         return types.ImageEmbedding(
             original_height=original_height,
@@ -103,11 +161,6 @@ class Sam3(types.Model):
     ) -> list[types.Annotation]:
         original_height: int = embedding.original_height
         original_width: int = embedding.original_width
-
-        backbone_fpn_0: NDArray[np.float32] = embedding.embedding[None]
-        backbone_fpn_1: NDArray[np.float32] = embedding.extra_features[0][None]
-        backbone_fpn_2: NDArray[np.float32] = embedding.extra_features[1][None]
-        vision_pos_enc_2: NDArray[np.float32] = embedding.extra_features[2][None]
 
         score_threshold: float = (
             0.1 if prompt.score_threshold is None else prompt.score_threshold
@@ -157,18 +210,18 @@ class Sam3(types.Model):
         runs: list[list[NDArray[np.float32]]] = []
         for text in texts:
             tokens: NDArray[np.int64] = tokenize(texts=[text], context_length=32)
-            outputs = self._inference_sessions["language_encoder"].run(
-                None, {"tokens": tokens}
-            )
+            language_mask, language_features = self._inference_sessions[
+                "language_encoder"
+            ].run(["text_attention_mask", "text_memory"], {"tokens": tokens})
             outputs = self._inference_sessions["decoder"].run(
-                None,
+                ["boxes", "scores", "masks"],
                 {
-                    "backbone_fpn_0": backbone_fpn_0,
-                    "backbone_fpn_1": backbone_fpn_1,
-                    "backbone_fpn_2": backbone_fpn_2,
-                    "vision_pos_enc_2": vision_pos_enc_2,
-                    "language_mask": outputs[0],
-                    "language_features": outputs[1],
+                    "backbone_fpn_0": embedding.embedding,
+                    "backbone_fpn_1": embedding.extra_features[0],
+                    "backbone_fpn_2": embedding.extra_features[1],
+                    "vision_pos_enc_2": embedding.extra_features[2],
+                    "language_mask": language_mask,
+                    "language_features": language_features,
                     "box_coords": box_coords,
                     "box_labels": box_labels,
                     "box_masks": box_masks,
@@ -247,24 +300,25 @@ class Sam3(types.Model):
     ) -> list[types.Annotation]:
         height: int = image_embedding.original_height
         width: int = image_embedding.original_width
-        inputs: dict[str, NDArray] = {
-            "image_embeddings": image_embedding.extra_features[3][None],
-            "high_res_features1": image_embedding.extra_features[4][None],
-            "high_res_features2": image_embedding.extra_features[5][None],
+        inputs: dict[str, types.Feature] = {
+            "image_embeddings": image_embedding.extra_features[3],
+            "high_res_features1": image_embedding.extra_features[4],
+            "high_res_features2": image_embedding.extra_features[5],
             "point_coords": (points / [width, height] * 1008).astype(np.float32)[None],
             "point_labels": point_labels.astype(np.float32)[None],
             "mask_input": np.zeros((1, 1, 288, 288), dtype=np.float32),
             "has_mask_input": np.array([0], dtype=np.float32),
         }
         session = self._inference_sessions["point_decoder"]
+        names: list[str] = ["iou_predictions", "low_res_masks"]
         iou_predictions, low_res_masks = cast(
-            list[NDArray[np.float32]], session.run(None, inputs)
+            list[NDArray[np.float32]], session.run(names, inputs)
         )
         # Refine with the best mask from the first pass as the mask prompt.
         inputs["mask_input"] = low_res_masks[:, [iou_predictions[0].argmax()]]
         inputs["has_mask_input"] = np.array([1], dtype=np.float32)
         iou_predictions, low_res_masks = cast(
-            list[NDArray[np.float32]], session.run(None, inputs)
+            list[NDArray[np.float32]], session.run(names, inputs)
         )
         best: int = int(iou_predictions[0].argmax())
 

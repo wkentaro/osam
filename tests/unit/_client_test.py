@@ -289,7 +289,7 @@ def test_host_checks_the_version(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_raising_from_progress_stops_the_pull(monkeypatch: pytest.MonkeyPatch) -> None:
     cancelled = threading.Event()
 
-    def pull(progress, cancel) -> None:
+    def pull(device, progress, cancel) -> None:
         for completed in range(1000):
             if cancel.is_set():
                 cancelled.set()
@@ -314,7 +314,7 @@ def test_raising_from_progress_stops_the_pull(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_failed_pull_raises_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    def pull(progress, cancel) -> None:
+    def pull(device, progress, cancel) -> None:
         raise RuntimeError("Failed to download encoder.onnx")
 
     model_type = _registry.get_model_type_by_name(name="efficientsam:10m")

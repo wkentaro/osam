@@ -91,9 +91,9 @@ class Runtime:
         return [
             types.ModelInfo(
                 name=model_type.name,
-                id=model_type.get_id(),
-                size=model_type.get_size(),
-                modified_at=model_type.get_modified_at(),
+                id=model_type.get_id(device=self._device),
+                size=model_type.get_size(device=self._device),
+                modified_at=model_type.get_modified_at(device=self._device),
                 metadata=model_type.metadata,
                 capabilities=["segment"],
                 prompt_kinds=sorted(model_type.prompt_kinds),
@@ -130,7 +130,11 @@ class Runtime:
             typing.cast(Callable, progress)(line | {"total": total})
 
         with self._lock:
-            model_type.pull(progress=report if progress else None, cancel=cancel)
+            model_type.pull(
+                device=self._device,
+                progress=report if progress else None,
+                cancel=cancel,
+            )
 
     def remove(self, *, model: str) -> None:
         model_type: type[types.Model] = self.model_type(name=model)
@@ -213,8 +217,8 @@ class Runtime:
         model_type: type[types.Model] = self.model_type(name=model_name)
         # Before unloading anything, so a failed download leaves the others
         # loaded. Files already on disk are verified once, when the model loads.
-        if model_type.get_size() is None:
-            model_type.pull()
+        if model_type.get_size(device=self._device) is None:
+            model_type.pull(device=self._device)
         while len(self._loaded) >= self._max_loaded_models:
             self._unload(model_name=next(iter(self._loaded)))
         model: types.Model | None = None

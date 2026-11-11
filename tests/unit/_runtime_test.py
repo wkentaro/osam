@@ -162,7 +162,7 @@ def test_failed_load_unloads_the_others_and_retries(
 
     # A failed download unloads nothing.
     with monkeypatch.context() as patch:
-        patch.setattr(b, "get_size", classmethod(lambda cls: None))
+        patch.setattr(b, "get_size", classmethod(lambda cls, device=None: None))
         patch.setattr(b, "pull", offline)
         with pytest.raises(OSError, match="unreachable"):
             _segment(runtime=runtime, model="b:1")

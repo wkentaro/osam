@@ -30,9 +30,11 @@ class Model(abc.ABC):
     # The prompt kinds decode takes; others raise ValueError.
     prompt_kinds: frozenset[PromptKind]
 
+    # The file of each session, by session name, which remove deletes; a model
+    # with files for some devices lists them all, and _device_blobs picks.
     _blobs: dict[str, Blob]
-    # Blobs that run on CoreML with device="coreml", all when None; the others
-    # run on CPU.
+    # Sessions that run on CoreML with device="coreml", all when None; the
+    # others run on WebGPU when it finds a GPU, and on the CPU otherwise.
     _coreml_blobs: frozenset[str] | None = None
     _inference_sessions: dict[str, onnxruntime.InferenceSession]
 
@@ -46,10 +48,18 @@ class Model(abc.ABC):
         logger.debug("Initializing model {name}", name=self.name)
         if device is not None:
             _onnx.device_providers(device=device)  # fail before downloading
-        self.pull()
+        self.pull(device=device)
+        blobs: dict[str, Blob] = self._blobs_of(device=device)
         if device is None:
-            self._inference_sessions = _onnx.load_inference_sessions(blobs=self._blobs)
-            return
+            self._inference_sessions = _onnx.load_inference_sessions(blobs=blobs)
+            if self.device != "cpu" or blobs == self._device_blobs(device="cpu"):
+                return
+            # A fallback to the CPU, which runs its own files faster, such as
+            # float32 instead of a GPU's float16.
+            del self._inference_sessions  # free them before loading the others
+            device = "cpu"
+            self.pull(device=device)
+            blobs = self._device_blobs(device=device)
         self._inference_sessions = {
             key: _onnx.create_device_session(
                 blob=blob,
@@ -59,7 +69,7 @@ class Model(abc.ABC):
                     coreml_cache_path=blob.coreml_cache_path,
                 ),
             )
-            for key, blob in self._blobs.items()
+            for key, blob in blobs.items()
         }
         logger.info(
             "Initialized inference sessions on {device!r}: {providers!r}",
@@ -74,17 +84,29 @@ class Model(abc.ABC):
         # The device the model runs on, e.g. "webgpu", or "cpu" after a fallback.
         session = next(iter(self._inference_sessions.values()))
         provider: str = session.get_providers()[0]
-        return {v: k for k, v in _onnx.DEVICE_PROVIDERS.items()}.get(provider, provider)
+        return _onnx.PROVIDER_DEVICES.get(provider, provider)
+
+    @classmethod
+    def _device_blobs(cls, *, device: str) -> dict[str, Blob]:
+        # The file of each session on device, for a model with files that run
+        # faster on some devices, such as float16 copies for GPUs.
+        return cls._blobs
+
+    @classmethod
+    def _blobs_of(cls, *, device: str | None) -> dict[str, Blob]:
+        # The files a model loads on device, or with the device it picks itself.
+        return cls._device_blobs(device=device or _onnx.default_device())
 
     @classmethod
     def pull(
         cls,
         *,
+        device: str | None = None,
         progress: Callable[[str, int, int | None], None] | None = None,
         cancel: threading.Event | None = None,
         timeout: float | tuple[float, float] | None = 30,
     ) -> None:
-        for blob in cls._blobs.values():
+        for blob in cls._blobs_of(device=device).values():
             blob.pull(progress=progress, cancel=cancel, timeout=timeout)
 
     @classmethod
@@ -93,15 +115,17 @@ class Model(abc.ABC):
             blob.remove()
 
     @classmethod
-    def get_id(cls) -> str:
+    def get_id(cls, *, device: str | None = None) -> str:
         return hashlib.md5(
-            "+".join(blob.hash for blob in cls._blobs.values()).encode()
+            "+".join(
+                blob.hash for blob in cls._blobs_of(device=device).values()
+            ).encode()
         ).hexdigest()[:12]
 
     @classmethod
-    def get_size(cls) -> int | None:
+    def get_size(cls, *, device: str | None = None) -> int | None:
         size = 0
-        for blob in cls._blobs.values():
+        for blob in cls._blobs_of(device=device).values():
             # Read once: a concurrent remove can turn a second read into None.
             blob_size: int | None = blob.size
             if blob_size is None:
@@ -110,9 +134,9 @@ class Model(abc.ABC):
         return size
 
     @classmethod
-    def get_modified_at(cls) -> float | None:
+    def get_modified_at(cls, *, device: str | None = None) -> float | None:
         modified_at: float = 0
-        for blob in cls._blobs.values():
+        for blob in cls._blobs_of(device=device).values():
             blob_modified_at: float | None = blob.modified_at
             if blob_modified_at is None:
                 return None

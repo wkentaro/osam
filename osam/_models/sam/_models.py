@@ -139,7 +139,9 @@ class Sam(SamBase):
         ).astype(np.float32)
 
         decoder_inputs: dict[str, npt.NDArray] = {
-            "image_embeddings": image_embedding.embedding[None, :, :, :],
+            "image_embeddings": cast(
+                npt.NDArray[np.float32], image_embedding.embedding
+            )[None],
             "point_coords": onnx_coord,
             "point_labels": onnx_label,
             "mask_input": np.zeros((1, 1, 256, 256), dtype=np.float32),
