@@ -1,4 +1,3 @@
-import os
 import pathlib
 
 import numpy as np
@@ -46,12 +45,8 @@ def test_a_null_threshold_is_unset(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
 
-# ponytail: runs only with the video models exported locally, until they are
-# uploaded as blobs.
-@pytest.mark.skipif(
-    not os.environ.get("OSAM_SAM3_VIDEO_MODELS"),
-    reason="needs OSAM_SAM3_VIDEO_MODELS",
-)
+# With the weights, on the worker that runs the other SAM3 tests.
+@pytest.mark.xdist_group("sam3")
 def test_replay_gives_the_same_result() -> None:
     image = np.asarray(
         PIL.Image.open(
@@ -92,41 +87,3 @@ def test_replay_gives_the_same_result() -> None:
     replayed = track(_runtime.Runtime(device="cpu"), [prompt, refine, remove])
     assert replayed.done.cache == "miss"
     assert replayed.done.result == removed.done.result
-
-
-class _Session:
-    _provider: str
-
-    def __init__(self, *, provider: str) -> None:
-        self._provider = provider
-
-    def get_providers(self) -> list[str]:
-        return [self._provider, "CPUExecutionProvider"]
-
-
-@pytest.mark.parametrize(
-    "provider", ["CUDAExecutionProvider", "WebGpuExecutionProvider"]
-)
-def test_video_models_fail_off_the_image_encoders_device(
-    monkeypatch: pytest.MonkeyPatch, provider: str
-) -> None:
-    from osam import _onnx
-    from osam._models.sam3 import _models
-
-    # onnxruntime dropped the provider, leaving the CPU.
-    monkeypatch.setattr(
-        _onnx,
-        "_create_session",
-        lambda path, providers: _Session(provider="CPUExecutionProvider"),
-    )
-    monkeypatch.setenv("OSAM_SAM3_VIDEO_MODELS", "/models")
-    model = _models.Sam3.__new__(_models.Sam3)
-    model._inference_sessions = {"image_encoder": _Session(provider=provider)}
-    with pytest.raises(RuntimeError, match=f"{provider} failed to load"):
-        model.new_timeline(
-            get_embedding=lambda frame: None,
-            num_frames=1,
-            height=4,
-            width=4,
-        )
-    assert model._video_sessions is None

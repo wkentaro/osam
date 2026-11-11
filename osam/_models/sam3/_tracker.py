@@ -172,7 +172,7 @@ class Tracker:
     def __init__(
         self,
         sessions: dict[str, onnxruntime.InferenceSession],
-        get_features: typing.Callable[[int], list[NDArray]],
+        get_features: typing.Callable[[int], list[typing.Any]],
         num_frames: int,
         video_height: int,
         video_width: int,
@@ -194,7 +194,7 @@ class Tracker:
             )
         self._sessions = sessions
         self._get_features = get_features
-        self._features_cache: tuple[int, list[NDArray]] | None = None
+        self._features_cache: tuple[int, list[typing.Any]] | None = None
         self.num_frames = num_frames
         self.video_height = video_height
         self.video_width = video_width

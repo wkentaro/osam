@@ -472,18 +472,12 @@ def test_track_reports_errors(
     assert response.status_code == 400, response.text
 
 
-def test_sam3_tracks_with_the_video_models(monkeypatch: pytest.MonkeyPatch) -> None:
-    def capabilities() -> list[str]:
-        with contextlib.closing(_runtime.Runtime()) as runtime:
-            app = _server.create_app(runtime=runtime)
-            models = TestClient(app).get("/api/models").json()["models"]
-        (sam3,) = (m for m in models if m["name"] == "sam3:latest")
-        return sam3["capabilities"]
-
-    monkeypatch.delenv("OSAM_SAM3_VIDEO_MODELS", raising=False)
-    assert capabilities() == ["segment"]
-    monkeypatch.setenv("OSAM_SAM3_VIDEO_MODELS", "/models")
-    assert capabilities() == ["segment", "track"]
+def test_sam3_tracks() -> None:
+    with contextlib.closing(_runtime.Runtime()) as runtime:
+        app = _server.create_app(runtime=runtime)
+        models = TestClient(app).get("/api/models").json()["models"]
+    (sam3,) = (m for m in models if m["name"] == "sam3:latest")
+    assert sam3["capabilities"] == ["segment", "track"]
 
 
 def test_track_bounds_its_results_with_long_histories(

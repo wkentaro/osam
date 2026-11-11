@@ -1,4 +1,3 @@
-import os
 from collections.abc import Callable
 from typing import Final
 from typing import cast
@@ -14,12 +13,7 @@ from osam import _onnx
 from osam import _types as types
 
 from .._clip import tokenize
-from . import _video
 from ._timeline import Timeline
-
-# ponytail: the video models load from this directory of sam3-onnx exports,
-# models/sam3_{name}.onnx, until they are uploaded as blobs.
-_VIDEO_MODELS_ENV: Final = "OSAM_SAM3_VIDEO_MODELS"
 
 # sam3-onnx's models, by file name without the sam3_ prefix and .onnx.
 _FILES: Final[dict[str, types.Blob]] = {
@@ -59,6 +53,42 @@ _FILES: Final[dict[str, types.Blob]] = {
         url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_point_decoder_fp16.onnx",
         hash="sha256:92ad10439ac5fb86d1a2cfa603e8ed34000b079d2d6eab0cef50297193fb7825",
     ),
+    "mask_downsampler": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_mask_downsampler.onnx",
+        hash="sha256:730b4ce0a995d6bc1a8ac6485893d96b477525111f107b1290625da7c2e2c1fa",
+    ),
+    "mask_downsampler_fp16": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_mask_downsampler_fp16.onnx",
+        hash="sha256:aff8ed550982ffc8712d879efe7cf0755c563a3efb31f75a684adb19f9e68f6b",
+    ),
+    "memory_attention": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_attention.onnx",
+        hash="sha256:59f5bdbea3c53128688c6fd55c6a60d3840a909e9ddd31cf406925de7ba94b63",
+    ),
+    "memory_attention_fp16": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_attention_fp16.onnx",
+        hash="sha256:951c5eabd7ac6707f641fd6736b596dac71b05354d2943c2ee94be7036ca7fb0",
+    ),
+    "memory_attention_fused_fp16": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_attention_fused_fp16.onnx",
+        hash="sha256:6dc7d2462eb856af15f4393dab9b66013aa26caf34b09ccd889a063377f2aa44",
+    ),
+    "memory_attention_fixed": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_attention_fixed.onnx",
+        hash="sha256:5934b587489f52cce77fa445c48ebdf1c09ee79c57d5d7342e0a727f27323449",
+    ),
+    "memory_attention_fixed_fp16": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_attention_fixed_fp16.onnx",
+        hash="sha256:80fe0ef83dd53d64b9918fa23c97ab0473502c0c9f2369ac81c4017220c92bc7",
+    ),
+    "memory_encoder": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_encoder.onnx",
+        hash="sha256:2a3c0b84795e07615ea9bdf7b380f93eff188debf861c4164ae22e90fe2ec96c",
+    ),
+    "memory_encoder_fp16": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_encoder_fp16.onnx",
+        hash="sha256:2948a2ce5bc74abb7481032e813a92ba5920e41b36da97012d4111120e0e43a3",
+    ),
 }
 
 # The v0.6.0 files, which an upgrade leaves on disk for remove to delete.
@@ -91,10 +121,16 @@ def _file(*, name: str, device: str) -> str:
     # lacks float16 kernels. On CUDA and WebGPU, the image encoder's attention
     # runs as onnxruntime's MultiHeadAttention, which CoreML takes minutes to
     # compile. onnxruntime before 1.24, the last on Python 3.10, runs the
-    # float16 image encoder 10 times as slow as float32 on CoreML.
+    # float16 image encoder 10 times as slow as float32 on CoreML. The fused
+    # memory attention keeps CUDA's arena from growing on every tracked frame,
+    # which ran out of memory on a 12 GB GPU, and runs slower elsewhere.
     if device == "cpu" or (device == "coreml" and _ORT_VERSION < (1, 24)):
         return name
-    if name == "image_encoder" and device in ("cuda", "webgpu"):
+    if (name, device) in {
+        ("image_encoder", "cuda"),
+        ("image_encoder", "webgpu"),
+        ("memory_attention", "cuda"),
+    }:
         return f"{name}_fused_fp16"
     return f"{name}_fp16"
 
@@ -114,25 +150,37 @@ class Sam3(types.Model):
     # CoreML runs the image encoder 3 times as fast as WebGPU does. It takes
     # 11 s to compile the decoder for 140 ms less per run, and can't load the
     # point decoder, whose point_coords dimension is unbounded.
-    _coreml_blobs = frozenset({"image_encoder"})
+    # The tracker runs memory_attention_fixed, a copy of memory_attention
+    # padded to a fixed shape, on CoreML in half the time WebGPU takes for the
+    # other, and the other when the memories outgrow it.
+    _coreml_blobs = frozenset({"image_encoder", "memory_attention_fixed"})
 
     @classmethod
     @override
     def _device_blobs(cls, *, device: str) -> dict[str, types.Blob]:
         blobs: dict[str, types.Blob] = {}
-        for name in ("image_encoder", "language_encoder", "decoder", "point_decoder"):
+        names: list[str] = [
+            "image_encoder",
+            "language_encoder",
+            "decoder",
+            "point_decoder",
+            "memory_encoder",
+            "memory_attention",
+            "mask_downsampler",
+        ]
+        if device == "coreml":
+            names.append("memory_attention_fixed")
+        for name in names:
             session: str = _onnx.session_device(
                 device=device, coreml=name in cls._coreml_blobs
             )
             blobs[name] = _FILES[_file(name=name, device=session)]
         return blobs
 
-    _video_sessions: dict[str, onnxruntime.InferenceSession] | None = None
-
     @classmethod
     @override
     def tracks(cls) -> bool:
-        return bool(os.environ.get(_VIDEO_MODELS_ENV))
+        return True
 
     @override
     def new_timeline(
@@ -143,23 +191,7 @@ class Sam3(types.Model):
         height: int,
         width: int,
     ) -> Timeline:
-        if self._video_sessions is None:
-            # On the image encoder's device, which the model reports: a video
-            # model that can't load or run there fails instead of tracking on
-            # another one.
-            providers: list[str] = list(
-                self._inference_sessions["image_encoder"].get_providers()
-            )
-            directory: str = os.environ[_VIDEO_MODELS_ENV]
-            self._video_sessions = {
-                name: _onnx.create_device_session(
-                    path=os.path.join(directory, f"sam3_{name}.onnx"),
-                    providers=providers,
-                )
-                for name in _video.MODEL_NAMES
-            }
-
-        def get_features(frame: int) -> dict[str, NDArray]:
+        def get_features(frame: int) -> dict[str, types.Feature]:
             # The image encoder's outputs by name, as encode_image keeps them.
             embedding: types.ImageEmbedding = get_embedding(frame)
             NAMES: Final = [
@@ -176,7 +208,7 @@ class Sam3(types.Model):
             }
 
         return Timeline(
-            sessions=self._video_sessions,
+            sessions=self._inference_sessions,
             get_features=get_features,
             num_frames=num_frames,
             height=height,

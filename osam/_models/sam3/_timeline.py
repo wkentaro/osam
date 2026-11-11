@@ -32,7 +32,7 @@ class Timeline:
         self,
         *,
         sessions: dict[str, onnxruntime.InferenceSession],
-        get_features: Callable[[int], dict[str, NDArray]],
+        get_features: Callable[[int], dict[str, types.Feature]],
         num_frames: int,
         height: int,
         width: int,

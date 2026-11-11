@@ -356,6 +356,5 @@ It streams one line per frame, `{"frame": 0, "annotations": [...]}`, each
 annotation with its `object_id`, then
 `{"done": true, "objects": [...], "result": "sha256:...", "cache": "partial"}`.
 A `base` other than the server's result gets 409 with `"code": "base_changed"`
-and the new `result`. Until the video models are uploaded, it needs
-`OSAM_SAM3_VIDEO_MODELS`, a directory of sam3-onnx exports, and `/api/models`
-lists `"track"` in SAM3's `capabilities` only then.
+and the new `result`. `/api/models` lists `"track"` in the `capabilities` of
+a model that tracks, SAM3.

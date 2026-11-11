@@ -199,7 +199,7 @@ def _masks_to_boxes(masks: NDArray[np.bool_]) -> NDArray[np.float32]:
 
 
 def _tracker_features(
-    features: typing.Callable[[int], dict[str, NDArray]], frame_idx: int
+    features: typing.Callable[[int], dict[str, typing.Any]], frame_idx: int
 ) -> list[NDArray]:
     return [
         features(frame_idx)[name]
@@ -218,7 +218,7 @@ class VideoInference:
     def __init__(
         self,
         sessions: dict[str, onnxruntime.InferenceSession],
-        get_features: typing.Callable[[int], dict[str, NDArray]],
+        get_features: typing.Callable[[int], dict[str, typing.Any]],
         num_frames: int,
         video_height: int,
         video_width: int,
