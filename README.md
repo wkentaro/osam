@@ -218,7 +218,7 @@ osam run sam3 --image examples/_images/dogs.jpg \
   --text dog --negative-box 1200,400,1700,1400 > sam3_negative_box.png
 
 # Track objects through a directory of frames, prompted on the first one,
-# writing one PNG per frame (sam3, with OSAM_SAM3_VIDEO_MODELS)
+# writing one PNG per frame (sam3)
 osam run sam3 --video frames/ --text person -o out/
 
 # Or give the whole prompt as JSON, in client.segment's keyword arguments
