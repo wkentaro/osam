@@ -27,6 +27,13 @@ MAX_OBJ_PTRS_IN_ENCODER: int = 16
 MF_THRESHOLD: float = 0.01
 NO_OBJ_SCORE: float = -1024.0
 MAX_POINT_NUM_IN_PROMPT_ENC: int = 16
+# far_old_frame_idx of track_step, in multiples of MAX_OBJ_PTRS_IN_ENCODER
+FAR_OLD_FRAMES: int = 20
+
+# The memories and object pointers that sam3_memory_attention_fixed.onnx takes:
+# those of one conditioning frame. More conditioning frames give up to 10 and 19.
+FIXED_NUM_MEMORIES: int = NUM_MASKMEM
+FIXED_NUM_OBJ_PTRS: int = MAX_OBJ_PTRS_IN_ENCODER
 
 # The sessions Tracker runs, as models/sam3_{name}.onnx.
 MODEL_NAMES: tuple[str, ...] = (
@@ -44,12 +51,44 @@ def _new_output_dict() -> OutputDict:
     return {"cond_frame_outputs": {}, "non_cond_frame_outputs": {}}
 
 
-def _to_bfloat16(x: NDArray[np.float32]) -> NDArray[np.float32]:
-    """Round to bfloat16 and back, as the tracker stores its memories: to the
-    nearest, ties to even, keeping the upper 16 bits of each float32."""
+def _to_bfloat16(x: NDArray[np.float32]) -> NDArray[np.uint16]:
+    """Round to bfloat16, as the tracker stores its memories, which halves
+    the memory they take: to the nearest, ties to even, as the upper 16 bits
+    of each float32."""
     bits = np.ascontiguousarray(x, np.float32).view(np.uint32)
     rounded = bits + np.uint32(0x7FFF) + ((bits >> 16) & np.uint32(1))
-    return (rounded & np.uint32(0xFFFF0000)).view(np.float32)
+    return (rounded >> 16).astype(np.uint16)
+
+
+def _from_bfloat16(x: NDArray[np.uint16]) -> NDArray[np.float32]:
+    return (x.astype(np.uint32) << 16).view(np.float32)
+
+
+def _pad_memory_attention_inputs(
+    memory: NDArray,
+    memory_tpos: NDArray,
+    obj_ptrs: NDArray,
+    obj_ptr_tpos: NDArray,
+) -> dict[str, NDArray]:
+    """The inputs of sam3_memory_attention_fixed.onnx for one object: n
+    memories and p object pointers padded to its fixed counts, with the
+    padding marked invalid so it gets no attention."""
+
+    def pad(x: NDArray, size: int) -> NDArray:
+        padding = np.zeros((size - len(x), *x.shape[1:]), x.dtype)
+        return np.concatenate([x, padding])
+
+    def valid(x: NDArray, size: int) -> NDArray:
+        return (np.arange(size) < len(x)).astype(np.float32)
+
+    return {
+        "memory": pad(memory, FIXED_NUM_MEMORIES),
+        "memory_tpos": pad(memory_tpos, FIXED_NUM_MEMORIES),
+        "obj_ptrs": pad(obj_ptrs, FIXED_NUM_OBJ_PTRS),
+        "obj_ptr_tpos": pad(obj_ptr_tpos, FIXED_NUM_OBJ_PTRS),
+        "memory_valid": valid(memory, FIXED_NUM_MEMORIES),
+        "obj_ptr_valid": valid(obj_ptrs, FIXED_NUM_OBJ_PTRS),
+    }
 
 
 def _lerp(x: NDArray[np.float32], axis: int, size_out: int) -> NDArray[np.float32]:
@@ -124,7 +163,10 @@ class Tracker:
     """Track objects through a video from point, box, and mask prompts.
 
     get_features(frame_idx) returns the image encoder's image_embeddings,
-    high_res_features1, and high_res_features2 for that frame.
+    high_res_features1, and high_res_features2 for that frame, as arrays or
+    as OrtValues on the sessions' GPU.
+
+    sessions can also hold "memory_attention_fixed", which CoreML can run.
     """
 
     def __init__(
@@ -342,6 +384,8 @@ class Tracker:
         image_embeddings = self._features(frame_idx)[0]
         if is_init_cond_frame or not use_prev_mem_frame:
             # The image encoder adds no_mem_embed already.
+            if isinstance(image_embeddings, onnxruntime.OrtValue):
+                image_embeddings = image_embeddings.numpy()
             return np.repeat(image_embeddings, batch_size, axis=0)
 
         tpos_sign_mul = -1 if track_in_reverse else 1
@@ -366,7 +410,8 @@ class Tracker:
         memories: list[NDArray] = []
         memory_tpos: list[int] = []
         for t_pos, prev, is_selected_cond_frame in t_pos_and_prevs:
-            if prev is None:
+            # _frame_filter keeps the adjacent frame even when trimmed.
+            if prev is None or prev["maskmem_features"] is None:
                 continue
             memories.append(prev["maskmem_features"])
             t = t_pos if not is_selected_cond_frame else 0
@@ -388,7 +433,8 @@ class Tracker:
             if out is not None:
                 pos_and_ptrs.append((t_diff, out["obj_ptr"]))
 
-        memory = np.stack(memories, axis=1)  # (batch_size, n, 64, 72, 72)
+        # (batch_size, n, 64, 72, 72)
+        memory = _from_bfloat16(np.stack(memories, axis=1))
         # Reverse tracking from the last frame can have no pointers at all.
         obj_ptrs = (
             np.stack([ptr for _, ptr in pos_and_ptrs], axis=1)
@@ -400,19 +446,30 @@ class Tracker:
         ) / np.float32(max_obj_ptrs_in_encoder - 1)
         # One object per call: a batch of objects runs out of memory on
         # WebGPU and is no faster on CUDA.
-        return np.concatenate(
-            [
-                self._run(
-                    "memory_attention",
-                    image_embeddings=image_embeddings,
-                    memory=memory[i],
-                    memory_tpos=np.array(memory_tpos, dtype=np.int64),
-                    obj_ptrs=obj_ptrs[i],
-                    obj_ptr_tpos=obj_ptr_tpos,
-                )["pix_feat_with_mem"]
-                for i in range(batch_size)
-            ]
-        )
+        outputs: list[NDArray] = []
+        for i in range(batch_size):
+            inputs: dict[str, NDArray] = {
+                "memory": memory[i],
+                "memory_tpos": np.array(memory_tpos, dtype=np.int64),
+                "obj_ptrs": obj_ptrs[i],
+                "obj_ptr_tpos": obj_ptr_tpos,
+            }
+            name = "memory_attention"
+            # The fixed-shape copy gives the same output, on CoreML. Prompts
+            # on several frames can pass its counts, which the other takes.
+            if (
+                "memory_attention_fixed" in self._sessions
+                and len(memory_tpos) <= FIXED_NUM_MEMORIES
+                and obj_ptrs.shape[1] <= FIXED_NUM_OBJ_PTRS
+            ):
+                name = "memory_attention_fixed"
+                inputs = _pad_memory_attention_inputs(**inputs)
+            outputs.append(
+                self._run(name, image_embeddings=image_embeddings, **inputs)[
+                    "pix_feat_with_mem"
+                ]
+            )
+        return np.concatenate(outputs)
 
     def _track_step(
         self,
@@ -840,9 +897,26 @@ class Tracker:
                 batch_size=self._get_obj_num(),
             )
             output_dict[storage_key][frame_idx] = current_out
+            self._trim_far_old_memory(frame_idx, reverse)
         self._add_output_per_object(frame_idx, current_out, storage_key)
         self.frames_already_tracked[frame_idx] = {"reverse": reverse}
         return current_out
+
+    def _trim_far_old_memory(self, frame_idx: int, reverse: bool) -> None:
+        """Sam3TrackerBase.track_step's trim of too old frames for memory
+        selection, behind the frame in either direction, so the memory the
+        tracker holds stays bounded on long videos. The frame keeps its mask,
+        pointer, and score. Without eff_iou_score, _frame_filter skips it."""
+        far_old_frame_idx = frame_idx + (1 if reverse else -1) * (
+            FAR_OLD_FRAMES * MAX_OBJ_PTRS_IN_ENCODER
+        )
+        non_cond_frame_outputs = self.output_dict["non_cond_frame_outputs"]
+        out = non_cond_frame_outputs.get(far_old_frame_idx)
+        if out is None or out["maskmem_features"] is None:
+            return
+        out["maskmem_features"] = None
+        out.pop("eff_iou_score", None)
+        self._add_output_per_object(far_old_frame_idx, out, "non_cond_frame_outputs")
 
     def update_memories(
         self, frame_idx: int, high_res_masks: NDArray, object_score_logits: NDArray
@@ -980,10 +1054,13 @@ class Tracker:
                     "object_score_logits",
                     "iou_score",
                 ]:
-                    out[key] = out[key][remain_old_obj_inds]
-                out["eff_iou_score"] = self._cal_mem_score(
-                    out["object_score_logits"], out["iou_score"]
-                )
+                    if out[key] is not None:
+                        out[key] = out[key][remain_old_obj_inds]
+                # A trimmed frame stays out of the memory selection.
+                if "eff_iou_score" in out:
+                    out["eff_iou_score"] = self._cal_mem_score(
+                        out["object_score_logits"], out["iou_score"]
+                    )
                 self._add_output_per_object(frame_idx, out, storage_key)
         return self.obj_ids
 
