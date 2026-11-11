@@ -497,8 +497,7 @@ def _track(
     # Without case, as a.png and A.png are one file on macOS and Windows.
     if output_dir is not None and len({p.stem.casefold() for p in paths}) < len(paths):
         raise click.UsageError(
-            f"{video_dir} has frames of the same name, which -o would write to "
-            "one file"
+            f"{video_dir} has frames of the same name, which -o would write to one file"
         )
     try:
         frames: list[np.ndarray] = [
