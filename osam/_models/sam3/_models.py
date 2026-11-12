@@ -135,6 +135,34 @@ def _file(*, name: str, device: str) -> str:
     return f"{name}_fp16"
 
 
+def _crop_mask(
+    *,
+    mask: NDArray[np.float32],
+    bounding_box: types.BoundingBox,
+    height: int,
+    width: int,
+) -> NDArray[np.bool_]:
+    # The mask probabilities resized to height x width and thresholded, as
+    # sam3-onnx does, over the bounding box's pixels only.
+    bb = bounding_box
+    mask_h, mask_w = mask.shape
+    return (
+        np.asarray(
+            PIL.Image.fromarray(mask).resize(
+                (bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1),
+                resample=PIL.Image.Resampling.BILINEAR,
+                box=(
+                    bb.xmin * mask_w / width,
+                    bb.ymin * mask_h / height,
+                    (bb.xmax + 1) * mask_w / width,
+                    (bb.ymax + 1) * mask_h / height,
+                ),
+            )
+        )
+        > 0.5
+    )
+
+
 class Sam3(types.Model):
     name = "sam3:latest"
     metadata = types.ModelMetadata(
@@ -357,7 +385,6 @@ class Sam3(types.Model):
         scores: NDArray[np.float32] = np.concatenate([run[1] for run in runs])
         masks_native: NDArray[np.float32] = np.concatenate([run[2] for run in runs])
         row_texts: list[str] = [text for text, run in zip(texts, runs) for _ in run[1]]
-        mask_h, mask_w = masks_native.shape[2], masks_native.shape[3]
 
         # Scale normalized boxes to inclusive pixel coordinates in the image
         boxes = np.minimum(
@@ -367,10 +394,6 @@ class Sam3(types.Model):
                 dtype=np.float32,
             ),
             [original_width - 1, original_height - 1] * 2,
-        )
-        # Scale normalized boxes to native mask coordinates
-        boxes_mask = boxes_norm * np.array(
-            [mask_w, mask_h, mask_w, mask_h], dtype=np.float32
         )
 
         # Keep the highest-scoring annotations, in text then decoder order.
@@ -386,19 +409,11 @@ class Sam3(types.Model):
                 xmax=round(box[2]),
                 ymax=round(box[3]),
             )
-            bbox_w = bb.xmax - bb.xmin + 1
-            bbox_h = bb.ymax - bb.ymin + 1
-            # Crop in native mask space, then resize to bbox dimensions
-            bm = boxes_mask[i].astype(int)
-            native_crop = masks_native[i, 0, bm[1] : bm[3] + 1, bm[0] : bm[2] + 1]
-            cropped_mask: NDArray[np.bool_] = (
-                np.asarray(
-                    PIL.Image.fromarray(native_crop).resize(
-                        (bbox_w, bbox_h),
-                        resample=PIL.Image.Resampling.BILINEAR,
-                    )
-                )
-                > 0.5
+            cropped_mask: NDArray[np.bool_] = _crop_mask(
+                mask=masks_native[i, 0],
+                bounding_box=bb,
+                height=original_height,
+                width=original_width,
             )
             annotations.append(
                 types.Annotation(
