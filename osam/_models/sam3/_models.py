@@ -245,9 +245,11 @@ class Sam3(types.Model):
         )
         # A box narrower than a pixel still encloses the pixel at its start.
         boxes[:, 2:] = np.maximum(boxes[:, 2:], boxes[:, :2])
-        # Scale normalized boxes to native mask coordinates
-        boxes_mask = boxes_norm * np.array(
-            [mask_w, mask_h, mask_w, mask_h], dtype=np.float32
+        # Scale the boxes' pixel areas to native mask coordinates
+        boxes_mask = (
+            (boxes + [0, 0, 1, 1])
+            * [mask_w, mask_h, mask_w, mask_h]
+            / [original_width, original_height, original_width, original_height]
         )
 
         # Keep the highest-scoring annotations, in the decoder's order.
@@ -266,8 +268,10 @@ class Sam3(types.Model):
             bbox_w = bb.xmax - bb.xmin + 1
             bbox_h = bb.ymax - bb.ymin + 1
             # Crop in native mask space, then resize to bbox dimensions
-            bm = boxes_mask[i].astype(int)
-            native_crop = masks_native[i, 0, bm[1] : bm[3] + 1, bm[0] : bm[2] + 1]
+            bm = np.concatenate(
+                [np.floor(boxes_mask[i, :2]), np.ceil(boxes_mask[i, 2:])]
+            ).astype(int)
+            native_crop = masks_native[i, 0, bm[1] : bm[3], bm[0] : bm[2]]
             cropped_mask: NDArray[np.bool_] = (
                 np.asarray(
                     PIL.Image.fromarray(native_crop).resize(
