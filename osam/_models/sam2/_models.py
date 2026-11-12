@@ -62,12 +62,12 @@ class Sam2(SamBase):
             encoder_session=self._inference_sessions["encoder"]
         )
 
-        input_point: npt.NDArray[np.float32] = points / np.array(
-            [
-                image_embedding.original_width / input_size,
-                image_embedding.original_height / input_size,
-            ],
-            dtype=np.float32,
+        input_point: npt.NDArray[np.float32] = types.scale_points(
+            points=points,
+            scale=(
+                input_size / image_embedding.original_width,
+                input_size / image_embedding.original_height,
+            ),
         )
 
         decoder_inputs = {

@@ -43,6 +43,12 @@ class EfficientSam(SamBase):
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
     ) -> npt.NDArray[np.bool_]:
+        # The decoder scales the points by 1024 / size itself.
+        scale = 1024 / np.array(
+            [image_embedding.original_width, image_embedding.original_height],
+            dtype=np.float32,
+        )
+        points = types.scale_points(points=points, scale=scale) / scale
         decoder_inputs = {
             # batch_size, embedding_dim, height, width
             "image_embeddings": cast(

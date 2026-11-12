@@ -118,26 +118,25 @@ class Sam(SamBase):
             encoder_session=self._inference_sessions["encoder"]
         )
 
-        # A padding point, label -1, only without a box, as segment-anything
-        # pads in PromptEncoder._embed_points(pad=boxes is None).
-        if 2 not in point_labels:
-            points = np.concatenate([points, np.array([[0.0, 0.0]])], axis=0)
-            point_labels = np.concatenate([point_labels, np.array([-1])], axis=0)
-        onnx_coord: npt.NDArray[np.float32] = points[None, :, :]
-        onnx_label: npt.NDArray[np.float32] = point_labels[None, :].astype(np.float32)
-
         new_height, new_width = _compute_resized_hw(
             height=image_embedding.original_height,
             width=image_embedding.original_width,
             target_size=input_size,
         )
-        onnx_coord = (
-            onnx_coord.astype(float)
-            * (
+        points = types.scale_points(
+            points=points,
+            scale=(
                 new_width / image_embedding.original_width,
                 new_height / image_embedding.original_height,
-            )
-        ).astype(np.float32)
+            ),
+        )
+        # A padding point, label -1, only without a box, as segment-anything
+        # pads in PromptEncoder._embed_points(pad=boxes is None).
+        if 2 not in point_labels:
+            points = np.concatenate([points, np.array([[0.0, 0.0]])], axis=0)
+            point_labels = np.concatenate([point_labels, np.array([-1])], axis=0)
+        onnx_coord: npt.NDArray[np.float32] = points[None, :, :].astype(np.float32)
+        onnx_label: npt.NDArray[np.float32] = point_labels[None, :].astype(np.float32)
 
         decoder_inputs: dict[str, npt.NDArray] = {
             "image_embeddings": cast(
