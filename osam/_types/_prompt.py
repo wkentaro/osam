@@ -75,3 +75,11 @@ def point_inputs(
         points += [prompt.box[:2], prompt.box[2:]]
         labels += [2, 3]
     return np.array(points, dtype=np.float32), np.array(labels, dtype=np.float32)
+
+
+def scale_points(
+    *, points: npt.NDArray[np.float32], scale: npt.ArrayLike
+) -> npt.NDArray[np.float32]:
+    # Scale pixel centers, not pixel corners: pixel x spans x - 0.5..x + 0.5,
+    # which must cover the same area of the resized image.
+    return ((points + 0.5) * np.asarray(scale) - 0.5).astype(np.float32)

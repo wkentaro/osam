@@ -390,15 +390,23 @@ class Sam3(types.Model):
         masks_native: NDArray[np.float32] = np.concatenate([run[2] for run in runs])
         row_texts: list[str] = [text for text, run in zip(texts, runs) for _ in run[1]]
 
-        # Scale normalized boxes to inclusive pixel coordinates in the image
-        boxes = np.minimum(
+        # Scale normalized box edges to the first and last pixels whose
+        # centers they enclose, a center on an edge included.
+        edges = (
             boxes_norm
             * np.array(
                 [original_width, original_height, original_width, original_height],
                 dtype=np.float32,
-            ),
+            )
+            - 0.5
+        )
+        boxes = np.clip(
+            np.concatenate([np.ceil(edges[:, :2]), np.floor(edges[:, 2:])], axis=1),
+            0,
             [original_width - 1, original_height - 1] * 2,
         )
+        # A box narrower than a pixel still encloses the pixel at its start.
+        boxes[:, 2:] = np.maximum(boxes[:, 2:], boxes[:, :2])
 
         # Keep the highest-scoring annotations, in text then decoder order.
         keep = np.sort(np.argsort(-scores, kind="stable")[:max_annotations])
@@ -445,7 +453,9 @@ class Sam3(types.Model):
             "image_embeddings": image_embedding.extra_features[3],
             "high_res_features1": image_embedding.extra_features[4],
             "high_res_features2": image_embedding.extra_features[5],
-            "point_coords": (points / [width, height] * 1008).astype(np.float32)[None],
+            "point_coords": types.scale_points(
+                points=points, scale=1008 / np.array([width, height])
+            )[None],
             "point_labels": point_labels.astype(np.float32)[None],
             "mask_input": np.zeros((1, 1, 288, 288), dtype=np.float32),
             "has_mask_input": np.array([0], dtype=np.float32),

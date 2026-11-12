@@ -92,3 +92,47 @@ def test_replay_gives_the_same_result() -> None:
     replayed = track(_runtime.Runtime(device="cpu"), [prompt, refine, remove])
     assert replayed.done.cache == "miss"
     assert replayed.done.result == removed.done.result
+
+
+def test_points_and_box_reach_the_tracker_as_pixel_centers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict] = []
+
+    class Predictor(_Predictor):
+        max_obj_id = 0
+
+        def _add_action_history(self, *args) -> None:
+            pass
+
+        def add_tracker_new_points(self, *args, **kwargs) -> None:
+            calls.append(kwargs)
+
+    monkeypatch.setattr(_timeline, "VideoInference", Predictor)
+    timeline = _timeline.Timeline(
+        sessions={}, get_features=lambda frame: {}, num_frames=1, height=128, width=256
+    )
+
+    timeline.apply(
+        action=_types.PromptAction(
+            type="prompt",
+            frame=0,
+            points=[(10, 20)],
+            point_labels=[1],
+            box=(0, 0, 255, 127),
+        )
+    )
+
+    # The point decoder adds 0.5 to read an integer as a pixel center of the
+    # image resized to IMAGE_SIZE.
+    [call] = calls
+    scale = _timeline.IMAGE_SIZE / np.array([256, 128])
+    for sent, pixels in [
+        (call["points"], [(10, 20)]),
+        (call["box"].reshape(-1, 2), [(0, 0), (255, 127)]),
+    ]:
+        np.testing.assert_allclose(
+            sent * _timeline.IMAGE_SIZE + 0.5,
+            (np.array(pixels) + 0.5) * scale,
+            rtol=1e-6,
+        )
