@@ -541,12 +541,23 @@ def _track(
     track_keys: set[str] = set(inspect.signature(Client.track).parameters)
     options: dict = {k: v for k, v in prompt.items() if k in track_keys}
     action: dict = {k: v for k, v in prompt.items() if k not in track_keys}
+
+    def progress(event: types.TrackProgress) -> None:
+        message = "Preparing video"
+        if event.action is not None and event.frame is not None:
+            message = (
+                f"Tracking action {event.action + 1}, "
+                f"frame {event.frame + 1}/{event.total_frames}"
+            )
+        click.echo(f"\r\033[K{message}", err=True, nl=False)
+
     try:
         with _client(device=device) as client:
             response: types.TrackResponse = client.track(
                 model_name,
                 frames,
                 [{"type": "prompt", "frame": 0} | action],
+                progress=progress,
                 **options,
             )
     except click.ClickException:
@@ -554,6 +565,8 @@ def _track(
     except Exception:
         logger.exception("Failed to run model")
         sys.exit(1)
+    finally:
+        click.echo(err=True)
 
     if json:
         for frame in response.frames:

@@ -165,9 +165,9 @@ def test_run_video_writes_a_png_per_frame(
             + ["-o", str(out), "--json"],
         )
     assert result.exit_code == 0, result.output
-    *frames, done = (
-        json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")
-    )
+    *frames, done = (json.loads(line) for line in result.stdout.splitlines())
+    assert "Preparing video" in result.stderr
+    assert "Tracking action 1, frame 3/3" in result.stderr
     assert [f["frame"] for f in frames] == [0, 1, 2]
     assert done["objects"] == [{"object_id": 0, "first_frame": 0, "last_frame": 2}]
     assert sorted(p.name for p in out.iterdir()) == ["1.png", "10.png", "2.png"]

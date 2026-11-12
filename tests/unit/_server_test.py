@@ -326,12 +326,15 @@ class _FakeTimeline:
         self._applied = applied
         self._count = 0
 
-    def apply(self, *, action) -> None:
+    def apply(self, *, action, on_frame=None) -> None:
         if getattr(action, "object_id", None) == 99:
             raise ValueError("no object 99")
         self._get_embedding(0)
         self._applied.append(action.type)
         self._count += 1
+        for frame in range(self._num_frames):
+            if on_frame is not None:
+                on_frame(frame)
 
     def annotations(self, *, frame: int) -> list[types.Annotation]:
         return [
@@ -361,11 +364,30 @@ def _patch_tracking(
     return applied
 
 
-def _post_track(*, client: TestClient, **fields) -> tuple[list[dict], dict]:
+def _track_events(*, client: TestClient, **fields) -> list[dict]:
     response = client.post("/api/track", json={"model": "fake", **fields})
     assert response.status_code == 200, response.text
-    *frames, done = (json.loads(line) for line in response.text.splitlines())
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert events[0]["progress"] is True
+    # One preparing event, before any position.
+    assert [e for e in events if "progress" in e and e.get("frame") is None] == [
+        events[0]
+    ]
+    return events
+
+
+def _post_track(*, client: TestClient, **fields) -> tuple[list[dict], dict]:
+    *events, done = _track_events(client=client, **fields)
+    assert done["done"] is True
+    frames = [event for event in events if not event.get("progress")]
     return frames, done
+
+
+def _track_error(*, client: TestClient, **fields) -> dict:
+    *progress, error = _track_events(client=client, **fields)
+    assert all(event.get("progress") for event in progress)
+    assert "error" in error
+    return error
 
 
 def test_track_streams_frames_and_caches_action_prefixes(
@@ -420,17 +442,10 @@ def test_track_streams_frames_and_caches_action_prefixes(
 
     # An edit on another result than the server's, such as after a replay.
     stale = {**add, "base": "sha256:" + "f" * 64}
-    response = client.post(
-        "/api/track",
-        json={
-            "model": "fake",
-            "frames": [ref] * 3,
-            "actions": [prompt, stale],
-        },
-    )
-    assert response.status_code == 409, response.text
-    assert response.json()["code"] == "base_changed"
-    assert response.json()["result"] == f"sha256:{1:064d}"
+    error = _track_error(client=client, frames=[ref] * 3, actions=[prompt, stale])
+    assert error["status_code"] == 409
+    assert error["code"] == "base_changed"
+    assert error["result"] == f"sha256:{1:064d}"
 
 
 def test_track_keeps_copies_of_its_inputs_and_results(
@@ -489,40 +504,37 @@ def test_track_reports_errors(
     client = TestClient(app)
     prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
     unknown = "sha256:" + "0" * 64
-    body = {"model": "fake", "frames": [_TINY_IMAGE_B64, unknown]}
+    body = {"frames": [_TINY_IMAGE_B64, unknown]}
 
-    response = client.post("/api/track", json={**body, "actions": [prompt]})
-    assert response.status_code == 400, response.text
-    assert "doesn't track" in response.json()["error"]
+    error = _track_error(client=client, **body, actions=[prompt])
+    assert error["status_code"] == 400
+    assert "doesn't track" in error["error"]
+    error = _track_error(client=client, **body, model="missing", actions=[prompt])
+    assert (error["status_code"], error["code"]) == (404, "model_not_found")
 
     _patch_tracking(monkeypatch=monkeypatch, model_type=runtime.model_type(name="fake"))
 
-    missing = client.post("/api/track", json={**body, "actions": [prompt]})
-    assert missing.status_code == 412, missing.text
-    assert missing.json()["code"] == "missing_images"
-    assert missing.json()["images"] == [unknown]
+    missing = _track_error(client=client, **body, actions=[prompt])
+    assert missing["status_code"] == 412
+    assert missing["code"] == "missing_images"
+    assert missing["images"] == [unknown]
 
     body["frames"] = [_TINY_IMAGE_B64]
     remove = {"type": "remove", "object_id": 0, "base": "sha256:" + "0" * 64}
     for actions in [[remove], [prompt, prompt], []]:
-        response = client.post("/api/track", json={**body, "actions": actions})
+        response = client.post(
+            "/api/track", json={"model": "fake", **body, "actions": actions}
+        )
         assert response.status_code == 422, response.text
-    response = client.post(
-        "/api/track",
-        json={
-            **body,
-            "actions": [
-                prompt,
-                {**remove, "object_id": 99, "base": f"sha256:{1:064d}"},
-            ],
-        },
+    error = _track_error(
+        client=client,
+        **body,
+        actions=[prompt, {**remove, "object_id": 99, "base": f"sha256:{1:064d}"}],
     )
-    assert response.status_code == 400, response.text
-    assert response.json()["error"] == "no object 99"
-    response = client.post(
-        "/api/track", json={**body, "actions": [prompt], "last_frame": 1}
-    )
-    assert response.status_code == 400, response.text
+    assert error["status_code"] == 400
+    assert error["error"] == "no object 99"
+    error = _track_error(client=client, **body, actions=[prompt], last_frame=1)
+    assert error["status_code"] == 400
 
 
 @pytest.mark.parametrize(
@@ -601,3 +613,100 @@ def test_track_bounds_its_results_with_long_histories(
         for track in runtime._tracks.values()
     )
     assert all(len(actions) == 64 for _, actions in runtime._tracks)
+
+
+def test_track_openapi_describes_ndjson_and_structured_http_errors(
+    app: fastapi.FastAPI,
+) -> None:
+    document = TestClient(app).get("/openapi.json").json()
+    responses = document["paths"]["/api/track"]["post"]["responses"]
+    assert set(responses["200"]["content"]) == {"application/x-ndjson"}
+    schema = responses["200"]["content"]["application/x-ndjson"]["schema"]
+    assert {item["$ref"].rsplit("/", 1)[-1] for item in schema["anyOf"]} == {
+        "TrackProgress",
+        "TrackFrame",
+        "TrackDone",
+        "TrackError",
+    }
+    assert set(responses) == {"200", "422"}
+    assert set(responses["422"]["content"]) == {"application/json"}
+    error = responses["422"]["content"]["application/json"]["schema"]
+    assert set(error["required"]) == {"error", "code"}
+    assert (
+        "progress"
+        not in document["components"]["schemas"]["TrackRequest"]["properties"]
+    )
+
+
+def test_track_callback_failure_discards_partial_timeline_and_releases_callback(
+    monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
+) -> None:
+    applied = _patch_tracking(
+        monkeypatch=monkeypatch, model_type=runtime.model_type(name="fake")
+    )
+    request = _requests.TrackRequest(
+        model="fake",
+        frames=[np.zeros((1, 1, 3), np.uint8)] * 3,
+        actions=[
+            types.PromptAction(
+                type="prompt", frame=0, points=[(0, 0)], point_labels=[1]
+            )
+        ],
+    )
+
+    class Stop(BaseException):
+        pass
+
+    class Progress:
+        def __call__(self, event: types.TrackProgress) -> None:
+            if event.frame == 1:
+                raise Stop()
+
+    callback = Progress()
+    ref = weakref.ref(callback)
+    with pytest.raises(Stop):
+        runtime.track(request=request, progress=callback)
+    assert runtime._timeline is None
+    assert runtime._track_images == []
+    assert not runtime._tracks
+    del callback
+    assert ref() is None
+    assert runtime.track(request=request).done.cache == "miss"
+    assert applied == ["prompt", "prompt"]
+
+    class Success:
+        def __call__(self, event: types.TrackProgress) -> None:
+            pass
+
+    runtime._tracks.clear()
+    runtime._timeline = None
+    success = Success()
+    ref = weakref.ref(success)
+    runtime.track(request=request, progress=success)
+    del success
+    assert ref() is None
+
+
+def test_track_stream_logs_unexpected_failure(
+    app: fastapi.FastAPI,
+    runtime: _runtime.Runtime,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def fail(**kwargs):
+        raise RuntimeError("model failed")
+
+    monkeypatch.setattr(runtime, "track", fail)
+    logger = logging.getLogger("uvicorn.error")
+    monkeypatch.setattr(logger, "handlers", [*logger.handlers, caplog.handler])
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    error = _track_error(
+        client=TestClient(app), frames=[_TINY_IMAGE_B64], actions=[prompt]
+    )
+    assert error == {
+        "error": "model failed",
+        "code": "internal_error",
+        "status_code": 500,
+    }
+    assert "Video tracking failed" in caplog.text
+    assert "RuntimeError: model failed" in caplog.text

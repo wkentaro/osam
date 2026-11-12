@@ -12,6 +12,7 @@ import threading
 import typing
 import urllib.parse
 from collections.abc import Callable
+from collections.abc import Generator
 from collections.abc import Iterator
 from typing import IO
 from typing import Any
@@ -180,20 +181,52 @@ class HttpBackend:
                     raise
         return post(encoded)
 
-    def track(self, *, request: _requests.TrackRequest) -> types.TrackResponse:
+    def track(
+        self,
+        *,
+        request: _requests.TrackRequest,
+        progress: Callable[[types.TrackProgress], None] | None = None,
+    ) -> types.TrackResponse:
         # Every frame by reference first.
         frames: list[np.ndarray] = typing.cast(list[np.ndarray], request.frames)
         refs: list[str] = [_json.image_ref(image=frame) for frame in frames]
         body: dict[str, Any] = request.model_dump(
             mode="json", exclude={"frames"}, exclude_none=True
         )
+        callback_failed = False
 
         def post(sent: list[str]) -> types.TrackResponse:
-            *lines, done = self._stream(path="/api/track", body=body | {"frames": sent})
-            return types.TrackResponse(
-                frames=[types.TrackFrame.model_validate(line) for line in lines],
-                done=types.TrackDone.model_validate(done),
-            )
+            nonlocal callback_failed
+            frames: list[types.TrackFrame] = []
+            process = self._process
+            with contextlib.closing(
+                self._stream(path="/api/track", body=body | {"frames": sent})
+            ) as stream:
+                for line in stream:
+                    if "error" in line:
+                        event = types.TrackError.model_validate(line)
+                        error = _response_error(
+                            status_code=event.status_code,
+                            data=json.dumps(line).encode(),
+                        )
+                        if self._private and event.status_code == 500:
+                            stream.close()
+                            self._restart(process=process, error=error)
+                        raise error
+                    if line.get("progress"):
+                        if progress is not None:
+                            try:
+                                progress(types.TrackProgress.model_validate(line))
+                            except _errors.ResponseError:
+                                callback_failed = True
+                                raise
+                    elif line.get("done"):
+                        return types.TrackResponse(
+                            frames=frames, done=types.TrackDone.model_validate(line)
+                        )
+                    else:
+                        frames.append(types.TrackFrame.model_validate(line))
+            raise RuntimeError("tracking stream ended without a done record")
 
         # The ones a 412 lists inline, then, if the server lost more, such as
         # in a restart, every one, which can't be missing.
@@ -210,7 +243,7 @@ class HttpBackend:
                 )
             except _errors.ResponseError as e:
                 missing: _errors.Reported = _errors.REPORTED[_errors.UnknownImageError]
-                if e.code != missing.code or attempt == 2:
+                if callback_failed or e.code != missing.code or attempt == 2:
                     raise
                 inline |= set(e.images) if attempt == 0 else set(refs)
         raise AssertionError("unreachable")
@@ -276,7 +309,9 @@ class HttpBackend:
             raise _response_error(status_code=response.status, data=data)
         return json.loads(data) if data else None
 
-    def _stream(self, *, path: str, body: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    def _stream(
+        self, *, path: str, body: dict[str, Any]
+    ) -> Generator[dict[str, Any], None, None]:
         # Retries like _request only until the stream starts; a timeout after
         # that restarts a private server and raises.
         connection, response = self._restarting(

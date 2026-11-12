@@ -42,7 +42,12 @@ class _Backend(Protocol):
         self, *, request: _requests.SegmentRequest
     ) -> _requests.SegmentResponse: ...
 
-    def track(self, *, request: _requests.TrackRequest) -> types.TrackResponse: ...
+    def track(
+        self,
+        *,
+        request: _requests.TrackRequest,
+        progress: Callable[[types.TrackProgress], None] | None = None,
+    ) -> types.TrackResponse: ...
 
 
 # Client.list shadows list inside the class, hence builtins.list there.
@@ -210,6 +215,7 @@ class Client:
         last_frame: int | None = None,
         include_masks: bool | None = None,
         keep_alive: float | str | None = None,
+        progress: Callable[[types.TrackProgress], None] | None = None,
     ) -> types.TrackResponse:
         """Track objects through frames, RGB arrays of one size, with model.
 
@@ -228,6 +234,10 @@ class Client:
         and done with each object's frames, result, and whether it hit the
         server's cache. Frames the server saw before go by reference.
         include_masks, keep_alive: as in segment.
+        progress receives the current action and frame, starting with a
+        preparing event. Positions can go backwards during propagation.
+        Raising from the callback cancels between frames, after any native
+        inference call in flight finishes.
         """
         request = _requests.TrackRequest.model_validate(
             {"model": model, "frames": builtins.list(frames), "actions": actions}
@@ -240,4 +250,4 @@ class Client:
                 }
             )
         )
-        return self._backend.track(request=request)
+        return self._backend.track(request=request, progress=progress)

@@ -2,6 +2,7 @@ import typing
 
 import pydantic
 
+from .._errors import ErrorBody
 from ._annotation import Annotation
 
 # What /api/track returns, and Client.track.
@@ -10,6 +11,21 @@ from ._annotation import Annotation
 class TrackFrame(pydantic.BaseModel):
     frame: int
     annotations: list[Annotation]
+
+
+class TrackProgress(pydantic.BaseModel):
+    progress: typing.Literal[True] = True
+    action: int | None = None
+    frame: int | None = None
+    total_frames: int
+
+
+class TrackError(ErrorBody):
+    status_code: int = pydantic.Field(
+        description="400 invalid_request, 404 model_not_found, 409 base_changed "
+        "with result, 412 missing_images with images, 500 internal_error, or "
+        "502 pull_failed. The HTTP response is already 200."
+    )
 
 
 class TrackObject(pydantic.BaseModel):

@@ -394,6 +394,7 @@ class VideoInference:
         start_frame_idx: int | None,
         max_frame_num_to_track: int | None,
         reverse: bool,
+        on_frame: typing.Callable[[int], None] | None = None,
     ) -> typing.Iterator[tuple[int, VideoOutput]]:
         """Sam3VideoInference.propagate_in_video. Frames come out HOTSTART_DELAY
         frames late, so objects that hotstart removes never show up."""
@@ -403,6 +404,8 @@ class VideoInference:
         hotstart_buffer: list[tuple[int, dict[str, typing.Any]]] = []
         hotstart_removed_obj_ids: set[int] = set()
         for frame_idx in processing_order:
+            if on_frame is not None:
+                on_frame(frame_idx)
             out = self._run_single_frame_inference(frame_idx, reverse)
             hotstart_buffer.append((frame_idx, out))
             hotstart_removed_obj_ids.update(out["removed_obj_ids"])
@@ -521,6 +524,7 @@ class VideoInference:
         start_frame_idx: int | None = None,
         max_frame_num_to_track: int | None = None,
         reverse: bool = False,
+        on_frame: typing.Callable[[int], None] | None = None,
     ) -> typing.Iterator[tuple[int, VideoOutput]]:
         """Yield the outputs of each frame.
 
@@ -544,12 +548,14 @@ class VideoInference:
         self._add_action_history(propagation_type, start_frame_idx, obj_ids, reverse)
         if propagation_type == "propagation_full":
             yield from self._propagate_full(
-                start_frame_idx, max_frame_num_to_track, reverse
+                start_frame_idx, max_frame_num_to_track, reverse, on_frame
             )
             return
 
         if propagation_type == "propagation_fetch":
             for frame_idx in processing_order:
+                if on_frame is not None:
+                    on_frame(frame_idx)
                 obj_id_to_mask = self._cached_masks(frame_idx)
                 yield (
                     frame_idx,
@@ -565,6 +571,8 @@ class VideoInference:
         for tracker in trackers:
             tracker.propagate_in_video_preflight()
         for frame_idx in processing_order:
+            if on_frame is not None:
+                on_frame(frame_idx)
             trk_obj_ids, low_res_masks, trk_scores = self._run_tracker_propagation(
                 frame_idx, reverse, trackers, run_mem_encoder=True
             )

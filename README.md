@@ -316,6 +316,14 @@ annotations and `done`. Each edit passes the `done.result` it was made on as
 `base`. It sends frames by reference first and sends inline only those the
 server lacks.
 
+Pass `progress=callback` to receive `osam.types.TrackProgress` while inference
+runs. A preparing event has `action` and `frame` set to `None`; later events
+give zero-based action and frame positions and `total_frames`. Positions can
+go backwards because tracking propagates in both directions, then collects
+final results. They are not a completion percentage. Raising from the callback
+stops the request. Cancellation takes effect between frames, after any native
+inference call or model compilation in flight finishes.
+
 ```python
 response = client.track(
     "sam3", frames, [{"type": "prompt", "frame": 0, "texts": ["person"]}]
@@ -388,8 +396,24 @@ It streams one line per frame, `{"frame": 0, "annotations": [...]}`, each
 annotation with its `object_id`, then
 `{"done": true, "objects": [...], "result": "sha256:...", "cache": "partial"}`
 and `"images"`, a reference to each frame to send next.
-A `base` other than the server's result gets 409 with `"code": "base_changed"`
-and the new `result`, also available as `osam.ResponseError.result` in Python.
+The NDJSON stream starts with
+`{"progress": true, "action": null, "frame": null, "total_frames": 20}` and
+reports current frame positions while inference runs. Only the subsequent
+frame records contain finalized annotations. The stream ends with `done`, or
+with an error record such as
+`{"error": "...", "code": "base_changed", "status_code": 409, "result": "sha256:..."}`.
+The response has already started with HTTP 200, so clients must read error
+records. Invalid request bodies receive HTTP 422 before the stream starts.
+
+A changed `base` reports `base_changed` with the current `result` digest.
+`missing_images` reports status 412 and `images` to resend inline. The Python
+client retries missing frames and raises `osam.ResponseError` for failures,
+preserving `status_code`, `code`, `images` and `result`. Disconnecting cancels
+work between frames, including requests still waiting for the inference worker.
+
+`/openapi.json` documents all four NDJSON record types and the JSON HTTP error
+body. The video CLI prints current frame positions to stderr; `--json` stdout
+contains only finalized frame and done records.
 `/api/models` lists `"track"` in the `capabilities` of
 a model that tracks, SAM3.
 

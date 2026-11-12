@@ -52,14 +52,16 @@ class Timeline:
         # The digest of the object ids and masks on every frame, as base.
         return self._result
 
-    def apply(self, *, action: types.Action) -> None:
+    def apply(
+        self, *, action: types.Action, on_frame: Callable[[int], None] | None = None
+    ) -> None:
         # The first action is the prompt, and only the first. Raises
         # ValueError for an action the result doesn't allow, such as a
         # refinement of an object that isn't there.
         if isinstance(action, types.PromptAction):
             self._check_frame(frame=action.frame)
             if action.texts is not None:
-                self._prompt_texts(action=action)
+                self._prompt_texts(action=action, on_frame=on_frame)
                 return
             if action.example_boxes is not None:
                 raise ValueError("example_boxes need texts")
@@ -71,6 +73,7 @@ class Timeline:
                 points=action.points,
                 point_labels=action.point_labels,
                 box=action.box,
+                on_frame=on_frame,
             )
         elif isinstance(action, types.AddAction):
             self._check_frame(frame=action.frame)
@@ -79,6 +82,7 @@ class Timeline:
                 points=action.points,
                 point_labels=action.point_labels,
                 box=action.box,
+                on_frame=on_frame,
             )
         elif isinstance(action, types.RefineAction):
             self._check_frame(frame=action.frame)
@@ -91,11 +95,13 @@ class Timeline:
                 [*points, *action.points],
                 [*labels, *action.point_labels],
             )
-            self._prompt_object(object_id=action.object_id, frame=action.frame)
+            self._prompt_object(
+                object_id=action.object_id, frame=action.frame, on_frame=on_frame
+            )
         else:
             self._check_object(object_id=action.object_id)
             self._video.remove_object(action.object_id)
-            self._fetch()
+            self._fetch(on_frame=on_frame)
 
     def _check_frame(self, *, frame: int) -> None:
         if frame >= self._num_frames:
@@ -105,7 +111,9 @@ class Timeline:
         if object_id not in self._video.obj_ids.tolist():
             raise ValueError(f"no object {object_id}")
 
-    def _prompt_texts(self, *, action: types.PromptAction) -> None:
+    def _prompt_texts(
+        self, *, action: types.PromptAction, on_frame: Callable[[int], None] | None
+    ) -> None:
         # A null threshold is unset, as the action's cache key has it.
         if any(getattr(action, name) is not None for name in THRESHOLDS):
             raise ValueError("track takes no thresholds")
@@ -128,7 +136,7 @@ class Timeline:
             boxes_xywh=boxes_xywh,
             box_labels=box_labels,
         )
-        self._propagate(frame=action.frame)
+        self._propagate(frame=action.frame, on_frame=on_frame)
 
     def _start_without_detection(self) -> None:
         # As if a text prompt had found nothing, so points and boxes add
@@ -146,6 +154,7 @@ class Timeline:
         points: list[tuple[float, float]] | None,
         point_labels: list[PointLabel] | None,
         box: tuple[float, float, float, float] | None,
+        on_frame: Callable[[int], None] | None,
     ) -> None:
         object_id: int = self._video.max_obj_id + 1
         self._prompts[object_id] = {
@@ -155,9 +164,11 @@ class Timeline:
                 list(point_labels or []),
             )
         }
-        self._prompt_object(object_id=object_id, frame=frame)
+        self._prompt_object(object_id=object_id, frame=frame, on_frame=on_frame)
 
-    def _prompt_object(self, *, object_id: int, frame: int) -> None:
+    def _prompt_object(
+        self, *, object_id: int, frame: int, on_frame: Callable[[int], None] | None
+    ) -> None:
         box, points, labels = self._prompts[object_id][frame]
 
         def normalize(xy: NDArray[np.float32]) -> NDArray:
@@ -176,22 +187,24 @@ class Timeline:
             labels=np.array(labels, np.int32) if points else None,
             box=None if box is None else normalize(box).reshape(-1),
         )
-        self._propagate(frame=frame)
+        self._propagate(frame=frame, on_frame=on_frame)
 
-    def _propagate(self, *, frame: int) -> None:
+    def _propagate(self, *, frame: int, on_frame: Callable[[int], None] | None) -> None:
         for reverse in (False, True):
             for _ in self._video.propagate_in_video(
-                start_frame_idx=frame, reverse=reverse
+                start_frame_idx=frame, reverse=reverse, on_frame=on_frame
             ):
                 pass
-        self._fetch()
+        self._fetch(on_frame=on_frame)
 
-    def _fetch(self) -> None:
+    def _fetch(self, *, on_frame: Callable[[int], None] | None) -> None:
         # Every frame's outputs as the predictor has them now: hotstart can
         # remove an object from frames the other direction already returned,
         # and a removed object no longer claims its pixels from the others.
         digest = hashlib.sha256()
-        for frame, out in self._video.propagate_in_video(start_frame_idx=0):
+        for frame, out in self._video.propagate_in_video(
+            start_frame_idx=0, on_frame=on_frame
+        ):
             self._annotations[frame] = []
             for object_id, score, mask in zip(
                 out["out_obj_ids"].tolist(),

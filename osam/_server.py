@@ -45,6 +45,21 @@ class PullRequest(pydantic.BaseModel):
     model: str
 
 
+class _TrackStream(fastapi.responses.StreamingResponse):
+    media_type = "application/x-ndjson"
+    _cancel: threading.Event
+
+    def __init__(self, content, *, cancel: threading.Event):
+        super().__init__(content)
+        self._cancel = cancel
+
+    async def __call__(self, scope, receive, send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self._cancel.set()
+
+
 # Errors are {"error": message, "code": code}: the message as in Ollama, and a
 # code that stays the same across releases, for clients to branch on.
 def _error(
@@ -60,6 +75,32 @@ def _error(
         status_code=status_code,
         headers=headers,
     )
+
+
+def _report(*, exc: Exception) -> dict[str, Any]:
+    # The fields of _error for exc. Two errors carry a field more: the images
+    # to send again, in place of their references, and the result to show
+    # before the edit is made again.
+    reported: _errors.Reported = next(
+        (
+            _errors.REPORTED[t]
+            for t in type(exc).__mro__
+            if issubclass(t, Exception) and t in _errors.REPORTED
+        ),
+        _errors.INTERNAL,
+    )
+    fields: dict[str, Any] = {
+        "message": str(exc),
+        "status_code": reported.status_code,
+        "code": reported.code,
+    }
+    if reported is _errors.INTERNAL:
+        fields["message"] = str(exc) or type(exc).__name__
+    if isinstance(exc, _errors.UnknownImageError):
+        fields["images"] = exc.refs
+    if isinstance(exc, _errors.BaseChangedError):
+        fields["result"] = exc.result
+    return fields
 
 
 def _describe_validation_errors(*, errors: Sequence[Any]) -> str:
@@ -93,43 +134,10 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
         ),
     )
     # Anything else is a 500, still in that shape; uvicorn logs the traceback.
-    app.add_exception_handler(
-        Exception,
-        lambda request, exc: _error(
-            message=str(exc) or type(exc).__name__,
-            status_code=_errors.INTERNAL.status_code,
-            code=_errors.INTERNAL.code,
-        ),
-    )
-    for error_type, reported in _errors.REPORTED.items():
+    for error_type in [Exception, *_errors.REPORTED]:
         app.add_exception_handler(
-            error_type,
-            lambda request, exc, reported=reported: _error(
-                message=str(exc), status_code=reported.status_code, code=reported.code
-            ),
+            error_type, lambda request, exc: _error(**_report(exc=exc))
         )
-    # These two carry a field more: the images to send again, in place of
-    # their references, and the result to show before the edit is made again.
-    missing: _errors.Reported = _errors.REPORTED[_errors.UnknownImageError]
-    app.add_exception_handler(
-        _errors.UnknownImageError,
-        lambda request, exc: _error(
-            message=str(exc),
-            status_code=missing.status_code,
-            code=missing.code,
-            images=exc.refs,
-        ),
-    )
-    changed: _errors.Reported = _errors.REPORTED[_errors.BaseChangedError]
-    app.add_exception_handler(
-        _errors.BaseChangedError,
-        lambda request, exc: _error(
-            message=str(exc),
-            status_code=changed.status_code,
-            code=changed.code,
-            result=exc.result,
-        ),
-    )
     app.add_exception_handler(
         fastapi.exceptions.RequestValidationError,
         lambda request, exc: _error(
@@ -202,21 +210,78 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
     async def segment(request: SegmentRequest) -> SegmentResponse:
         return await run(call=functools.partial(runtime.segment, request=request))
 
-    # Streams NDJSON: a line per frame, then a done line. Every action runs
-    # before the first line, so a missing frame or a changed base is still a
-    # status code.
-    @app.post("/api/track", response_class=fastapi.responses.StreamingResponse)
+    @app.post(
+        "/api/track",
+        status_code=200,
+        response_class=_TrackStream,
+        responses={
+            200: {
+                "model": types.TrackProgress
+                | types.TrackFrame
+                | types.TrackDone
+                | types.TrackError,
+                "description": "NDJSON progress and finalized frames, ending with "
+                "TrackDone or TrackError. Inference errors carry status_code "
+                "inside the HTTP 200 stream.",
+            },
+            422: {
+                "description": "invalid_request: request validation failed",
+                "content": {
+                    "application/json": {
+                        "schema": _errors.ErrorBody.model_json_schema()
+                    }
+                },
+            },
+        },
+    )
     async def track(request: TrackRequest) -> fastapi.responses.Response:
-        response = await run(call=functools.partial(runtime.track, request=request))
+        cancel = threading.Event()
+        loop = asyncio.get_running_loop()
+        events: asyncio.Queue[
+            types.TrackProgress | types.TrackResponse | types.TrackError
+        ] = asyncio.Queue()
 
-        def lines():
-            for frame in response.frames:
-                yield frame.model_dump_json() + "\n"
-            yield response.done.model_dump_json() + "\n"
+        def progress(event: types.TrackProgress) -> None:
+            # The stream already sent the preparing event.
+            if event.frame is not None and not cancel.is_set():
+                loop.call_soon_threadsafe(events.put_nowait, event)
 
-        return fastapi.responses.StreamingResponse(
-            lines(), media_type="application/x-ndjson"
-        )
+        def work() -> None:
+            try:
+                event = runtime.track(request=request, progress=progress, cancel=cancel)
+            except Exception as exc:
+                if cancel.is_set() and isinstance(
+                    exc, (concurrent.futures.CancelledError, types.PullCancelledError)
+                ):
+                    return
+                fields = _report(exc=exc)
+                if fields["status_code"] == _errors.INTERNAL.status_code:
+                    logging.getLogger("uvicorn.error").exception(
+                        "Video tracking failed"
+                    )
+                event = types.TrackError(error=fields.pop("message"), **fields)
+            if not cancel.is_set():
+                loop.call_soon_threadsafe(events.put_nowait, event)
+
+        async def stream():
+            # Sent even when another request holds the worker.
+            yield (
+                types.TrackProgress(total_frames=len(request.frames)).model_dump_json()
+                + "\n"
+            )
+            loop.run_in_executor(worker, work)
+            while True:
+                event = await events.get()
+                if isinstance(event, types.TrackResponse):
+                    for frame in event.frames:
+                        yield await asyncio.to_thread(frame.model_dump_json) + "\n"
+                    yield event.done.model_dump_json() + "\n"
+                    return
+                yield event.model_dump_json(exclude_none=True) + "\n"
+                if isinstance(event, types.TrackError):
+                    return
+
+        return _TrackStream(stream(), cancel=cancel)
 
     @app.post("/api/load")
     async def load(request: LoadRequest) -> None:

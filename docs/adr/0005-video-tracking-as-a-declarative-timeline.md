@@ -2,7 +2,7 @@
 
 osam tracks objects through a video with one endpoint, `POST /api/track`. A
 request names the frames by reference and lists every action the user has
-taken so far, in order. The server streams one line per frame. It keeps
+taken so far, in order. The server streams progress and finalized frames. It keeps
 tracker state only as a cache keyed by that list, so the client holds the
 source of truth. This replaces the session resource that ADR 0004 expected
 video tracking to need.
@@ -36,12 +36,17 @@ longer has it.
   form, since it can't refine an object. It is the timeline with one action.
 - **A declarative timeline (chosen).** It follows `/api/segment`: content
   references, 412 for what the server lacks, and server state as a cache.
+- **Buffer results to preserve HTTP errors.** Rejected: it delays the first
+  response until inference finishes and requires a separate progress mode.
+  `/api/track` has not shipped, so choose one streaming contract before
+  clients depend on it. Inference errors carry their status inside the stream.
 
 ## Decision
 
 - A request has `model`, `frames`, and `actions`. Each frame is a base64
   image file, or a reference `"sha256:<hex>"` to an image the server has
-  seen. Frames that the server lacks get 412 with `"code": "missing_images"`
+  seen. Frames that the server lacks get an error record with
+  `"status_code": 412`, `"code": "missing_images"`
   and their references, and the client resends those inline.
 
 - `/api/segment` moves to the same form: `image` takes either value, and
@@ -71,7 +76,7 @@ longer has it.
   digest of the object ids and masks on every frame of the video, whatever
   `first_frame`, `last_frame`, and `include_masks` returned. Before applying
   an action, the server checks that the result it holds or replayed for the
-  earlier actions has that digest, and answers 409 with
+  earlier actions has that digest, and reports `"status_code": 409` with
   `"code": "base_changed"` and the new digest when it does not. This is the
   If-Match of HTTP. It keeps ids safe to refer to, since a replay that numbers
   objects differently, or segments them differently, fails before any edit.
@@ -80,12 +85,22 @@ longer has it.
   frame, in both directions from the first prompt frame. The server works out
   what it must recompute.
 
-- The response is NDJSON with one line per frame,
+- The response is NDJSON, starting before inference with
+  `{"progress": true, "action": null, "frame": null, "total_frames": N}`.
+  Later progress records give the zero-based action and frame currently being
+  processed. Positions can go backwards during propagation; they are not a
+  completion percentage. Finalized frames follow as
   `{"frame", "annotations"}`, then a last line with `"done": true`, each
   object's first and last frame, `result`, and whether the request hit the
   cache.
   `first_frame` and `last_frame` limit the frames returned, and
   `include_masks: false` leaves out the masks.
+
+- Inference failures end the HTTP 200 stream with `{"error", "code", "status_code"}` and any `images` or `result` metadata. Invalid request bodies
+  still receive HTTP 422 before streaming. The Python client handles streamed
+  errors, including missing-frame retries, as it handles HTTP errors.
+  Disconnecting or raising from its progress callback cancels between frames.
+  Native inference or compilation already in flight must finish first.
 
 - The server caches tracker state by model, device, frames, and action
   prefix, and image features by model and image reference. Both caches are
@@ -109,7 +124,7 @@ longer has it.
   from the client-facing API into the runtime, where upstream keeps it too.
 - An edit applies only to the result the user saw. Replays on the same
   device reproduce it. A replay on another device, such as after a GPU falls
-  back to CPU, usually changes some mask and fails with 409, so the client
+  back to CPU, usually changes some mask and reports status 409, so the client
   shows the new result and the user makes the edits again.
 - Requests grow with the number of frames and actions, by about 70 bytes per
   frame reference.

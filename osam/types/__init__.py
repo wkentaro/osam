@@ -7,8 +7,10 @@ from ._model_info import ModelInfo
 from ._model_info import RunningModel
 from ._model_metadata import ModelMetadata
 from ._track import TrackDone
+from ._track import TrackError
 from ._track import TrackFrame
 from ._track import TrackObject
+from ._track import TrackProgress
 from ._track import TrackResponse
 
 __all__ = [
@@ -21,7 +23,9 @@ __all__ = [
     "ModelMetadata",
     "RunningModel",
     "TrackDone",
+    "TrackError",
     "TrackFrame",
     "TrackObject",
+    "TrackProgress",
     "TrackResponse",
 ]

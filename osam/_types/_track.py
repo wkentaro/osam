@@ -21,7 +21,7 @@ class _Edit(pydantic.BaseModel):
 
     base: str = pydantic.Field(
         description="The result digest of the response the user saw when making "
-        "this action; 409 if the server's result differs"
+        "this action; base_changed with status_code 409 if the result differs"
     )
 
 
