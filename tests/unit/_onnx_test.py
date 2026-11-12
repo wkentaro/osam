@@ -313,6 +313,37 @@ def test_resolve_providers_without_webgpu_plugin_is_cpu(
     assert resolve_providers() == ["CPUExecutionProvider"]
 
 
+def test_sam3_runs_on_cpu_with_cuda_before_onnxruntime_1_24(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_cuda: list[str],
+    fake_sessions: list[tuple[str, Any]],
+) -> None:
+    from osam._models.sam3 import _models
+
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    monkeypatch.setattr(_models, "_ORT_VERSION", (1, 23))
+    monkeypatch.setattr(_model.Model, "pull", classmethod(lambda cls, **kwargs: None))
+    ort: Any = onnxruntime
+    monkeypatch.setattr(
+        ort,
+        "get_available_providers",
+        lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"],
+    )
+
+    with pytest.raises(RuntimeError, match="fails on cuda with onnxruntime"):
+        _models.Sam3(device="cuda")
+    # Picking a device automatically picks the CPU, with its files.
+    sam3 = _models.Sam3()
+    assert sam3.device == "cpu"
+    cpu = _models.Sam3._device_blobs(device="cpu")
+    assert _models.Sam3._blobs_of(device=None) == cpu
+    loaded = [path for path, p in fake_sessions if p != "fallback disabled"]
+    assert loaded == [blob.path for blob in cpu.values()]
+
+    monkeypatch.setattr(_models, "_ORT_VERSION", (1, 24))
+    assert _models.Sam3(device="cuda").device == "cuda"
+
+
 def test_model_device_reports_the_picked_device(
     monkeypatch: pytest.MonkeyPatch,
     fake_webgpu: list[Any],
