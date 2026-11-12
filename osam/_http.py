@@ -444,6 +444,9 @@ def _serve_stdio() -> None:
     # The child of _start_subprocess: settings on stdin, how it started on
     # stdout, and stdin closing when the parent exits.
     start: dict[str, Any] = json.loads(sys.stdin.readline())
+    # Without a stderr, as under pythonw.exe, stray output goes nowhere.
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
     # Keep stray output, native libraries' too, off the start line.
     stdout = os.fdopen(os.dup(sys.stdout.fileno()), "w")
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())

@@ -236,6 +236,25 @@ def test_unavailable_device_fails_at_start(capfd: pytest.CaptureFixture[str]) ->
     assert "Traceback" not in capfd.readouterr().err
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="closes fd 2 with sh")
+def test_private_server_starts_without_a_stderr() -> None:
+    # As under pythonw.exe, where the child starts with sys.stderr None.
+    result = subprocess.run(
+        [
+            "sh",
+            "-c",
+            'exec 2>&-; exec "$0" -c "from osam._http import _serve_stdio; '
+            '_serve_stdio()"',
+            sys.executable,
+        ],
+        input=b'{"token": "t", "settings": {}}\n',
+        stdout=subprocess.PIPE,
+        timeout=60,
+    )
+    assert result.returncode == 0
+    assert b'"port"' in result.stdout
+
+
 def test_frozen_application_starts_through_multiprocessing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
