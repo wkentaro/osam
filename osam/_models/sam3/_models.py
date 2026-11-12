@@ -7,6 +7,7 @@ from loguru import logger
 from numpy.typing import NDArray
 
 from osam import types
+from osam.types._prompt import scale_points
 
 from ..yoloworld.clip import tokenize
 
@@ -227,18 +228,28 @@ class Sam3(types.Model):
         masks_native: NDArray[np.float32] = cast(NDArray[np.float32], outputs[2])
         mask_h, mask_w = masks_native.shape[2], masks_native.shape[3]
 
-        # Scale normalized boxes to inclusive pixel coordinates in the image
-        boxes = np.minimum(
+        # Scale normalized box edges to the first and last pixels whose
+        # centers they enclose, a center on an edge included.
+        edges = (
             boxes_norm
             * np.array(
                 [original_width, original_height, original_width, original_height],
                 dtype=np.float32,
-            ),
+            )
+            - 0.5
+        )
+        boxes = np.clip(
+            np.concatenate([np.ceil(edges[:, :2]), np.floor(edges[:, 2:])], axis=1),
+            0,
             [original_width - 1, original_height - 1] * 2,
         )
-        # Scale normalized boxes to native mask coordinates
-        boxes_mask = boxes_norm * np.array(
-            [mask_w, mask_h, mask_w, mask_h], dtype=np.float32
+        # A box narrower than a pixel still encloses the pixel at its start.
+        boxes[:, 2:] = np.maximum(boxes[:, 2:], boxes[:, :2])
+        # Scale the boxes' pixel areas to native mask coordinates
+        boxes_mask = (
+            (boxes + [0, 0, 1, 1])
+            * [mask_w, mask_h, mask_w, mask_h]
+            / [original_width, original_height, original_width, original_height]
         )
 
         # Keep the highest-scoring annotations, in the decoder's order.
@@ -257,8 +268,10 @@ class Sam3(types.Model):
             bbox_w = bb.xmax - bb.xmin + 1
             bbox_h = bb.ymax - bb.ymin + 1
             # Crop in native mask space, then resize to bbox dimensions
-            bm = boxes_mask[i].astype(int)
-            native_crop = masks_native[i, 0, bm[1] : bm[3] + 1, bm[0] : bm[2] + 1]
+            bm = np.concatenate(
+                [np.floor(boxes_mask[i, :2]), np.ceil(boxes_mask[i, 2:])]
+            ).astype(int)
+            native_crop = masks_native[i, 0, bm[1] : bm[3], bm[0] : bm[2]]
             cropped_mask: NDArray[np.bool_] = (
                 np.asarray(
                     PIL.Image.fromarray(native_crop).resize(
@@ -302,7 +315,9 @@ class Sam3(types.Model):
             "image_embeddings": image_embedding.extra_features[3][None],
             "high_res_features1": image_embedding.extra_features[4][None],
             "high_res_features2": image_embedding.extra_features[5][None],
-            "point_coords": (points / [width, height] * 1008).astype(np.float32)[None],
+            "point_coords": scale_points(
+                points=points, scale=1008 / np.array([width, height])
+            )[None],
             "point_labels": point_labels.astype(np.float32)[None],
             "mask_input": np.zeros((1, 1, 288, 288), dtype=np.float32),
             "has_mask_input": np.array([0], dtype=np.float32),

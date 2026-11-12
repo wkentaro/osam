@@ -9,6 +9,7 @@ import PIL.Image
 from loguru import logger
 
 from osam import types
+from osam.types._prompt import scale_points
 
 
 class SamBase(types.Model):
@@ -153,25 +154,24 @@ class Sam(SamBase):
             encoder_session=self._inference_sessions["encoder"]
         )
 
-        onnx_coord: npt.NDArray[np.float32] = np.concatenate(
-            [prompt.points, np.array([[0.0, 0.0]])], axis=0
-        )[None, :, :]
-        onnx_label: npt.NDArray[np.float32] = np.concatenate(
-            [prompt.point_labels, np.array([-1])], axis=0
-        )[None, :].astype(np.float32)
-
         new_height, new_width = _compute_resized_hw(
             height=image_embedding.original_height,
             width=image_embedding.original_width,
             target_size=input_size,
         )
-        onnx_coord = (
-            onnx_coord.astype(float)
-            * (
+        points: npt.NDArray[np.float32] = scale_points(
+            points=prompt.points,
+            scale=(
                 new_width / image_embedding.original_width,
                 new_height / image_embedding.original_height,
-            )
-        ).astype(np.float32)
+            ),
+        )
+        onnx_coord: npt.NDArray[np.float32] = np.concatenate(
+            [points, np.array([[0.0, 0.0]], dtype=np.float32)], axis=0
+        )[None, :, :]
+        onnx_label: npt.NDArray[np.float32] = np.concatenate(
+            [prompt.point_labels, np.array([-1])], axis=0
+        )[None, :].astype(np.float32)
 
         decoder_inputs: dict[str, npt.NDArray] = {
             "image_embeddings": image_embedding.embedding[None, :, :, :],

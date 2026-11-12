@@ -3,6 +3,7 @@ from typing import Type
 from typing import Union
 
 import numpy as np
+import numpy.typing as npt
 import pydantic
 
 
@@ -82,3 +83,11 @@ class Prompt(pydantic.BaseModel):
                 "points and point_labels must have the same number of rows"
             )
         return self
+
+
+def scale_points(
+    *, points: npt.NDArray[np.floating], scale: npt.ArrayLike
+) -> npt.NDArray[np.float32]:
+    # Scale pixel centers, not pixel corners: pixel x spans x - 0.5..x + 0.5,
+    # which must cover the same area of the resized image.
+    return ((points + 0.5) * np.asarray(scale) - 0.5).astype(np.float32)

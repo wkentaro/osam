@@ -10,15 +10,18 @@ from osam._models.sam3._models import Sam3
 @pytest.mark.parametrize(
     "box, expected",
     [
-        ([-0.3, -0.3, 0.5, 0.5], (0, 0, 50, 50)),
+        ([-0.3, -0.3, 0.5, 0.5], (0, 0, 49, 49)),
         ([0.5, 0.5, 1.3, 1.3], (50, 50, 99, 99)),
+        ([0.2, 0.3, 0.4, 0.5], (20, 30, 39, 49)),
+        ([0.206, 0.306, 0.214, 0.314], (21, 31, 21, 31)),
+        ([0.375, 0.125, 0.625, 0.875], (37, 12, 62, 87)),
     ],
 )
-def test_generate_keeps_mask_of_box_past_image_edge(
+def test_generate_boxes_the_pixels_inside_the_predicted_edges(
     box: list[float], expected: tuple[int, int, int, int]
 ) -> None:
-    # The decoder can predict a box past the image for an object cut off by
-    # the edge.
+    # The decoder predicts box edges, past the image for an object cut off by
+    # the image edge, and the box keeps the pixels whose centers they enclose.
     language_encoder = pytypes.SimpleNamespace(
         run=lambda *_: [np.ones((1, 32), bool), np.zeros((32, 1, 8), np.float32)]
     )
@@ -116,3 +119,50 @@ def test_generate_segments_one_object_from_points_and_one_box(
     )
 
     assert calls == [point_labels]
+
+
+@pytest.mark.parametrize(
+    "width, xmin, xmax",
+    [(288, 50, 130), (4000, 375, 875)],
+)
+def test_generate_samples_the_mask_over_the_box_pixels(
+    width: int, xmin: int, xmax: int
+) -> None:
+    # The native mask is foreground exactly over the box's pixels.
+    native = np.zeros((1, 1, 288, 288), np.float32)
+    native[0, 0, 40:120, xmin * 288 // width : xmax * 288 // width] = 1
+    language_encoder = pytypes.SimpleNamespace(
+        run=lambda *_: [np.ones((1, 32), bool), np.zeros((32, 1, 8), np.float32)]
+    )
+    decoder = pytypes.SimpleNamespace(
+        get_inputs=lambda: [pytypes.SimpleNamespace(name="box_coords", shape=[1])],
+        run=lambda *_: [
+            np.array([[xmin / width, 40 / 288, xmax / width, 120 / 288]], np.float32),
+            np.array([0.9], np.float32),
+            native,
+        ],
+    )
+    model = Sam3.__new__(Sam3)
+    model._inference_sessions = {
+        "language_encoder": language_encoder,
+        "decoder": decoder,
+    }
+    embedding = types.ImageEmbedding(
+        original_height=288,
+        original_width=width,
+        embedding=np.zeros((1, 1, 1), np.float32),
+        extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
+    )
+
+    response = model.generate(
+        types.GenerateRequest(
+            model="sam3",
+            image_embedding=embedding,
+            prompt=types.Prompt(texts=["car"]),
+        )
+    )
+
+    [annotation] = response.annotations
+    bb = annotation.bounding_box
+    assert (bb.xmin, bb.ymin, bb.xmax, bb.ymax) == (xmin, 40, xmax - 1, 119)
+    assert annotation.mask.all()
