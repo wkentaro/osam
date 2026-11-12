@@ -10,6 +10,13 @@ Milliseconds, median of 5 runs after a warm-up, excluding model loading. Each
 prompt reuses the image embedding, so a prompt column is the time per prompt
 after the image is encoded once.
 
+`Encode` measures the image encoder alone. A new image with a text prompt also
+runs the text decoder. Adding the published stage medians gives 230 ms on CUDA
+and 1496 ms on M5 CoreML. These sums estimate inference work; they are not
+measured end-to-end medians. HTTP requests also hash and encode the input,
+transfer it, and serialize output masks. The table does not measure server
+latency or video frame rate.
+
 | Device | Encode | Point | Box | Negative box | Text |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | CPU, Intel i9-12900K | 8431 | 100 | 55 | 1062 | 1085 |
@@ -65,4 +72,7 @@ python examples/benchmark.py --model sam3 --device cpu --device coreml --device 
 ```
 
 The script prints New image in place of Encode: encoding plus SAM3's default
-prompt, the text `visual`.
+prompt, the text `visual`. Its cached Text column uses `dog`. Do not subtract
+that column from New image to infer an encoder measurement, since the prompts
+differ. The table above records stage measurements from the dated benchmark;
+running the script produces its own measurements with these operation names.
