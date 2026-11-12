@@ -93,7 +93,7 @@ class Client:
         )
 
     def close(self) -> None:
-        """Stop the private server this client started, or unload its models."""
+        """Stop the private server, or release in-process models and caches."""
         self._backend.close()
 
     def __enter__(self) -> "Client":

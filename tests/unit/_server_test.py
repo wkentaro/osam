@@ -5,6 +5,7 @@ import json
 import logging
 import pathlib
 import threading
+import weakref
 from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Final
@@ -459,6 +460,29 @@ def test_track_keeps_copies_of_its_inputs_and_results(
     assert not runtime._frames[ref].any()
 
 
+@pytest.mark.parametrize("unload_first", [False, True])
+def test_close_releases_video_caches(
+    monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime, unload_first: bool
+) -> None:
+    _patch_tracking(monkeypatch=monkeypatch, model_type=runtime.model_type(name="fake"))
+    runtime.track(
+        request=_requests.TrackRequest(
+            model="fake",
+            frames=[np.zeros((2, 3, 3), np.uint8)],
+            actions=[types.PromptAction(type="prompt", frame=0, texts=["dog"])],
+            keep_alive=-1,
+        )
+    )
+    frame = weakref.ref(next(iter(runtime._frames.values())))
+    mask = weakref.ref(next(iter(runtime._tracks.values())).frames[0][0].mask)
+    assert frame() is not None and mask() is not None
+    if unload_first:
+        runtime.load(request=_requests.LoadRequest(model="fake", keep_alive=0))
+    runtime.close()
+    assert runtime.ps() == []
+    assert frame() is None and mask() is None
+
+
 def test_track_reports_errors(
     monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
 ) -> None:
@@ -499,6 +523,41 @@ def test_track_reports_errors(
         "/api/track", json={**body, "actions": [prompt], "last_frame": 1}
     )
     assert response.status_code == 400, response.text
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/api/load", {"model": "fake", "keeep_alive": 0}),
+        ("/api/pull", {"model": "fake", "keeep_alive": 0}),
+        ("/api/segment", {"model": "fake", "image": _TINY_IMAGE_B64, "text": "person"}),
+        (
+            "/api/track",
+            {
+                "model": "fake",
+                "frames": [_TINY_IMAGE_B64],
+                "actions": [{"type": "prompt", "frame": 0, "texts": ["person"]}],
+                "text": "person",
+            },
+        ),
+        (
+            "/api/track",
+            {
+                "model": "fake",
+                "frames": [_TINY_IMAGE_B64],
+                "actions": [{"type": "prompt", "frame": 0, "text": "person"}],
+            },
+        ),
+    ],
+)
+def test_requests_reject_unknown_fields(
+    app: fastapi.FastAPI, runtime: _runtime.Runtime, path: str, body: dict
+) -> None:
+    response = TestClient(app).post(path, json=body)
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "invalid_request"
+    assert "Extra inputs" in response.json()["error"]
+    assert runtime.ps() == []
 
 
 def test_sam3_tracks() -> None:

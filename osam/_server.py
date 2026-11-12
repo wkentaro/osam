@@ -40,6 +40,8 @@ class Version(pydantic.BaseModel):
 
 
 class PullRequest(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="forbid")
+
     model: str
 
 

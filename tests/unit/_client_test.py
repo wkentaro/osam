@@ -536,6 +536,8 @@ def test_track_sends_frames_the_server_lacks(monkeypatch: pytest.MonkeyPatch) ->
         with pytest.raises(osam.ResponseError) as e:
             client.track("efficientsam:10m", frames, [prompt, {**add, "base": "x"}])
         assert e.value.code == "base_changed"
+        assert e.value.status_code == 409
+        assert e.value.result == f"sha256:{1:064d}"
 
 
 def test_track_sends_every_frame_when_the_server_loses_more(

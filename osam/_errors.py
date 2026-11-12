@@ -48,6 +48,8 @@ class ResponseError(Exception):
     code: str | None
     # The image references a "missing_images" error asks to send.
     images: list[str]
+    # The current result of a "base_changed" conflict.
+    result: str | None
 
     def __init__(
         self,
@@ -55,11 +57,13 @@ class ResponseError(Exception):
         status_code: int,
         code: str | None = None,
         images: list[str] | None = None,
+        result: str | None = None,
     ):
         super().__init__(message)
         self.status_code = status_code
         self.code = code
         self.images = images or []
+        self.result = result
 
 
 class InvalidRequestError(ResponseError, ValueError):

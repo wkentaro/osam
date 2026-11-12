@@ -55,6 +55,8 @@ KeepAlive = typing.Annotated[
 
 
 class LoadRequest(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="forbid")
+
     model: str
     keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
 
@@ -126,7 +128,7 @@ class SegmentResponse(pydantic.BaseModel):
 
 
 class TrackRequest(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     model: str
     frames: list[Base64Image | ImageRef] = pydantic.Field(
