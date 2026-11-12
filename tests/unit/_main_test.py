@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import pathlib
@@ -240,3 +241,103 @@ def test_run_video_passes_include_masks_to_the_request(
     (annotation,) = frame["annotations"]
     assert annotation["mask"] is None
     assert annotation["bounding_box"] is not None
+
+
+@pytest.mark.parametrize(
+    "alias",
+    [
+        "same directory",
+        pytest.param(
+            "symlink",
+            marks=pytest.mark.skipif(
+                sys.platform == "win32",
+                reason="directory symlinks require privileges on Windows",
+            ),
+        ),
+        "hardlink",
+    ],
+)
+@pytest.mark.parametrize("overwrite", [False, True])
+def test_video_output_preserves_source_frames(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, alias: str, overwrite: bool
+) -> None:
+    video = tmp_path / "frames"
+    video.mkdir()
+    source = video / "0.png"
+    PIL.Image.fromarray(np.full((4, 4, 3), 80, np.uint8)).save(source)
+    original = source.read_bytes()
+    out = video
+    if alias == "symlink":
+        out = tmp_path / "alias"
+        out.symlink_to(video, target_is_directory=True)
+    elif alias == "hardlink":
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "0.png").hardlink_to(source)
+
+    def unexpected(**kwargs):
+        raise AssertionError("started inference before checking output paths")
+
+    monkeypatch.setattr(__main__, "_client", unexpected)
+    args = ["sam3", "--video", str(video), "--text", "dog", "-o", str(out)]
+    result = CliRunner().invoke(
+        __main__.run, args + (["--overwrite"] if overwrite else [])
+    )
+    assert result.exit_code == 2, result.output
+    assert "input frame" in result.output
+    assert source.read_bytes() == original
+
+
+@pytest.mark.parametrize("alias_during_inference", [False, True])
+def test_video_output_requires_explicit_overwrite(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    alias_during_inference: bool,
+) -> None:
+    video, out = tmp_path / "frames", tmp_path / "out"
+    video.mkdir()
+    out.mkdir()
+    source, target = video / "0.png", out / "0.png"
+    PIL.Image.fromarray(np.full((4, 4, 3), 80, np.uint8)).save(source)
+    original = source.read_bytes()
+    target.write_bytes(b"existing output")
+    calls = []
+
+    def track(*args, **kwargs):
+        calls.append(True)
+        if alias_during_inference:
+            target.unlink()
+            target.hardlink_to(source)
+        return osam.types.TrackResponse(
+            frames=[osam.types.TrackFrame(frame=0, annotations=[])],
+            done=osam.types.TrackDone(
+                objects=[], result="sha256:" + "0" * 64, cache="miss", images=[]
+            ),
+        )
+
+    monkeypatch.setattr(
+        __main__,
+        "_client",
+        lambda **kwargs: contextlib.nullcontext(types.SimpleNamespace(track=track)),
+    )
+    monkeypatch.setattr(
+        __main__,
+        "_visualize_objects",
+        lambda **kwargs: np.full((4, 4, 3), 255, np.uint8),
+    )
+    args = ["sam3", "--video", str(video), "--text", "dog", "-o", str(out)]
+    result = CliRunner().invoke(__main__.run, args)
+    assert result.exit_code == 2, result.output
+    assert "--overwrite" in result.output
+    assert not calls
+    assert target.read_bytes() == b"existing output"
+
+    result = CliRunner().invoke(__main__.run, args + ["--overwrite"])
+    if alias_during_inference:
+        assert result.exit_code == 2, result.output
+        assert "input frame" in result.output
+    else:
+        assert result.exit_code == 0, result.output
+        assert np.asarray(PIL.Image.open(target)).min() == 255
+    assert calls == [True]
+    assert source.read_bytes() == original
