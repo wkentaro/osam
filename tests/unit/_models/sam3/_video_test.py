@@ -83,6 +83,19 @@ def test_component_areas_are_8_connected() -> None:
     )
 
 
+def test_cached_masks_keep_every_pixel() -> None:
+    # 3 x 5 pixels, which don't fill a whole number of bytes.
+    video = object.__new__(_video.VideoInference)
+    video.num_frames, video.video_height, video.video_width = 1, 3, 5
+    video.reset_state()
+    mask = np.random.default_rng(0).random((3, 5)) > 0.5
+    video._cache_frame_outputs(0, {7: mask, 8: ~mask}, removed_obj_ids=[8])
+    cached = video._cached_masks(0)
+    assert list(cached) == [7]
+    assert cached[7].dtype == np.bool_
+    np.testing.assert_array_equal(cached[7], mask)
+
+
 def test_propagation_history() -> None:
     video = object.__new__(_video.VideoInference)
     video.num_frames, video.video_height, video.video_width = 10, 4, 4
