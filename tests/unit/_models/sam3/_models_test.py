@@ -1,4 +1,5 @@
 import types as pytypes
+import typing
 
 import numpy as np
 import PIL.Image
@@ -242,3 +243,51 @@ def test_crop_mask_matches_the_mask_resized_to_the_image() -> None:
             ),
             full[ymin : ymax + 1, xmin : xmax + 1],
         )
+
+
+@pytest.mark.parametrize(
+    "points, point_labels, names",
+    [
+        ([(10, 10)], [1], ["iou_predictions", "low_res_masks"]),
+        (
+            [(10, 10), (20, 20)],
+            [1, 1],
+            ["single_iou_predictions", "single_low_res_masks"],
+        ),
+    ],
+)
+def test_point_prompt_fills_small_holes_of_the_mask(
+    points: list[tuple[float, float]],
+    point_labels: list[typing.Literal[0, 1]],
+    names: list[str],
+) -> None:
+    logits = np.full((288, 288), -1, np.float32)
+    logits[50:250, 50:250] = 1
+    logits[60:76, 60:76] = -1  # 256 pixels, filled
+    logits[100:117, 100:117] = -1  # 289 pixels, kept
+    calls: list[list[str]] = []
+
+    def run(output_names: list[str], inputs: dict) -> list[np.ndarray]:
+        calls.append(output_names)
+        return [np.array([[0.9]], np.float32), logits[None, None]]
+
+    model = Sam3.__new__(Sam3)
+    model._inference_sessions = {"point_decoder": pytypes.SimpleNamespace(run=run)}
+    embedding = types.ImageEmbedding(
+        original_height=288,
+        original_width=288,
+        embedding=np.zeros((1, 1, 1), np.float32),
+        extra_features=[np.zeros((1, 1, 1), np.float32)] * 6,
+    )
+
+    [annotation] = model.decode(
+        embedding=embedding,
+        prompt=types.Prompt(points=points, point_labels=point_labels),
+    )
+
+    assert calls == [names, names]
+    bb = annotation.bounding_box
+    assert (bb.xmin, bb.ymin, bb.xmax, bb.ymax) == (50, 50, 249, 249)
+    # The mask is cropped to the box, so the holes move by (-50, -50).
+    assert annotation.mask[60 - 50 : 76 - 50, 60 - 50 : 76 - 50].all()
+    assert not annotation.mask[100 - 50 : 117 - 50, 100 - 50 : 117 - 50].any()

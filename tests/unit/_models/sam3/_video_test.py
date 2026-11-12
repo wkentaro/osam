@@ -74,7 +74,7 @@ def test_component_areas_are_8_connected() -> None:
         bool,
     )
     np.testing.assert_array_equal(
-        _video._component_areas(mask),
+        _video.component_areas(mask),
         [
             [2, 0, 0, 2, 2],
             [0, 2, 0, 0, 0],

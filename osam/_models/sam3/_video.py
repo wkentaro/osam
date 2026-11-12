@@ -95,7 +95,7 @@ def _nms_masks(probs: NDArray, masks: NDArray, iou_threshold: float) -> NDArray:
     return np.sort(np.array(kept, np.int64))
 
 
-def _component_areas(mask: NDArray[np.bool_]) -> NDArray[np.int32]:
+def component_areas(mask: NDArray[np.bool_]) -> NDArray[np.int32]:
     """The area of each pixel's 8-connected component, 0 outside the mask, as
     cv2.connectedComponentsWithStats gives it to perflib.
 
@@ -142,10 +142,10 @@ def _fill_holes_in_mask_scores(masks: NDArray) -> NDArray:
     masks = masks.copy()
     for mask in masks:
         mask_bg = mask <= 0
-        mask[mask_bg & (_component_areas(mask_bg) <= FILL_HOLE_AREA)] = 0.1
+        mask[mask_bg & (component_areas(mask_bg) <= FILL_HOLE_AREA)] = 0.1
         mask_fg = mask > 0
         fg_area_thresh = min(int(mask_fg.sum()) // 2, FILL_HOLE_AREA)
-        mask[mask_fg & (_component_areas(mask_fg) <= fg_area_thresh)] = -0.1
+        mask[mask_fg & (component_areas(mask_fg) <= fg_area_thresh)] = -0.1
     return masks
 
 

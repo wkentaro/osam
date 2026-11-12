@@ -14,6 +14,7 @@ from osam import _types as types
 
 from .._clip import tokenize
 from ._timeline import Timeline
+from ._video import component_areas
 
 # sam3-onnx's models, by file name without the sam3_ prefix and .onnx.
 _FILES: Final[dict[str, types.Blob]] = {
@@ -111,6 +112,9 @@ _V0_6_0_FILES: Final[dict[str, types.Blob]] = {
     ),
 }
 
+
+# SAM3InteractiveImagePredictor's max_hole_area, in low-res mask pixels.
+MAX_HOLE_AREA: Final = 256
 
 _ORT_VERSION: Final = tuple(int(v) for v in onnxruntime.__version__.split(".")[:2])
 
@@ -447,7 +451,13 @@ class Sam3(types.Model):
             "has_mask_input": np.array([0], dtype=np.float32),
         }
         session = self._inference_sessions["point_decoder"]
-        names: list[str] = ["iou_predictions", "low_res_masks"]
+        # Three masks for one point, which can mean a part or the whole, and
+        # the decoder's single mask for more, as SAM3's predictor advises.
+        names: list[str] = (
+            ["iou_predictions", "low_res_masks"]
+            if len(points) == 1
+            else ["single_iou_predictions", "single_low_res_masks"]
+        )
         iou_predictions, low_res_masks = cast(
             list[NDArray[np.float32]], session.run(names, inputs)
         )
@@ -459,11 +469,17 @@ class Sam3(types.Model):
         )
         best: int = int(iou_predictions[0].argmax())
 
-        # ponytail: no filling of small background holes, unlike SAM2's
-        # postprocessing; add it if masks show pinholes.
+        # Fill small background holes, as SAM3's predictor does.
+        logits: NDArray[np.float32] = low_res_masks[0, best]
+        background = logits <= 0
+        logits = np.where(
+            background & (component_areas(background) <= MAX_HOLE_AREA),
+            np.float32(10),
+            logits,
+        )
         mask: NDArray[np.bool_] = (
             np.asarray(
-                PIL.Image.fromarray(low_res_masks[0, best]).resize(
+                PIL.Image.fromarray(logits).resize(
                     (width, height), resample=PIL.Image.Resampling.BILINEAR
                 )
             )
