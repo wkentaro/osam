@@ -36,7 +36,7 @@ dependencies = [
   "numpy",
   # PIL.Image.Resampling
   "Pillow>=9.1",
-  "pydantic>=2",
+  "pydantic>=2.1",
   "typing-extensions>=4.4",
   "uvicorn",
 ]

@@ -46,6 +46,19 @@ jobs:
           enable-cache: true
       - run: just setup
       - run: just lint
+  minimum-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.10'
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv pip install 'pydantic==2.1.0' 'fastapi==0.100.0' 'Pillow==9.1.0' 'numpy<2'
+          'httpx==0.27.0'
+      - run: uv run --no-sync pytest -q tests/unit/_requests_test.py tests/unit/_server_test.py
+          tests/unit/types/
   test:
     runs-on: ${{ matrix.os }}
     strategy:
