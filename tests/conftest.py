@@ -54,7 +54,8 @@ def pytest_xdist_node_collection_finished(node, ids):
 @pytest.hookimpl(tryfirst=True)  # before xdist reads the groups
 def pytest_collection_modifyitems(items):
     # Two SAM3 models don't fit in a CI runner's memory, so one worker runs the
-    # tests that load it. Those under _models/sam3/ load no weights.
+    # tests that load it. Those under _models/sam3/ load no weights, or mark
+    # themselves.
     for item in items:
         if "sam3" in item.nodeid and "/_models/sam3/" not in item.nodeid:
             item.add_marker(pytest.mark.xdist_group("sam3"))

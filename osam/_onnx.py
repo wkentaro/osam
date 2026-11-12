@@ -23,6 +23,7 @@ DEVICE_PROVIDERS: Final[dict[str, str]] = {
     "coreml": "CoreMLExecutionProvider",
     "webgpu": "WebGpuExecutionProvider",
 }
+PROVIDER_DEVICES: Final[dict[str, str]] = {v: k for k, v in DEVICE_PROVIDERS.items()}
 
 
 def resolve_providers() -> list[str]:
@@ -32,13 +33,18 @@ def resolve_providers() -> list[str]:
         return providers
     if "CUDAExecutionProvider" in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    if _has_hardware_webgpu():
+        return ["WebGpuExecutionProvider", "CPUExecutionProvider"]
+    return ["CPUExecutionProvider"]
+
+
+def _has_hardware_webgpu() -> bool:
     try:
         device: Any | None = _webgpu_device()
-        if device is not None and _can_use_webgpu(ep_device=device):
-            return ["WebGpuExecutionProvider", "CPUExecutionProvider"]
+        return device is not None and _can_use_webgpu(ep_device=device)
     except Exception as e:  # plugin missing or failing to register
         logger.debug("Skipping WebGpuExecutionProvider: {e}", e=e)
-    return ["CPUExecutionProvider"]
+        return False
 
 
 @functools.cache
@@ -176,6 +182,30 @@ def load_inference_sessions(
     return inference_sessions
 
 
+def default_device() -> str:
+    # The device of resolve_providers, whose files a model pulls when it picks
+    # its device automatically: the CPU for a provider osam doesn't name.
+    return PROVIDER_DEVICES.get(resolve_providers()[0], "cpu")
+
+
+def picks_coreml() -> bool:
+    # Whether picking a device automatically picks CoreML for a model that
+    # runs faster there than on WebGPU: on macOS, unless OSAM_ONNX_PROVIDERS
+    # names the providers.
+    return not os.environ.get("OSAM_ONNX_PROVIDERS", "").strip() and (
+        DEVICE_PROVIDERS["coreml"] in onnxruntime.get_available_providers()  # type: ignore[possibly-missing-attribute]
+    )
+
+
+def session_device(*, device: str, coreml: bool = True) -> str:
+    # The device that runs a model's session on device. A session that CoreML
+    # doesn't run, coreml=False, runs on WebGPU when it finds a GPU, which runs
+    # them faster than the CPU, and on the CPU otherwise.
+    if device != "coreml" or coreml:
+        return device
+    return "webgpu" if _has_hardware_webgpu() else "cpu"
+
+
 def device_providers(
     *, device: str, coreml: bool = True, coreml_cache_path: str | None = None
 ) -> _Providers:
@@ -189,7 +219,9 @@ def device_providers(
             raise RuntimeError(f"{provider} found no GPU")
     elif provider not in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
         raise RuntimeError(f"{provider} is unavailable in the installed onnxruntime")
-    if device == "cpu" or (device == "coreml" and not coreml):
+    device = session_device(device=device, coreml=coreml)
+    provider = DEVICE_PROVIDERS[device]
+    if device == "cpu":
         return ["CPUExecutionProvider"]
     if device == "coreml":
         # MLProgram supports more operators than the default NeuralNetwork, and
@@ -208,10 +240,31 @@ def device_providers(
     return [provider, "CPUExecutionProvider"]
 
 
-def _coreml_model(*, blob: Blob) -> str | bytes:
+def run_on_device(
+    *, session: onnxruntime.InferenceSession, names: list[str], inputs: dict[str, Any]
+) -> list[Any]:
+    # session.run, but on CUDA and WebGPU the outputs stay on the GPU as
+    # OrtValues, which another session there takes as inputs without a copy
+    # to the CPU and back: 20 ms of SAM3's 200 ms on CUDA.
+    device: str | None = PROVIDER_DEVICES.get(session.get_providers()[0])
+    if device not in ("cuda", "webgpu"):
+        return list(session.run(names, inputs))
+    binding = session.io_binding()
+    for name, value in inputs.items():
+        if isinstance(value, onnxruntime.OrtValue):
+            binding.bind_ortvalue_input(name, value)
+        else:
+            binding.bind_cpu_input(name, value)
+    for name in names:
+        binding.bind_output(name, device)
+    session.run_with_iobinding(binding)
+    return binding.get_outputs()
+
+
+def _coreml_model(*, path: str) -> str | bytes:
     # Rewrites every Gemm to transB=1 in memory: the CoreML EP takes minutes to
     # load Gemm(transB=0), as it writes the transposed weight into its model as
-    # text. A blob with nothing to rewrite is returned as its path.
+    # text. A model with nothing to rewrite is returned as its path.
     try:
         import onnx
         from onnx import numpy_helper
@@ -219,7 +272,7 @@ def _coreml_model(*, blob: Blob) -> str | bytes:
         raise RuntimeError(
             "CoreMLExecutionProvider needs onnx: pip install 'osam[cpu]'"
         ) from None
-    model = onnx.load(blob.path, load_external_data=False)
+    model = onnx.load(path, load_external_data=False)
     initializers = {i.name: i for i in model.graph.initializer}
     gemms = [
         node
@@ -229,9 +282,9 @@ def _coreml_model(*, blob: Blob) -> str | bytes:
         and not any(a.name == "transB" and a.i for a in node.attribute)
     ]
     if not gemms:
-        return blob.path
-    logger.debug("Rewriting {!r} for CoreML", blob.path)
-    onnx.load_external_data_for_model(model, os.path.dirname(blob.path))
+        return path
+    logger.debug("Rewriting {!r} for CoreML", path)
+    onnx.load_external_data_for_model(model, os.path.dirname(path))
     for name in {node.input[1] for node in gemms}:
         weight = initializers[name]
         weight.CopyFrom(numpy_helper.from_array(numpy_helper.to_array(weight).T, name))
@@ -247,7 +300,7 @@ def _first_provider(*, providers: _Providers) -> str:
 
 
 def _create_session(
-    *, blob: Blob, providers: _Providers
+    *, path: str, providers: _Providers
 ) -> onnxruntime.InferenceSession:
     sess_options = onnxruntime.SessionOptions()  # type: ignore[possibly-missing-attribute]
     if "CUDAExecutionProvider" in providers and _setup_cuda():
@@ -256,29 +309,29 @@ def _create_session(
     if provider == "WebGpuExecutionProvider":
         # A plugin provider is added by device; CPU stays as the fallback.
         sess_options.add_provider_for_devices([_webgpu_device()], {})
-        return onnxruntime.InferenceSession(blob.path, sess_options)
+        return onnxruntime.InferenceSession(path, sess_options)
     model: str | bytes = (
-        _coreml_model(blob=blob) if provider == "CoreMLExecutionProvider" else blob.path
+        _coreml_model(path=path) if provider == "CoreMLExecutionProvider" else path
     )
     session = onnxruntime.InferenceSession(model, sess_options, providers=providers)
     if isinstance(model, bytes):
         # onnxruntime keeps a model given as bytes, gigabytes for SAM3, to
         # recreate the session on CPU fallback; the original file serves that.
-        session._model_path = blob.path
+        session._model_path = path
         session._model_bytes = None
     return session
 
 
 def create_device_session(
-    *, blob: Blob, providers: _Providers
+    *, path: str, providers: _Providers
 ) -> onnxruntime.InferenceSession:
     session: onnxruntime.InferenceSession = _create_session(
-        blob=blob, providers=providers
+        path=path, providers=providers
     )
     # onnxruntime silently drops a provider it can't use.
     provider: str = _first_provider(providers=providers)
     if provider not in session.get_providers():
-        raise RuntimeError(f"{provider} failed to load {blob.path}")
+        raise RuntimeError(f"{provider} failed to load {path}")
     # Raise on a provider failure in run() too, instead of retrying on CPU.
     session.disable_fallback()
     return session
@@ -290,7 +343,7 @@ def _load_inference_session(
     try:
         if providers is None:
             providers = resolve_providers()
-        inference_session = _create_session(blob=blob, providers=providers)
+        inference_session = _create_session(path=blob.path, providers=providers)
     except Exception as e:
         # Even though there is fallback in onnxruntime, it won't always work.
         # e.g., CUDA is installed and CUDA_PATH is set, but CUDA_VISIBLE_DEVICES

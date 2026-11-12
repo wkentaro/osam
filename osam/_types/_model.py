@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import hashlib
 import threading
+import typing
 from collections.abc import Callable
 
 import imgviz
@@ -22,6 +23,9 @@ from ._prompt import THRESHOLDS
 from ._prompt import Prompt
 from ._prompt import PromptKind
 
+if typing.TYPE_CHECKING:
+    from .._models.sam3._timeline import Timeline
+
 
 class Model(abc.ABC):
     name: str
@@ -30,9 +34,11 @@ class Model(abc.ABC):
     # The prompt kinds decode takes; others raise ValueError.
     prompt_kinds: frozenset[PromptKind]
 
+    # The file of each session, by session name, which remove deletes; a model
+    # with files for some devices lists them all, and _device_blobs picks.
     _blobs: dict[str, Blob]
-    # Blobs that run on CoreML with device="coreml", all when None; the others
-    # run on CPU.
+    # Sessions that run on CoreML with device="coreml", all when None; the
+    # others run on WebGPU when it finds a GPU, and on the CPU otherwise.
     _coreml_blobs: frozenset[str] | None = None
     _inference_sessions: dict[str, onnxruntime.InferenceSession]
 
@@ -41,25 +47,45 @@ class Model(abc.ABC):
 
         device: "cpu", "cuda", "coreml", or "webgpu". None picks OSAM_ONNX_PROVIDERS,
         or the first available of CUDA and a hardware WebGPU adapter, falling
-        back to CPU.
+        back to CPU; CoreML before WebGPU for a model that runs faster there.
         """
         logger.debug("Initializing model {name}", name=self.name)
+        if device is None and self._picks_coreml():
+            try:
+                self.__init__(device="coreml")
+                return
+            except Exception as e:
+                logger.warning(
+                    "Failed to load {name} on CoreML, picking another device: {e}",
+                    name=self.name,
+                    e=e,
+                )
         if device is not None:
             _onnx.device_providers(device=device)  # fail before downloading
-        self.pull()
+        # Without a device, past CoreML, the files of the one picked otherwise.
+        files_device: str = device or _onnx.default_device()
+        self.pull(device=files_device)
+        blobs: dict[str, Blob] = self._device_blobs(device=files_device)
         if device is None:
-            self._inference_sessions = _onnx.load_inference_sessions(blobs=self._blobs)
-            return
+            self._inference_sessions = _onnx.load_inference_sessions(blobs=blobs)
+            if self.device != "cpu" or blobs == self._device_blobs(device="cpu"):
+                return
+            # A fallback to the CPU, which runs its own files faster, such as
+            # float32 instead of a GPU's float16.
+            del self._inference_sessions  # free them before loading the others
+            device = "cpu"
+            self.pull(device=device)
+            blobs = self._device_blobs(device=device)
         self._inference_sessions = {
             key: _onnx.create_device_session(
-                blob=blob,
+                path=blob.path,
                 providers=_onnx.device_providers(
                     device=device,
                     coreml=self._coreml_blobs is None or key in self._coreml_blobs,
                     coreml_cache_path=blob.coreml_cache_path,
                 ),
             )
-            for key, blob in self._blobs.items()
+            for key, blob in blobs.items()
         }
         logger.info(
             "Initialized inference sessions on {device!r}: {providers!r}",
@@ -74,17 +100,54 @@ class Model(abc.ABC):
         # The device the model runs on, e.g. "webgpu", or "cpu" after a fallback.
         session = next(iter(self._inference_sessions.values()))
         provider: str = session.get_providers()[0]
-        return {v: k for k, v in _onnx.DEVICE_PROVIDERS.items()}.get(provider, provider)
+        return _onnx.PROVIDER_DEVICES.get(provider, provider)
+
+    @classmethod
+    def _device_blobs(cls, *, device: str) -> dict[str, Blob]:
+        # The file of each session on device, for a model with files that run
+        # faster on some devices, such as float16 copies for GPUs.
+        return cls._blobs
+
+    @classmethod
+    def _runs_faster_on_coreml(cls) -> bool:
+        # Than on WebGPU, so that picking a device automatically picks CoreML.
+        return False
+
+    @classmethod
+    def _picks_coreml(cls) -> bool:
+        # Whether picking a device automatically tries CoreML first.
+        return cls._runs_faster_on_coreml() and _onnx.picks_coreml()
+
+    @classmethod
+    def _blobs_of(cls, *, device: str | None) -> dict[str, Blob]:
+        # The files a model loads on device, or with the device it picks itself.
+        if device is not None:
+            return cls._device_blobs(device=device)
+        blobs: dict[str, Blob] = cls._device_blobs(device=_onnx.default_device())
+        if not cls._picks_coreml():
+            return blobs
+        # CoreML's, unless only the others are on disk, such as offline after
+        # an upgrade; loading falls back to them when it can't pull CoreML's.
+        coreml: dict[str, Blob] = cls._device_blobs(device="coreml")
+        if any(b.size is None for b in coreml.values()) and all(
+            b.size is not None for b in blobs.values()
+        ):
+            return blobs
+        return coreml
 
     @classmethod
     def pull(
         cls,
         *,
+        device: str | None = None,
         progress: Callable[[str, int, int | None], None] | None = None,
         cancel: threading.Event | None = None,
         timeout: float | tuple[float, float] | None = 30,
     ) -> None:
-        for blob in cls._blobs.values():
+        # The files loading tries first, even with others on disk.
+        if device is None and cls._picks_coreml():
+            device = "coreml"
+        for blob in cls._blobs_of(device=device).values():
             blob.pull(progress=progress, cancel=cancel, timeout=timeout)
 
     @classmethod
@@ -93,15 +156,17 @@ class Model(abc.ABC):
             blob.remove()
 
     @classmethod
-    def get_id(cls) -> str:
+    def get_id(cls, *, device: str | None = None) -> str:
         return hashlib.md5(
-            "+".join(blob.hash for blob in cls._blobs.values()).encode()
+            "+".join(
+                blob.hash for blob in cls._blobs_of(device=device).values()
+            ).encode()
         ).hexdigest()[:12]
 
     @classmethod
-    def get_size(cls) -> int | None:
+    def get_size(cls, *, device: str | None = None) -> int | None:
         size = 0
-        for blob in cls._blobs.values():
+        for blob in cls._blobs_of(device=device).values():
             # Read once: a concurrent remove can turn a second read into None.
             blob_size: int | None = blob.size
             if blob_size is None:
@@ -110,9 +175,9 @@ class Model(abc.ABC):
         return size
 
     @classmethod
-    def get_modified_at(cls) -> float | None:
+    def get_modified_at(cls, *, device: str | None = None) -> float | None:
         modified_at: float = 0
-        for blob in cls._blobs.values():
+        for blob in cls._blobs_of(device=device).values():
             blob_modified_at: float | None = blob.modified_at
             if blob_modified_at is None:
                 return None
@@ -149,6 +214,23 @@ class Model(abc.ABC):
     def _decode(self, *, embedding: ImageEmbedding, prompt: Prompt) -> list[Annotation]:
         pass
 
+    @classmethod
+    def tracks(cls) -> bool:
+        # Whether new_timeline tracks objects through video frames.
+        return False
+
+    def new_timeline(
+        self,
+        *,
+        get_embedding: Callable[[int], ImageEmbedding],
+        num_frames: int,
+        height: int,
+        width: int,
+    ) -> Timeline:
+        # A video of num_frames frames, whose embeddings get_embedding returns
+        # by frame index, for /api/track's actions.
+        raise NotImplementedError(f"{self.name} doesn't track")
+
 
 def annotations_from_mask(
     *, mask: npt.NDArray[np.bool_], score: float | None = None
@@ -159,7 +241,8 @@ def annotations_from_mask(
     ymin, xmin, ymax, xmax = imgviz.masks_to_bboxes(masks=[mask])[0].astype(int)
     return [
         Annotation(
-            mask=mask[ymin : ymax + 1, xmin : xmax + 1],
+            # A copy, so a cached annotation doesn't keep the whole mask.
+            mask=mask[ymin : ymax + 1, xmin : xmax + 1].copy(),
             bounding_box=BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax),
             score=score,
         )

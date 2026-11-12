@@ -67,6 +67,25 @@ ImageRef = typing.Annotated[
 ]
 
 
+def _decode_image(*, image: object) -> object:
+    # Every model takes RGB, so grayscale, RGBA and palette images become RGB
+    # here, before the image is hashed.
+    if isinstance(image, str) and not image.startswith(IMAGE_REF_PREFIX):
+        return _json.image_b64data_to_ndarray(b64data=image, mode="RGB")
+    if not isinstance(image, np.ndarray):
+        return image  # pydantic rejects it
+    if image.dtype == np.uint8 and (
+        image.ndim == 2 or (image.ndim == 3 and image.shape[2] == 4)
+    ):
+        return np.asarray(PIL.Image.fromarray(image).convert("RGB"))
+    if image.dtype != np.uint8 or image.ndim != 3 or image.shape[2] != 3:
+        raise ValueError(
+            "image must be a uint8 array of shape (H, W, 3), (H, W, 4) or "
+            f"(H, W): got {image.dtype} {image.shape}"
+        )
+    return image
+
+
 class SegmentRequest(types.Prompt):
     # The prompt fields, and the model and image to segment.
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
@@ -85,23 +104,8 @@ class SegmentRequest(types.Prompt):
 
     @pydantic.field_validator("image", mode="before")
     @classmethod
-    def _decode_image(cls, image: object) -> object:
-        # Every model takes RGB, so grayscale, RGBA and palette images become
-        # RGB here, before the image is hashed.
-        if isinstance(image, str) and not image.startswith(IMAGE_REF_PREFIX):
-            return _json.image_b64data_to_ndarray(b64data=image, mode="RGB")
-        if not isinstance(image, np.ndarray):
-            return image  # pydantic rejects it
-        if image.dtype == np.uint8 and (
-            image.ndim == 2 or (image.ndim == 3 and image.shape[2] == 4)
-        ):
-            return np.asarray(PIL.Image.fromarray(image).convert("RGB"))
-        if image.dtype != np.uint8 or image.ndim != 3 or image.shape[2] != 3:
-            raise ValueError(
-                "image must be a uint8 array of shape (H, W, 3), (H, W, 4) or "
-                f"(H, W): got {image.dtype} {image.shape}"
-            )
-        return image
+    def _decode(cls, image: object) -> object:
+        return _decode_image(image=image)
 
 
 def to_json_fields(*, fields: dict[str, Any]) -> dict[str, Any]:
@@ -119,3 +123,39 @@ class SegmentResponse(pydantic.BaseModel):
         description="A reference to the request's image, to send as image with "
         "further prompts on it",
     )
+
+
+class TrackRequest(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    model: str
+    frames: list[Base64Image | ImageRef] = pydantic.Field(
+        min_length=1,
+        description="The video's frames, each a base64-encoded image file or the "
+        "reference to one sent before; 412 asks for the files",
+    )
+    actions: list[types.Action] = pydantic.Field(
+        min_length=1,
+        description="Every action the user has taken, in order, starting with a prompt",
+    )
+    first_frame: int = pydantic.Field(default=0, ge=0)
+    last_frame: int | None = pydantic.Field(
+        default=None, ge=0, description="The last frame to return; null for the last"
+    )
+    include_masks: bool = True
+    keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
+
+    @pydantic.field_validator("frames", mode="before")
+    @classmethod
+    def _decode_frames(cls, frames: object) -> object:
+        if not isinstance(frames, list):
+            return frames
+        return [_decode_image(image=frame) for frame in frames]
+
+    @pydantic.model_validator(mode="after")
+    def _check_actions(self) -> "TrackRequest":
+        if self.actions[0].type != "prompt" or any(
+            a.type == "prompt" for a in self.actions[1:]
+        ):
+            raise ValueError("the first action is a prompt, and only the first")
+        return self

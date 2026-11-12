@@ -1,3 +1,4 @@
+import json
 import os
 import pathlib
 import subprocess
@@ -13,8 +14,10 @@ from click.testing import CliRunner
 
 import osam.types
 from osam import __main__
+from osam import _registry
 from osam import _runtime
 from osam import _server
+from osam import _types
 
 
 def test_full_name_comes_from_the_server_list() -> None:
@@ -134,3 +137,106 @@ def test_cli_runs_twice_in_one_process(tmp_path: pathlib.Path) -> None:
         [sys.executable, "-c", script], capture_output=True, text=True, env=env
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_run_video_writes_a_png_per_frame(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    from tests.unit._client_test import _serving
+    from tests.unit._server_test import _patch_tracking
+
+    _patch_tracking(
+        monkeypatch=monkeypatch,
+        model_type=_registry.get_model_type_by_name(name="efficientsam:10m"),
+    )
+    video = tmp_path / "video"
+    video.mkdir()
+    for i in [10, 2, 1]:  # name order takes 2 before 10
+        PIL.Image.fromarray(np.full((4, 4, 3), i, np.uint8)).save(video / f"{i}.jpg")
+    for name in [".DS_Store", "1.json"]:  # files beside the frames are no frames
+        (video / name).write_text("{}")
+    out = tmp_path / "out"
+    with _serving() as host:
+        monkeypatch.setenv("OSAM_HOST", host)
+        result = CliRunner().invoke(
+            __main__.run,
+            ["efficientsam:10m", "--video", str(video), "--point", "0,0"]
+            + ["-o", str(out), "--json"],
+        )
+    assert result.exit_code == 0, result.output
+    *frames, done = (
+        json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")
+    )
+    assert [f["frame"] for f in frames] == [0, 1, 2]
+    assert done["objects"] == [{"object_id": 0, "first_frame": 0, "last_frame": 2}]
+    assert sorted(p.name for p in out.iterdir()) == ["1.png", "10.png", "2.png"]
+    assert PIL.Image.open(out / "10.png").size == (4, 4)
+
+    result = CliRunner().invoke(
+        __main__.run, ["efficientsam:10m", "--video", str(video)]
+    )
+    assert result.exit_code == 2
+    assert "--video needs -o" in result.output
+
+    # Also without case or Unicode form, as -o writes one file for each pair
+    # on macOS.
+    for names in [["1.png"], ["a.jpg", "A.png"], ["\u00e9.jpg", "e\u0301.png"]]:
+        for name in names:
+            PIL.Image.fromarray(np.zeros((4, 4, 3), np.uint8)).save(video / name)
+        result = CliRunner().invoke(
+            __main__.run,
+            ["efficientsam:10m", "--video", str(video), "--point", "0,0"]
+            + ["-o", str(out)],
+        )
+        assert result.exit_code == 2
+        assert "same name" in result.output
+        for name in names:
+            (video / name).unlink()
+
+
+def test_an_object_keeps_its_color_when_an_earlier_one_leaves() -> None:
+    def annotation(*, object_id: int, x: int) -> _types.Annotation:
+        mask = np.zeros((8, 8), bool)
+        mask[2:6, x : x + 4] = True
+        (a,) = _types.annotations_from_mask(mask=mask, score=1)
+        return a.model_copy(update={"object_id": object_id})
+
+    image = np.zeros((8, 8, 3), np.uint8)
+    both = __main__._visualize_objects(
+        image=image,
+        annotations=[annotation(object_id=0, x=0), annotation(object_id=1, x=4)],
+    )
+    alone = __main__._visualize_objects(
+        image=image, annotations=[annotation(object_id=1, x=4)]
+    )
+    assert both[4, 5].tolist() == alone[4, 5].tolist() != [0, 0, 0]
+
+
+def test_run_video_passes_include_masks_to_the_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    from tests.unit._client_test import _serving
+    from tests.unit._server_test import _patch_tracking
+
+    _patch_tracking(
+        monkeypatch=monkeypatch,
+        model_type=_registry.get_model_type_by_name(name="efficientsam:10m"),
+    )
+    video = tmp_path / "video"
+    video.mkdir()
+    PIL.Image.fromarray(np.zeros((4, 4, 3), np.uint8)).save(video / "0.jpg")
+    prompt = '{"points": [[0, 0]], "point_labels": [1], "include_masks": false}'
+    with _serving() as host:
+        monkeypatch.setenv("OSAM_HOST", host)
+        result = CliRunner().invoke(
+            __main__.run,
+            ["efficientsam:10m", "--video", str(video), "--prompt", prompt, "--json"]
+            + ["-o", str(tmp_path / "out")],
+        )
+    assert result.exit_code == 0, result.output
+    frame, _ = (
+        json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")
+    )
+    (annotation,) = frame["annotations"]
+    assert annotation["mask"] is None
+    assert annotation["bounding_box"] is not None

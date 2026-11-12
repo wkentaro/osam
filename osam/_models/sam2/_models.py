@@ -71,9 +71,15 @@ class Sam2(SamBase):
         )
 
         decoder_inputs = {
-            "image_embeddings": image_embedding.embedding[None],
-            "high_res_features1": image_embedding.extra_features[0][None],
-            "high_res_features2": image_embedding.extra_features[1][None],
+            "image_embeddings": cast(
+                npt.NDArray[np.float32], image_embedding.embedding
+            )[None],
+            "high_res_features1": cast(
+                npt.NDArray[np.float32], image_embedding.extra_features[0]
+            )[None],
+            "high_res_features2": cast(
+                npt.NDArray[np.float32], image_embedding.extra_features[1]
+            )[None],
             "point_coords": input_point[None],
             "point_labels": point_labels[None],
             "mask_input": np.zeros((1, 1, 256, 256), dtype=np.float32),

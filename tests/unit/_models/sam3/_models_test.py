@@ -101,7 +101,6 @@ def test_decode_finds_objects_for_each_text() -> None:
         run=lambda *_: [
             np.ones((1, 32), bool),
             np.zeros((32, 1, 8), np.float32),
-            np.zeros((1, 8), np.float32),  # the real encoder has more outputs
         ]
     )
     # The first run, for "car", finds two objects; the second, for "dog", one.
@@ -154,7 +153,11 @@ def test_encode_image_fetches_only_the_outputs_decoders_read() -> None:
         ]
 
     model = Sam3.__new__(Sam3)
-    model._inference_sessions = {"image_encoder": pytypes.SimpleNamespace(run=run)}
+    model._inference_sessions = {
+        "image_encoder": pytypes.SimpleNamespace(
+            run=run, get_providers=lambda: ["CPUExecutionProvider"]
+        )
+    }
 
     embedding = model.encode_image(image=np.zeros((4, 6, 3), np.uint8))
 
@@ -175,3 +178,42 @@ def test_encode_image_fetches_only_the_outputs_decoders_read() -> None:
             "high_res_features2",
         ]
     ]
+
+
+@pytest.mark.parametrize(
+    "device, ort_version, expected",
+    [
+        ("cpu", (1, 30), "image_encoder"),
+        ("cuda", (1, 30), "image_encoder_fused_fp16"),
+        ("webgpu", (1, 30), "image_encoder_fused_fp16"),
+        ("coreml", (1, 30), "image_encoder_fp16"),
+        ("coreml", (1, 23), "image_encoder"),
+    ],
+)
+def test_file_runs_fastest_on_the_device(
+    monkeypatch: pytest.MonkeyPatch,
+    device: str,
+    ort_version: tuple[int, int],
+    expected: str,
+) -> None:
+    from osam._models.sam3 import _models
+
+    monkeypatch.setattr(_models, "_ORT_VERSION", ort_version)
+    assert _models._file(name="image_encoder", device=device) == expected
+    assert _models._file(name="decoder", device="cpu") == "decoder"
+
+
+def test_remove_deletes_the_files_an_upgrade_leaves(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from osam import types
+    from osam._models.sam3._models import Sam3
+
+    removed: list[str] = []
+    monkeypatch.setattr(types.Blob, "remove", lambda self: removed.append(self.hash))
+    Sam3.remove()
+    # The v0.6.0 image encoder, which v0.7.0 replaced.
+    assert (
+        "sha256:c6b984d95ca7ca0564356253b92ee30287188cfffab5d4f87709b79d5d9aa6c8"
+        in removed
+    )

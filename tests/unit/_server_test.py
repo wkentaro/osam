@@ -5,6 +5,7 @@ import json
 import logging
 import pathlib
 import threading
+from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Final
 
@@ -17,6 +18,7 @@ from fastapi.testclient import TestClient
 
 import osam
 from osam import _json
+from osam import _requests
 from osam import _runtime
 from osam import _server
 from osam import _types as types
@@ -52,6 +54,7 @@ def test_openapi_documents_every_route(app: fastapi.FastAPI) -> None:
     assert response.status_code == 200, response.text
     assert {
         "/api/segment",
+        "/api/track",
         "/api/load",
         "/api/models",
         "/api/pull",
@@ -76,7 +79,7 @@ def test_pull_streams_progress(
 ) -> None:
     model_type = runtime.model_type(name="fake")
 
-    def pull(progress, cancel):
+    def pull(device, progress, cancel):
         progress("encoder.onnx", 1, 2)
         progress("encoder.onnx", 2, 2)
 
@@ -90,7 +93,7 @@ def test_pull_streams_progress(
         {"status": "success"},
     ]
 
-    def fail(progress, cancel):
+    def fail(device, progress, cancel):
         raise RuntimeError("disk full")
 
     monkeypatch.setattr(model_type, "pull", fail)
@@ -306,3 +309,236 @@ def test_a_value_error_is_a_400_on_every_route(
     response = TestClient(app).post("/api/load", json={"model": "efficientsam:10m"})
     assert response.status_code == 400
     assert response.json() == {"error": "no such thing", "code": "invalid_request"}
+
+
+class _FakeTimeline:
+    # Object i, from action i, covers frames i and up as a one-pixel mask.
+
+    _get_embedding: Callable[[int], object]
+    _num_frames: int
+    _applied: list
+    _count: int
+
+    def __init__(self, *, get_embedding, num_frames: int, applied: list):
+        self._get_embedding = get_embedding
+        self._num_frames = num_frames
+        self._applied = applied
+        self._count = 0
+
+    def apply(self, *, action) -> None:
+        if getattr(action, "object_id", None) == 99:
+            raise ValueError("no object 99")
+        self._get_embedding(0)
+        self._applied.append(action.type)
+        self._count += 1
+
+    def annotations(self, *, frame: int) -> list[types.Annotation]:
+        return [
+            types.annotations_from_mask(mask=np.ones((1, 1), bool), score=1)[
+                0
+            ].model_copy(update={"object_id": i})
+            for i in range(min(self._count, frame + 1))
+        ]
+
+    def result(self) -> str:
+        return f"sha256:{self._count:064d}"
+
+
+def _patch_tracking(
+    *, monkeypatch: pytest.MonkeyPatch, model_type: type[types.Model]
+) -> list[str]:
+    # model_type tracks with _FakeTimeline; returns the actions it applies.
+    applied: list[str] = []
+    monkeypatch.setattr(model_type, "tracks", classmethod(lambda cls: True))
+    monkeypatch.setattr(
+        model_type,
+        "new_timeline",
+        lambda self, *, get_embedding, num_frames, height, width: _FakeTimeline(
+            get_embedding=get_embedding, num_frames=num_frames, applied=applied
+        ),
+    )
+    return applied
+
+
+def _post_track(*, client: TestClient, **fields) -> tuple[list[dict], dict]:
+    response = client.post("/api/track", json={"model": "fake", **fields})
+    assert response.status_code == 200, response.text
+    *frames, done = (json.loads(line) for line in response.text.splitlines())
+    return frames, done
+
+
+def test_track_streams_frames_and_caches_action_prefixes(
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
+) -> None:
+    applied = _patch_tracking(
+        monkeypatch=monkeypatch, model_type=runtime.model_type(name="fake")
+    )
+    client = TestClient(app)
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    frames, done = _post_track(
+        client=client, frames=[_TINY_IMAGE_B64] * 3, actions=[prompt]
+    )
+    assert [f["frame"] for f in frames] == [0, 1, 2]
+    assert [a["object_id"] for a in frames[2]["annotations"]] == [0]
+    assert frames[0]["annotations"][0]["mask"]
+    assert done == {
+        "done": True,
+        "objects": [{"object_id": 0, "first_frame": 0, "last_frame": 2}],
+        "result": f"sha256:{1:064d}",
+        "cache": "miss",
+        "images": [_json.image_ref(image=np.zeros((1, 1, 3), np.uint8))] * 3,
+    }
+    assert applied == ["prompt"]
+
+    # By the references it returned, and the same actions: no model runs.
+    ref: str = done["images"][0]
+    add = {"type": "add", "frame": 1, "box": [0, 0, 1, 1], "base": done["result"]}
+    frames, done = _post_track(
+        client=client,
+        frames=[ref] * 3,
+        actions=[prompt],
+        first_frame=1,
+        last_frame=1,
+        include_masks=False,
+    )
+    assert done["cache"] == "hit"
+    assert [f["frame"] for f in frames] == [1]
+    assert frames[0]["annotations"][0]["mask"] is None
+    assert applied == ["prompt"]
+
+    # A new action applies to the cached timeline.
+    frames, done = _post_track(client=client, frames=[ref] * 3, actions=[prompt, add])
+    assert done["cache"] == "partial"
+    assert done["objects"][1] == {"object_id": 1, "first_frame": 1, "last_frame": 2}
+    assert applied == ["prompt", "add"]
+
+    # Undo returns the earlier result without running the model.
+    _, undone = _post_track(client=client, frames=[ref] * 3, actions=[prompt])
+    assert undone["cache"] == "hit"
+    assert applied == ["prompt", "add"]
+
+    # An edit on another result than the server's, such as after a replay.
+    stale = {**add, "base": "sha256:" + "f" * 64}
+    response = client.post(
+        "/api/track",
+        json={
+            "model": "fake",
+            "frames": [ref] * 3,
+            "actions": [prompt, stale],
+        },
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "base_changed"
+    assert response.json()["result"] == f"sha256:{1:064d}"
+
+
+def test_track_keeps_copies_of_its_inputs_and_results(
+    monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
+) -> None:
+    _patch_tracking(monkeypatch=monkeypatch, model_type=runtime.model_type(name="fake"))
+    request = _requests.TrackRequest.model_validate(
+        {
+            "model": "fake",
+            "frames": [np.zeros((1, 1, 3), np.uint8)],
+            "actions": [
+                {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+            ],
+        }
+    )
+    (annotation,) = runtime.track(request=request).frames[0].annotations
+    assert annotation.mask is not None
+    annotation.mask[:] = False
+    (annotation,) = runtime.track(request=request).frames[0].annotations
+    assert annotation.mask is not None and annotation.mask.all()
+
+    # And keeps a copy of a frame, which the caller may change.
+    frame = request.frames[0]
+    assert isinstance(frame, np.ndarray)
+    ref: str = _json.image_ref(image=frame)
+    frame[:] = 255
+    assert not runtime._frames[ref].any()
+
+
+def test_track_reports_errors(
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
+) -> None:
+    client = TestClient(app)
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    unknown = "sha256:" + "0" * 64
+    body = {"model": "fake", "frames": [_TINY_IMAGE_B64, unknown]}
+
+    response = client.post("/api/track", json={**body, "actions": [prompt]})
+    assert response.status_code == 400, response.text
+    assert "doesn't track" in response.json()["error"]
+
+    _patch_tracking(monkeypatch=monkeypatch, model_type=runtime.model_type(name="fake"))
+
+    missing = client.post("/api/track", json={**body, "actions": [prompt]})
+    assert missing.status_code == 412, missing.text
+    assert missing.json()["code"] == "missing_images"
+    assert missing.json()["images"] == [unknown]
+
+    body["frames"] = [_TINY_IMAGE_B64]
+    remove = {"type": "remove", "object_id": 0, "base": "sha256:" + "0" * 64}
+    for actions in [[remove], [prompt, prompt], []]:
+        response = client.post("/api/track", json={**body, "actions": actions})
+        assert response.status_code == 422, response.text
+    response = client.post(
+        "/api/track",
+        json={
+            **body,
+            "actions": [
+                prompt,
+                {**remove, "object_id": 99, "base": f"sha256:{1:064d}"},
+            ],
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["error"] == "no object 99"
+    response = client.post(
+        "/api/track", json={**body, "actions": [prompt], "last_frame": 1}
+    )
+    assert response.status_code == 400, response.text
+
+
+def test_sam3_tracks() -> None:
+    with contextlib.closing(_runtime.Runtime()) as runtime:
+        app = _server.create_app(runtime=runtime)
+        models = TestClient(app).get("/api/models").json()["models"]
+    (sam3,) = (m for m in models if m["name"] == "sam3:latest")
+    assert sam3["capabilities"] == ["segment", "track"]
+
+
+def test_track_bounds_its_results_with_long_histories(
+    monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
+) -> None:
+    _patch_tracking(monkeypatch=monkeypatch, model_type=runtime.model_type(name="fake"))
+    monkeypatch.setattr(runtime, "_track_cache_bytes", 16384)
+    client = TestClient(app)
+    actions: list[dict] = [
+        {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    ]
+    for _ in range(40):
+        _, done = _post_track(
+            client=client, frames=[_TINY_IMAGE_B64] * 3, actions=actions
+        )
+        actions.append(
+            {
+                "type": "refine",
+                "frame": 0,
+                "object_id": 0,
+                "points": [[0, 0]],
+                "point_labels": [0],
+                "base": done["result"],
+            }
+        )
+    # Each result costs its frames, not its actions, which the key holds by
+    # digest.
+    assert 1 < len(runtime._tracks) < 40
+    assert sum(track.nbytes for track in runtime._tracks.values()) <= 16384
+    # An annotation costs more than its mask's few pixels.
+    assert all(
+        track.nbytes > 1024 * sum(len(f) for f in track.frames) > 0
+        for track in runtime._tracks.values()
+    )
+    assert all(len(actions) == 64 for _, actions in runtime._tracks)

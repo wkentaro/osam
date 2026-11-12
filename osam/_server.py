@@ -24,6 +24,7 @@ from . import _types as types
 from ._requests import LoadRequest
 from ._requests import SegmentRequest
 from ._requests import SegmentResponse
+from ._requests import TrackRequest
 
 
 class ModelList(pydantic.BaseModel):
@@ -105,7 +106,8 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
                 message=str(exc), status_code=reported.status_code, code=reported.code
             ),
         )
-    # Also lists the images to send again, in place of their references.
+    # These two carry a field more: the images to send again, in place of
+    # their references, and the result to show before the edit is made again.
     missing: _errors.Reported = _errors.REPORTED[_errors.UnknownImageError]
     app.add_exception_handler(
         _errors.UnknownImageError,
@@ -114,6 +116,16 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
             status_code=missing.status_code,
             code=missing.code,
             images=exc.refs,
+        ),
+    )
+    changed: _errors.Reported = _errors.REPORTED[_errors.BaseChangedError]
+    app.add_exception_handler(
+        _errors.BaseChangedError,
+        lambda request, exc: _error(
+            message=str(exc),
+            status_code=changed.status_code,
+            code=changed.code,
+            result=exc.result,
         ),
     )
     app.add_exception_handler(
@@ -187,6 +199,22 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
     @app.post("/api/segment", response_model=SegmentResponse)
     async def segment(request: SegmentRequest) -> SegmentResponse:
         return await run(call=functools.partial(runtime.segment, request=request))
+
+    # Streams NDJSON: a line per frame, then a done line. Every action runs
+    # before the first line, so a missing frame or a changed base is still a
+    # status code.
+    @app.post("/api/track", response_class=fastapi.responses.StreamingResponse)
+    async def track(request: TrackRequest) -> fastapi.responses.Response:
+        response = await run(call=functools.partial(runtime.track, request=request))
+
+        def lines():
+            for frame in response.frames:
+                yield frame.model_dump_json() + "\n"
+            yield response.done.model_dump_json() + "\n"
+
+        return fastapi.responses.StreamingResponse(
+            lines(), media_type="application/x-ndjson"
+        )
 
     @app.post("/api/load")
     async def load(request: LoadRequest) -> None:

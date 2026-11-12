@@ -22,6 +22,19 @@ class UnknownImageError(LookupError):
         self.refs = refs
 
 
+class BaseChangedError(ValueError):
+    # An action whose base isn't the result of the actions before it.
+
+    result: str
+
+    def __init__(self, *, index: int, result: str):
+        super().__init__(
+            f"actions[{index}].base is not the result of the actions before it, "
+            f"{result}; show it and make the edit again"
+        )
+        self.result = result
+
+
 class DownloadError(RuntimeError):
     # A model file that no endpoint served.
     pass
@@ -33,11 +46,20 @@ class ResponseError(Exception):
 
     status_code: int
     code: str | None
+    # The image references a "missing_images" error asks to send.
+    images: list[str]
 
-    def __init__(self, message: str, status_code: int, code: str | None = None):
+    def __init__(
+        self,
+        message: str,
+        status_code: int,
+        code: str | None = None,
+        images: list[str] | None = None,
+    ):
         super().__init__(message)
         self.status_code = status_code
         self.code = code
+        self.images = images or []
 
 
 class InvalidRequestError(ResponseError, ValueError):
@@ -70,6 +92,7 @@ REPORTED: Final[dict[type[Exception], Reported]] = {
     UnknownModelError: Reported(status_code=404, code="model_not_found"),
     UnknownImageError: Reported(status_code=412, code="missing_images"),
     ValueError: Reported(status_code=400, code="invalid_request"),
+    BaseChangedError: Reported(status_code=409, code="base_changed"),
     # 502, as the host of the model files failed, not osam's server.
     DownloadError: Reported(status_code=502, code="pull_failed"),
 }

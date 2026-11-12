@@ -2,7 +2,7 @@
 
 SAM3 runs offline through onnxruntime on CPU, CUDA, WebGPU and CoreML. These are the
 numbers behind the speed table in the [README](../README.md#speed), measured on
-2026-10-31 with the sam3-onnx v0.6.0 models.
+2026-11-12 with the sam3-onnx v0.7.0 models.
 
 ## Inference time
 
@@ -12,35 +12,40 @@ after the image is encoded once.
 
 | Device | Encode | Point | Box | Negative box | Text |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| CPU, Intel i9-12900K | 6563 | 83 | 1152 | 1162 | 1162 |
-| CUDA, NVIDIA RTX 3080 Ti | 347 | 27 | 72 | 72 | 74 |
-| WebGPU, NVIDIA RTX 3080 Ti | 741 | 57 | 199 | 196 | 203 |
-| CPU, Apple M5 | 15341 | 64 | 1475 | 1489 | 1519 |
-| CoreML, Apple M5 | 2466 | 61 | 375 | 376 | 376 |
-| WebGPU, Apple M5 | 3691 | 46 | 610 | 621 | 604 |
+| CPU, Intel i9-12900K | 8431 | 100 | 55 | 1062 | 1085 |
+| CUDA, NVIDIA RTX 3080 Ti | 197 | 30 | 28 | 31 | 33 |
+| WebGPU, NVIDIA RTX 3080 Ti | 616 | 50 | 49 | 95 | 99 |
+| CPU, Apple M5 | 16425 | 67 | 66 | 1319 | 1320 |
+| CoreML, Apple M5 | 1163 | 44 | 46 | 330 | 333 |
+| WebGPU, Apple M5 | 2390 | 42 | 43 | 319 | 320 |
 
-On the M5, CoreML encodes the image 6.2x faster than the CPU and runs a text or
-box prompt 4.0x faster. The point decoder runs on CPU on both, because CoreML
-can't load its unbounded point input.
+GPUs run the float16 models, and CUDA and WebGPU the image encoder with fused
+attention; CPUs run the float32 ones. On CUDA, the image features stay on the
+GPU between the encoder and the decoders. On CoreML, only the image encoder
+runs on CoreML, and the rest on WebGPU.
 
-The Box column timed the concept detector, which a box without text used to
-run. A box without text now runs the point decoder, as a point prompt does.
+The v0.6.0 and v0.7.0 float32 image encoders take the same 7.8 s on the
+i9-12900K, so the CPU rows don't compare across the two dates.
 
-CoreML and CPU returned the same result on the M5 with the v0.5.0 models: for the text prompt "dog" and
-a box prompt, all 3 masks match with an IoU of 1.0 and the scores are equal.
+On CUDA, float16 finds the same 4 people on `bus.jpg` as float32 on the CPU,
+with equal scores to 3 decimals and mask IoUs of 0.95 to 1.0.
 
 ## Load time on the M5
 
 | Device | Load |
 | --- | ---: |
-| CPU | 2.9 s |
-| WebGPU | 3.2 s |
-| CoreML, first load | 40 s |
-| CoreML, later loads | 15 s |
+| CPU | 2.7 s |
+| WebGPU | 1.3 s |
+| CoreML, first load | 5.0 s |
+| CoreML, later loads | 2.1 s |
 
-On every CoreML load, osam rewrites each model's Gemm weights in memory to the
-layout CoreML loads in seconds. The first load compiles the result and caches
-it under `~/.cache/osam/coreml` (6.9 GB for SAM3). `osam rm sam3` deletes it.
+On every CoreML load, osam rewrites the image encoder's Gemm weights in memory
+to the layout CoreML loads in seconds. The first load compiles the result and
+caches it under `~/.cache/osam/coreml` (1.8 GB for SAM3). `osam rm sam3`
+deletes it.
+
+onnxruntime before 1.24 runs the float16 encoder on CoreML 10x slower than the
+float32 one, so on those versions osam loads the float32 encoder on CoreML.
 
 ## Setup
 
@@ -49,9 +54,9 @@ it under `~/.cache/osam/coreml` (6.9 GB for SAM3). `osam rm sam3` deletes it.
 - Linux 7.2: Python 3.10 and onnxruntime 1.23.2 for CPU, Python 3.12 and
   onnxruntime-gpu 1.31.1 for CUDA.
 - MacBook Pro (Mac17,2), Apple M5, 24 GB, macOS 26.6: Python 3.10 and
-  onnxruntime 1.23.2 for CPU and CoreML.
-- WebGPU on both: Python 3.12, onnxruntime 1.30.0 and onnxruntime-ep-webgpu
-  0.5.0, on Vulkan and Metal.
+  onnxruntime 1.23.2 for CPU.
+- WebGPU on both, and CoreML: Python 3.12, onnxruntime 1.30.0 and
+  onnxruntime-ep-webgpu 0.5.0, on Vulkan and Metal.
 
 Reproduce with:
 

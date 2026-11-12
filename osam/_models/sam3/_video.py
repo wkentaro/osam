@@ -14,6 +14,7 @@ box reconditioning, and the object limit.
 """
 
 import collections
+import functools
 import typing
 
 import numpy as np
@@ -148,20 +149,32 @@ def _fill_holes_in_mask_scores(masks: NDArray) -> NDArray:
     return masks
 
 
-def _apply_non_overlapping_constraints(pred_masks: NDArray) -> NDArray:
-    """Sam3TrackerBase._apply_non_overlapping_constraints of (N, 1, H, W)."""
-    if len(pred_masks) == 1:
-        return pred_masks
-    keep = pred_masks.argmax(0)[None] == np.arange(len(pred_masks))[:, None, None, None]
-    return np.where(keep, pred_masks, np.minimum(pred_masks, -10.0))
+def _is_argmax(scores: NDArray) -> NDArray[np.bool_]:
+    """scores.argmax(0) == i for each i along axis 0, the first of tied maxima.
+
+    numpy's argmax along the first axis takes 14 ms for 3 masks of 1008x1008,
+    and this 2 ms.
+    """
+    is_max = scores == scores.max(0)
+    seen = np.zeros_like(is_max[0])
+    for is_max_i in is_max:
+        is_max_i &= ~seen
+        seen |= is_max_i
+    return is_max
 
 
 def _suppress_object_pw_area_shrinkage(pred_masks: NDArray) -> NDArray:
-    """Sam3TrackerPredictor._suppress_object_pw_area_shrinkage of (N, 1, H, W)."""
-    non_overlapping = _apply_non_overlapping_constraints(pred_masks)
-    area_before = np.maximum((pred_masks > 0).sum((-1, -2)), 1)
-    area_after = (non_overlapping > 0).sum((-1, -2))
+    """Sam3TrackerPredictor._suppress_object_pw_area_shrinkage of (N, 1, H, W).
+
+    Its Sam3TrackerBase._apply_non_overlapping_constraints keeps a pixel's
+    score for the object that scores highest there, and lowers the others to
+    -10 at most, so the area after counts the positive pixels it keeps."""
+    positive = pred_masks > 0
+    area_before = np.maximum(positive.sum((-1, -2)), 1)
+    area_after = (positive & _is_argmax(pred_masks)).sum((-1, -2))
     keep = area_after / area_before >= 0.3
+    if keep.all():
+        return pred_masks
     return np.where(keep[..., None, None], pred_masks, np.minimum(pred_masks, -10.0))
 
 
@@ -172,8 +185,7 @@ def _apply_object_wise_non_overlapping_constraints(
     binary masks (N, H, W) with background_value=0: the highest scoring object
     claims each pixel."""
     scores = np.where(masks, obj_scores[:, None, None], 0)
-    is_max = scores.argmax(0)[None] == np.arange(len(masks))[:, None, None]
-    return masks & is_max & (scores > 0)
+    return masks & _is_argmax(scores) & (scores > 0)
 
 
 def _masks_to_boxes(masks: NDArray[np.bool_]) -> NDArray[np.float32]:
@@ -184,6 +196,15 @@ def _masks_to_boxes(masks: NDArray[np.bool_]) -> NDArray[np.float32]:
         xs = np.flatnonzero(mask.any(0))
         boxes.append([xs[0], ys[0], xs[-1], ys[-1]])
     return np.array(boxes, np.float32).reshape(-1, 4)
+
+
+def _tracker_features(
+    features: typing.Callable[[int], dict[str, typing.Any]], frame_idx: int
+) -> list[NDArray]:
+    return [
+        features(frame_idx)[name]
+        for name in ["image_embeddings", "high_res_features1", "high_res_features2"]
+    ]
 
 
 class VideoInference:
@@ -197,7 +218,7 @@ class VideoInference:
     def __init__(
         self,
         sessions: dict[str, onnxruntime.InferenceSession],
-        get_features: typing.Callable[[int], dict[str, NDArray]],
+        get_features: typing.Callable[[int], dict[str, typing.Any]],
         num_frames: int,
         video_height: int,
         video_width: int,
@@ -211,8 +232,9 @@ class VideoInference:
                 "re-export it with: uv run export_onnx.py"
             )
         self._sessions = sessions
-        self._get_features = get_features
-        self._features_cache: tuple[int, dict[str, NDArray]] | None = None
+        # Trackers share this cache without a reference back to self, so
+        # dropping the predictor frees it, and its sessions, right away.
+        self._features = functools.lru_cache(maxsize=1)(get_features)
         self.num_frames = num_frames
         self.video_height = video_height
         self.video_width = video_width
@@ -246,22 +268,10 @@ class VideoInference:
 
     # Models {{
 
-    def _features(self, frame_idx: int) -> dict[str, NDArray]:
-        if self._features_cache is None or self._features_cache[0] != frame_idx:
-            self._features_cache = (frame_idx, self._get_features(frame_idx))
-        return self._features_cache[1]
-
-    def _tracker_features(self, frame_idx: int) -> list[NDArray]:
-        features = self._features(frame_idx)
-        return [
-            features[name]
-            for name in ["image_embeddings", "high_res_features1", "high_res_features2"]
-        ]
-
     def _new_tracker(self) -> Tracker:
         return Tracker(
             self._sessions,
-            self._tracker_features,
+            functools.partial(_tracker_features, self._features),
             self.num_frames,
             self.video_height,
             self.video_width,
@@ -637,11 +647,19 @@ class VideoInference:
         self.obj_id_to_score.pop(obj_id, None)
 
     def add_tracker_new_points(
-        self, frame_idx: int, obj_id: int, points: NDArray, labels: NDArray
+        self,
+        frame_idx: int,
+        obj_id: int,
+        points: NDArray | None,
+        labels: NDArray | None,
+        box: NDArray | None = None,
     ) -> tuple[int, VideoOutput]:
         """Refine an object with points (N, 2) normalized by the video size and
         their labels (N,), replacing its earlier points on that frame, or add a
-        new object with a new obj_id. Return the outputs on that frame."""
+        new object with a new obj_id. Return the outputs on that frame.
+
+        Unlike upstream, it also takes a box (x1, y1, x2, y2) normalized by the
+        video size, which goes before the points, as the tracker takes it."""
         if frame_idx not in self.cached_frame_outputs:
             raise RuntimeError(
                 f"frame {frame_idx} has no outputs yet, propagate before adding points"
@@ -662,7 +680,7 @@ class VideoInference:
         self.removed_obj_ids.discard(obj_id)
 
         _, obj_ids, video_res_masks = tracker.add_new_points_or_box(
-            frame_idx, obj_id, points=points, labels=labels
+            frame_idx, obj_id, points=points, labels=labels, box=box
         )
         # Upstream fills the holes of every object's mask and keeps only this one.
         (mask,) = _fill_holes_in_mask_scores(video_res_masks[obj_ids.index(obj_id)])

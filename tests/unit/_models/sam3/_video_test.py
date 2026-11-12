@@ -1,3 +1,8 @@
+import gc
+import types
+import typing
+import weakref
+
 import numpy as np
 import pytest
 
@@ -33,7 +38,30 @@ def test_to_bfloat16_rounds_to_nearest_even() -> None:
     one = np.float32(1)
     step = np.float32(2**-7)  # bfloat16 has 7 mantissa bits
     x = np.array([one + step / 4, one + step / 2, one + 3 * step / 2], np.float32)
-    np.testing.assert_array_equal(_tracker._to_bfloat16(x), [one, one, one + 2 * step])
+    np.testing.assert_array_equal(
+        _tracker._from_bfloat16(_tracker._to_bfloat16(x)), [one, one, one + 2 * step]
+    )
+
+
+def test_is_argmax_takes_the_first_of_tied_maxima() -> None:
+    scores = np.array([[1, 2, 3], [3, 2, 1], [0, 2, 3]], np.float32)
+    np.testing.assert_array_equal(
+        _video._is_argmax(scores),
+        scores.argmax(0)[None] == np.arange(3)[:, None],
+    )
+
+
+def test_fixed_memory_attention_inputs_pad_and_mark_validity() -> None:
+    inputs = _tracker._pad_memory_attention_inputs(
+        memory=np.ones((2, 3), np.float32),
+        memory_tpos=np.array([6, 0], np.int64),
+        obj_ptrs=np.ones((1, 4), np.float32),
+        obj_ptr_tpos=np.zeros(1, np.float32),
+    )
+    assert inputs["memory"].shape == (_tracker.FIXED_NUM_MEMORIES, 3)
+    assert inputs["obj_ptrs"].shape == (_tracker.FIXED_NUM_OBJ_PTRS, 4)
+    assert inputs["memory_valid"].tolist() == [1, 1] + [0] * 5
+    assert inputs["obj_ptr_valid"].sum() == 1
 
 
 def test_component_areas_are_8_connected() -> None:
@@ -81,3 +109,29 @@ def test_propagation_history() -> None:
     assert video._parse_action_history_for_propagation() == ("propagation_full", None)
     video._add_action_history("propagation_full", 9, None, reverse=True)
     assert video._parse_action_history_for_propagation()[0] == "propagation_fetch"
+
+
+def test_dropping_the_predictor_frees_it_without_gc() -> None:
+    # The runtime unloads a model by dropping its timeline. A reference cycle
+    # through the trackers would keep the sessions until a gc pass.
+    def session(*, outputs: list[str], batch: object = "num_objects") -> object:
+        return types.SimpleNamespace(
+            get_outputs=lambda: [types.SimpleNamespace(name=n) for n in outputs],
+            get_inputs=lambda: [types.SimpleNamespace(shape=[batch])],
+        )
+
+    sessions = {
+        name: session(outputs=["mask_logits", "single_obj_ptr"])
+        for name in {*_video.MODEL_NAMES, *_tracker.MODEL_NAMES}
+    }
+    predictor = _video.VideoInference(
+        typing.cast(dict, sessions), lambda frame: {}, 1, 4, 4
+    )
+    predictor.trackers.append(predictor._new_tracker())
+    ref = weakref.ref(predictor)
+    gc.disable()
+    try:
+        del predictor
+        assert ref() is None
+    finally:
+        gc.enable()

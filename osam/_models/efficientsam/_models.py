@@ -45,7 +45,9 @@ class EfficientSam(SamBase):
     ) -> npt.NDArray[np.bool_]:
         decoder_inputs = {
             # batch_size, embedding_dim, height, width
-            "image_embeddings": image_embedding.embedding[None, :, :, :],
+            "image_embeddings": cast(
+                npt.NDArray[np.float32], image_embedding.embedding
+            )[None],
             # batch_size, num_queries, num_points, 2
             "batched_point_coords": points[None, None, :, :],
             # batch_size, num_queries, num_points

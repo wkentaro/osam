@@ -19,6 +19,11 @@ class Annotation(pydantic.BaseModel):
     bounding_box: BoundingBox | None = pydantic.Field(default=None)
     text: str | None = pydantic.Field(default=None)
     score: float | None = pydantic.Field(default=None)
+    object_id: int | None = pydantic.Field(
+        default=None,
+        description="The tracked object, numbered in the order objects appear; "
+        "null outside /api/track",
+    )
     # Serialized as a base64 PNG cropped to bounding_box.
     mask: Base64Image | None = pydantic.Field(default=None)
 

@@ -9,6 +9,7 @@ import secrets
 import subprocess
 import sys
 import threading
+import typing
 import urllib.parse
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -178,6 +179,41 @@ class HttpBackend:
                 if e.code != missing.code:
                     raise
         return post(encoded)
+
+    def track(self, *, request: _requests.TrackRequest) -> types.TrackResponse:
+        # Every frame by reference first.
+        frames: list[np.ndarray] = typing.cast(list[np.ndarray], request.frames)
+        refs: list[str] = [_json.image_ref(image=frame) for frame in frames]
+        body: dict[str, Any] = request.model_dump(
+            mode="json", exclude={"frames"}, exclude_none=True
+        )
+
+        def post(sent: list[str]) -> types.TrackResponse:
+            *lines, done = self._stream(path="/api/track", body=body | {"frames": sent})
+            return types.TrackResponse(
+                frames=[types.TrackFrame.model_validate(line) for line in lines],
+                done=types.TrackDone.model_validate(done),
+            )
+
+        # The ones a 412 lists inline, then, if the server lost more, such as
+        # in a restart, every one, which can't be missing.
+        inline: set[str] = set()
+        for attempt in range(3):
+            try:
+                return post(
+                    [
+                        _json.image_ndarray_to_b64data(ndarray=frame)
+                        if ref in inline
+                        else ref
+                        for ref, frame in zip(refs, frames)
+                    ]
+                )
+            except _errors.ResponseError as e:
+                missing: _errors.Reported = _errors.REPORTED[_errors.UnknownImageError]
+                if e.code != missing.code or attempt == 2:
+                    raise
+                inline |= set(e.images) if attempt == 0 else set(refs)
+        raise AssertionError("unreachable")
 
     def _request(
         self, *, method: str, path: str, body: dict[str, Any] | None = None
@@ -390,16 +426,18 @@ def _wait(*, process: _Process, timeout: float | None) -> bool:
 
 def _response_error(*, status_code: int, data: bytes) -> _errors.ResponseError:
     code: str | None = None
+    images: list[str] | None = None
     try:
         body: dict[str, Any] = json.loads(data)
         message: str = body["error"]
         code = body.get("code")
+        images = body.get("images")
     except (ValueError, KeyError, TypeError, AttributeError):
         message = data.decode(errors="replace")
     error_type: type[_errors.ResponseError] = _errors.RESPONSE_ERRORS.get(
         status_code, _errors.ResponseError
     )
-    return error_type(message, status_code=status_code, code=code)
+    return error_type(message, status_code=status_code, code=code, images=images)
 
 
 def _serve_stdio() -> None:
