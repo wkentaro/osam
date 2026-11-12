@@ -201,3 +201,19 @@ def test_file_runs_fastest_on_the_device(
     monkeypatch.setattr(_models, "_ORT_VERSION", ort_version)
     assert _models._file(name="image_encoder", device=device) == expected
     assert _models._file(name="decoder", device="cpu") == "decoder"
+
+
+def test_remove_deletes_the_files_an_upgrade_leaves(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from osam import types
+    from osam._models.sam3._models import Sam3
+
+    removed: list[str] = []
+    monkeypatch.setattr(types.Blob, "remove", lambda self: removed.append(self.hash))
+    Sam3.remove()
+    # The v0.6.0 image encoder, which v0.7.0 replaced.
+    assert (
+        "sha256:c6b984d95ca7ca0564356253b92ee30287188cfffab5d4f87709b79d5d9aa6c8"
+        in removed
+    )

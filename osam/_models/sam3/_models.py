@@ -53,6 +53,26 @@ _FILES: Final[dict[str, types.Blob]] = {
     ),
 }
 
+# The v0.6.0 files, which an upgrade leaves on disk for remove to delete.
+_V0_6_0_FILES: Final[dict[str, types.Blob]] = {
+    "v0.6.0/image_encoder": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_image_encoder.onnx",
+        hash="sha256:c6b984d95ca7ca0564356253b92ee30287188cfffab5d4f87709b79d5d9aa6c8",
+    ),
+    "v0.6.0/language_encoder": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_language_encoder.onnx",
+        hash="sha256:7868036ee14bb4f09672849c86d6fd5df43f06f089089a99fc2665cb0e84fc26",
+    ),
+    "v0.6.0/decoder": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_decoder.onnx",
+        hash="sha256:b4f3588d299611546d9aeb1abf2cf4651a78c7cc021668f379d211b80db1cba3",
+    ),
+    "v0.6.0/point_decoder": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_point_decoder.onnx",
+        hash="sha256:410871f485362f7b6762e890a3a3ee1619cbc6ae07f7c0e7c88fd319c37a09bb",
+    ),
+}
+
 
 _ORT_VERSION: Final = tuple(int(v) for v in onnxruntime.__version__.split(".")[:2])
 
@@ -81,7 +101,7 @@ class Sam3(types.Model):
 
     prompt_kinds = frozenset({"points", "box", "texts", "example_boxes"})
 
-    _blobs = _FILES
+    _blobs = {**_FILES, **_V0_6_0_FILES}
 
     # CoreML runs the image encoder 3 times as fast as WebGPU does. It takes
     # 11 s to compile the decoder for 140 ms less per run, and can't load the
