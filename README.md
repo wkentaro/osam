@@ -386,3 +386,12 @@ and `"images"`, a reference to each frame to send next.
 A `base` other than the server's result gets 409 with `"code": "base_changed"`
 and the new `result`. `/api/models` lists `"track"` in the `capabilities` of
 a model that tracks, SAM3.
+
+The server keeps the last video's tracking state in memory, so that the next
+edit applies without tracking from the start. At 1080p, each object takes about
+1.3 MB per frame for the first 320 frames and 0.6 MB for each frame after,
+when the tracker drops the oldest memory features, plus the annotations: one
+object over 400 frames kept 471 MB and 103 MB of annotations. A request that
+tracks again, for another video or with actions that don't extend the last
+ones, replaces it; one answered from the server's cache of results leaves it.
+Unloading the model frees it.
