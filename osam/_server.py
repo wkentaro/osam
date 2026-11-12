@@ -242,7 +242,8 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
         ] = asyncio.Queue()
 
         def progress(event: types.TrackProgress) -> None:
-            if not cancel.is_set():
+            # The stream already sent the preparing event.
+            if event.frame is not None and not cancel.is_set():
                 loop.call_soon_threadsafe(events.put_nowait, event)
 
         def work() -> None:

@@ -369,6 +369,10 @@ def _track_events(*, client: TestClient, **fields) -> list[dict]:
     assert response.status_code == 200, response.text
     events = [json.loads(line) for line in response.text.splitlines()]
     assert events[0]["progress"] is True
+    # One preparing event, before any position.
+    assert [e for e in events if "progress" in e and e.get("frame") is None] == [
+        events[0]
+    ]
     return events
 
 

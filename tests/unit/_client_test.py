@@ -513,13 +513,18 @@ def test_track_sends_frames_the_server_lacks(monkeypatch: pytest.MonkeyPatch) ->
             return stream(path=path, body=body)
 
         monkeypatch.setattr(backend, "_stream", recording)
+        events: list[osam.types.TrackProgress] = []
         for any_client in [client, in_process]:
-            response = any_client.track("efficientsam:10m", frames[:2], [prompt])
+            response = any_client.track(
+                "efficientsam:10m", frames[:2], [prompt], progress=events.append
+            )
             assert [f.frame for f in response.frames] == [0, 1]
             assert response.frames[1].annotations[0].object_id == 0
             assert response.done.cache == "miss"
         # By reference, then the two frames it lacked inline.
         assert posted == [[True, True], [False, False]]
+        assert events[0].frame is None
+        assert any(event.frame == 1 for event in events)
 
         posted.clear()
         add = {"type": "add", "frame": 2, "box": [0, 0, 1, 1]}
