@@ -13,6 +13,7 @@ from osam import _types as types
 from osam._types._prompt import THRESHOLDS
 from osam._types._prompt import PointLabel
 
+from ._tracker import IMAGE_SIZE
 from ._video import VideoInference
 
 
@@ -158,14 +159,22 @@ class Timeline:
 
     def _prompt_object(self, *, object_id: int, frame: int) -> None:
         box, points, labels = self._prompts[object_id][frame]
+
+        def normalize(xy: NDArray[np.float32]) -> NDArray:
+            # Pixel centers, as the point decoder reads them at IMAGE_SIZE.
+            return (
+                types.scale_points(
+                    points=xy.reshape(-1, 2), scale=IMAGE_SIZE / self._scale
+                )
+                / IMAGE_SIZE
+            )
+
         self._video.add_tracker_new_points(
             frame,
             object_id,
-            points=np.array(points, np.float32).reshape(-1, 2) / self._scale
-            if points
-            else None,
+            points=normalize(np.array(points, np.float32)) if points else None,
             labels=np.array(labels, np.int32) if points else None,
-            box=None if box is None else box / np.tile(self._scale, 2),
+            box=None if box is None else normalize(box).reshape(-1),
         )
         self._propagate(frame=frame)
 
