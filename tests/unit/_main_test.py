@@ -178,8 +178,9 @@ def test_run_video_writes_a_png_per_frame(
     assert result.exit_code == 2
     assert "--video needs -o" in result.output
 
-    # Also without case: a.jpg and A.png write one file on macOS and Windows.
-    for names in [["1.png"], ["a.jpg", "A.png"]]:
+    # Also without case or Unicode form, as -o writes one file for each pair
+    # on macOS.
+    for names in [["1.png"], ["a.jpg", "A.png"], ["\u00e9.jpg", "e\u0301.png"]]:
         for name in names:
             PIL.Image.fromarray(np.zeros((4, 4, 3), np.uint8)).save(video / name)
         result = CliRunner().invoke(

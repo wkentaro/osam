@@ -8,6 +8,7 @@ import pathlib
 import re
 import sys
 import typing
+import unicodedata
 from collections.abc import Iterator
 from typing import Final
 
@@ -494,8 +495,10 @@ def _track(
     )
     if not paths:
         raise click.UsageError(f"{video_dir} has no frames")
-    # Without case, as a.png and A.png are one file on macOS and Windows.
-    if output_dir is not None and len({p.stem.casefold() for p in paths}) < len(paths):
+    # Without case or Unicode form: a.png and A.png are one file on macOS and
+    # Windows, and so are a composed and a decomposed é.png on macOS.
+    stems: set[str] = {unicodedata.normalize("NFC", p.stem).casefold() for p in paths}
+    if output_dir is not None and len(stems) < len(paths):
         raise click.UsageError(
             f"{video_dir} has frames of the same name, which -o would write to one file"
         )
