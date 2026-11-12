@@ -175,6 +175,8 @@ CoreML as on WebGPU, but its first CoreML load compiles the encoder into a
 Without a device, inference runs on CUDA when the installed onnxruntime has it,
 then on WebGPU when `osam[webgpu]` finds a GPU, otherwise on CPU. A session that
 fails to start on the GPU, for example without a Vulkan driver, runs on CPU.
+On macOS with onnxruntime 1.24 or later, SAM3 runs as with `coreml`, falling
+back to the order above if CoreML fails.
 `client.ps()` tells which one was picked. To use another accelerator (CoreML on
 macOS, DirectML on Windows, TensorRT, ROCm), set `OSAM_ONNX_PROVIDERS` to a
 comma-separated list tried in the given order:

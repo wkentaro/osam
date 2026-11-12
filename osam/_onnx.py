@@ -188,6 +188,15 @@ def default_device() -> str:
     return PROVIDER_DEVICES.get(resolve_providers()[0], "cpu")
 
 
+def picks_coreml() -> bool:
+    # Whether picking a device automatically picks CoreML for a model that
+    # runs faster there than on WebGPU: on macOS, unless OSAM_ONNX_PROVIDERS
+    # names the providers.
+    return not os.environ.get("OSAM_ONNX_PROVIDERS", "").strip() and (
+        DEVICE_PROVIDERS["coreml"] in onnxruntime.get_available_providers()  # type: ignore[possibly-missing-attribute]
+    )
+
+
 def session_device(*, device: str, coreml: bool = True) -> str:
     # The device that runs a model's session on device. A session that CoreML
     # doesn't run, coreml=False, runs on WebGPU when it finds a GPU, which runs

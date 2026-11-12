@@ -321,6 +321,7 @@ def test_model_device_reports_the_picked_device(
     from osam._models.sam3._models import Sam3
 
     monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    monkeypatch.setattr(Sam3, "_runs_faster_on_coreml", classmethod(lambda cls: False))
     fake_webgpu.append(_webgpu_adapter())
     assert Sam3().device == "webgpu"
 
@@ -363,6 +364,73 @@ def test_partial_fallback_moves_every_session_to_cpu(
     assert {k: s.get_providers() for k, s in sessions.items()} == dict.fromkeys(
         "abc", cpu
     )
+
+
+def test_sam3_picks_coreml_on_macos(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_webgpu: list[Any],
+    fake_sessions: list[tuple[str, Any]],
+) -> None:
+    from osam._models.sam3 import _models
+
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    monkeypatch.setattr(_onnx, "_coreml_model", lambda path: path)
+    monkeypatch.setattr(_models, "_ORT_VERSION", (1, 30))
+    fake_webgpu.append(_webgpu_adapter())
+    # The image encoder on CoreML, as with device="coreml", and the rest on
+    # WebGPU.
+    sam3 = _models.Sam3()
+    assert sam3.device == "coreml"
+    assert {k: s.get_providers()[0] for k, s in sam3._inference_sessions.items()} == {
+        k: "CoreMLExecutionProvider"
+        if k in _models.Sam3._coreml_blobs
+        else "WebGpuExecutionProvider"
+        for k in _models.Sam3._device_blobs(device="coreml")
+    }
+
+    # Not when CoreML fails to load it.
+    def fail(**kwargs: Any) -> None:
+        raise RuntimeError("CoreMLExecutionProvider failed")
+
+    with monkeypatch.context() as m:
+        m.setattr(_onnx, "create_device_session", fail)
+        assert _models.Sam3().device == "webgpu"
+    # Nor with providers named, nor onnxruntime before 1.24.
+    with monkeypatch.context() as m:
+        m.setenv("OSAM_ONNX_PROVIDERS", "WebGpuExecutionProvider,CPUExecutionProvider")
+        assert _models.Sam3().device == "webgpu"
+        m.setenv("OSAM_ONNX_PROVIDERS", "CoreMLExecutionProvider,CPUExecutionProvider")
+        providers = {
+            s.get_providers()[0] for s in _models.Sam3()._inference_sessions.values()
+        }
+        assert "WebGpuExecutionProvider" not in providers
+    monkeypatch.setattr(_models, "_ORT_VERSION", (1, 23))
+    assert _models.Sam3().device == "webgpu"
+
+
+def test_sam3_picks_the_files_on_disk_when_coreml_files_are_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from osam._models.sam3 import _models
+
+    monkeypatch.setattr(_onnx, "picks_coreml", lambda: True)
+    monkeypatch.setattr(_onnx, "default_device", lambda: "webgpu")
+    monkeypatch.setattr(_models, "_ORT_VERSION", (1, 30))
+    coreml = _models.Sam3._device_blobs(device="coreml")
+    webgpu = _models.Sam3._device_blobs(device="webgpu")
+    on_disk: list[Blob] = []
+    monkeypatch.setattr(Blob, "size", property(lambda b: 1 if b in on_disk else None))
+
+    assert _models.Sam3._blobs_of(device=None) == coreml
+    on_disk.extend(webgpu.values())
+    assert _models.Sam3._blobs_of(device=None) == webgpu
+    # But a pull fetches the files that loading tries first.
+    pulled: list[Blob] = []
+    monkeypatch.setattr(Blob, "pull", lambda b, **kwargs: pulled.append(b))
+    _models.Sam3.pull()
+    assert pulled == list(coreml.values())
+    on_disk.extend(coreml.values())
+    assert _models.Sam3._blobs_of(device=None) == coreml
 
 
 def test_coreml_model_rewrites_gemm_to_trans_b(

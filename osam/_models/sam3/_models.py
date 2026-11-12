@@ -157,6 +157,12 @@ class Sam3(types.Model):
 
     @classmethod
     @override
+    def _runs_faster_on_coreml(cls) -> bool:
+        # Its image encoder, in float16, which onnxruntime runs fast from 1.24.
+        return _ORT_VERSION >= (1, 24)
+
+    @classmethod
+    @override
     def _device_blobs(cls, *, device: str) -> dict[str, types.Blob]:
         blobs: dict[str, types.Blob] = {}
         names: list[str] = [

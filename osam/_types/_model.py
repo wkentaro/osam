@@ -47,13 +47,25 @@ class Model(abc.ABC):
 
         device: "cpu", "cuda", "coreml", or "webgpu". None picks OSAM_ONNX_PROVIDERS,
         or the first available of CUDA and a hardware WebGPU adapter, falling
-        back to CPU.
+        back to CPU; CoreML before WebGPU for a model that runs faster there.
         """
         logger.debug("Initializing model {name}", name=self.name)
+        if device is None and self._picks_coreml():
+            try:
+                self.__init__(device="coreml")
+                return
+            except Exception as e:
+                logger.warning(
+                    "Failed to load {name} on CoreML, picking another device: {e}",
+                    name=self.name,
+                    e=e,
+                )
         if device is not None:
             _onnx.device_providers(device=device)  # fail before downloading
-        self.pull(device=device)
-        blobs: dict[str, Blob] = self._blobs_of(device=device)
+        # Without a device, past CoreML, the files of the one picked otherwise.
+        files_device: str = device or _onnx.default_device()
+        self.pull(device=files_device)
+        blobs: dict[str, Blob] = self._device_blobs(device=files_device)
         if device is None:
             self._inference_sessions = _onnx.load_inference_sessions(blobs=blobs)
             if self.device != "cpu" or blobs == self._device_blobs(device="cpu"):
@@ -97,9 +109,31 @@ class Model(abc.ABC):
         return cls._blobs
 
     @classmethod
+    def _runs_faster_on_coreml(cls) -> bool:
+        # Than on WebGPU, so that picking a device automatically picks CoreML.
+        return False
+
+    @classmethod
+    def _picks_coreml(cls) -> bool:
+        # Whether picking a device automatically tries CoreML first.
+        return cls._runs_faster_on_coreml() and _onnx.picks_coreml()
+
+    @classmethod
     def _blobs_of(cls, *, device: str | None) -> dict[str, Blob]:
         # The files a model loads on device, or with the device it picks itself.
-        return cls._device_blobs(device=device or _onnx.default_device())
+        if device is not None:
+            return cls._device_blobs(device=device)
+        blobs: dict[str, Blob] = cls._device_blobs(device=_onnx.default_device())
+        if not cls._picks_coreml():
+            return blobs
+        # CoreML's, unless only the others are on disk, such as offline after
+        # an upgrade; loading falls back to them when it can't pull CoreML's.
+        coreml: dict[str, Blob] = cls._device_blobs(device="coreml")
+        if any(b.size is None for b in coreml.values()) and all(
+            b.size is not None for b in blobs.values()
+        ):
+            return blobs
+        return coreml
 
     @classmethod
     def pull(
@@ -110,6 +144,9 @@ class Model(abc.ABC):
         cancel: threading.Event | None = None,
         timeout: float | tuple[float, float] | None = 30,
     ) -> None:
+        # The files loading tries first, even with others on disk.
+        if device is None and cls._picks_coreml():
+            device = "coreml"
         for blob in cls._blobs_of(device=device).values():
             blob.pull(progress=progress, cancel=cancel, timeout=timeout)
 
