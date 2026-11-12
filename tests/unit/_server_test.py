@@ -698,26 +698,11 @@ def test_track_stream_logs_unexpected_failure(
 
     monkeypatch.setattr(runtime, "track", fail)
     logger = logging.getLogger("uvicorn.error")
-    logger.addHandler(caplog.handler)
-    try:
-        response = TestClient(app).post(
-            "/api/track",
-            json={
-                "model": "fake",
-                "frames": [_TINY_IMAGE_B64],
-                "actions": [
-                    {
-                        "type": "prompt",
-                        "frame": 0,
-                        "points": [[0, 0]],
-                        "point_labels": [1],
-                    }
-                ],
-            },
-        )
-    finally:
-        logger.removeHandler(caplog.handler)
-    *_, error = [json.loads(line) for line in response.text.splitlines()]
+    monkeypatch.setattr(logger, "handlers", [*logger.handlers, caplog.handler])
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    error = _track_error(
+        client=TestClient(app), frames=[_TINY_IMAGE_B64], actions=[prompt]
+    )
     assert error == {
         "error": "model failed",
         "code": "internal_error",

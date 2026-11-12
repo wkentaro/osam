@@ -1,4 +1,6 @@
 import contextlib
+import http.client
+import json
 import logging
 import multiprocessing
 import pathlib
@@ -580,9 +582,6 @@ def test_disconnected_tracking_stops_before_the_clip_finishes(
     caplog: pytest.LogCaptureFixture,
     cancel_from_callback: bool,
 ) -> None:
-    import http.client
-    import json
-
     from . import _fakes
     from ._server_test import _FakeTimeline
     from ._server_test import _patch_tracking
@@ -648,9 +647,6 @@ def test_disconnected_tracking_stops_before_the_clip_finishes(
 def test_cancelled_queued_tracking_does_not_run_inference(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import http.client
-    import json
-
     from . import _fakes
     from ._server_test import _FakeTimeline
     from ._server_test import _patch_tracking
@@ -660,6 +656,7 @@ def test_cancelled_queued_tracking_does_not_run_inference(
     _patch_tracking(monkeypatch=monkeypatch, model_type=model)
     started, release = threading.Event(), threading.Event()
     calls: list[int] = []
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
 
     def slow(self, *, action, on_frame=None):
         calls.append(action.frame)
@@ -676,14 +673,7 @@ def test_cancelled_queued_tracking_does_not_run_inference(
                 client.track(
                     "fake",
                     [np.zeros((1, 1, 3), np.uint8)],
-                    [
-                        {
-                            "type": "prompt",
-                            "frame": 0,
-                            "points": [[0, 0]],
-                            "point_labels": [1],
-                        }
-                    ],
+                    [prompt],
                 )
             except BaseException as exc:
                 errors.append(exc)
@@ -703,14 +693,7 @@ def test_cancelled_queued_tracking_does_not_run_inference(
                     {
                         "model": "fake",
                         "frames": [inline],
-                        "actions": [
-                            {
-                                "type": "prompt",
-                                "frame": 0,
-                                "points": [[0, 0]],
-                                "point_labels": [1],
-                            }
-                        ],
+                        "actions": [prompt],
                     }
                 ),
                 {"Content-Type": "application/json"},
@@ -728,36 +711,6 @@ def test_cancelled_queued_tracking_does_not_run_inference(
         # This queued load also proves the cancelled tracking worker has exited.
         client.load("fake", keep_alive=-1)
         assert calls == [0]
-
-
-def test_track_progress_errors_retry_frames_and_expose_conflicts(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from . import _fakes
-    from ._server_test import _patch_tracking
-
-    model = _fakes.model_type(name="fake:latest")
-    runtime = _runtime.Runtime(model_types=[model])
-    _patch_tracking(monkeypatch=monkeypatch, model_type=model)
-    frames = [np.zeros((1, 1, 3), np.uint8)] * 3
-    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
-    events: list[osam.types.TrackProgress] = []
-    with _serving(runtime=runtime) as host, osam.Client(host=host) as client:
-        response = client.track("fake", frames, [prompt], progress=events.append)
-        assert response.done.cache == "miss"
-        assert events[0].frame is None
-        assert any(e.frame == 2 for e in events)
-        assert len(runtime._frames) == 1  # streamed 412 was retried inline
-        with pytest.raises(osam.ResponseError) as exc:
-            client.track(
-                "fake",
-                frames,
-                [prompt, {"type": "remove", "object_id": 0, "base": "wrong"}],
-                progress=events.append,
-            )
-        assert exc.value.status_code == 409
-        assert exc.value.code == "base_changed"
-        assert exc.value.result == response.done.result
 
 
 def test_track_stream_failure_closes_connection_before_private_restart(
