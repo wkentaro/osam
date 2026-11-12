@@ -262,8 +262,9 @@ class VideoInference:
             collections.defaultdict(list)
         )
         self.removed_obj_ids: set[int] = set()
-        # frame_idx -> obj_id -> the mask that propagation output on that frame
-        self.cached_frame_outputs: dict[int, dict[int, NDArray[np.bool_]]] = {}
+        # frame_idx -> obj_id -> the mask that propagation output on that frame,
+        # packed 8 pixels to a byte, as it lives as long as the timeline.
+        self.cached_frame_outputs: dict[int, dict[int, NDArray[np.uint8]]] = {}
         self.action_history: list[dict[str, typing.Any]] = []
 
     # Models {{
@@ -456,7 +457,7 @@ class VideoInference:
         removed_obj_ids: typing.Collection[int] = (),
     ) -> None:
         self.cached_frame_outputs[frame_idx] = {
-            obj_id: mask
+            obj_id: np.packbits(mask)
             for obj_id, mask in obj_id_to_mask.items()
             if obj_id not in removed_obj_ids
         }
@@ -464,7 +465,16 @@ class VideoInference:
     def _build_tracker_output(
         self, frame_idx: int, refined_obj_id_to_mask: dict[int, NDArray[np.bool_]]
     ) -> dict[int, NDArray[np.bool_]]:
-        return {**self.cached_frame_outputs[frame_idx], **refined_obj_id_to_mask}
+        return {**self._cached_masks(frame_idx), **refined_obj_id_to_mask}
+
+    def _cached_masks(self, frame_idx: int) -> dict[int, NDArray[np.bool_]]:
+        shape: tuple[int, int] = (self.video_height, self.video_width)
+        return {
+            obj_id: np.unpackbits(bits, count=shape[0] * shape[1])
+            .reshape(shape)
+            .view(np.bool_)
+            for obj_id, bits in self.cached_frame_outputs[frame_idx].items()
+        }
 
     def _postprocess_output(
         self, out: dict[str, typing.Any], removed_obj_ids: typing.Collection[int] = ()
@@ -540,7 +550,7 @@ class VideoInference:
 
         if propagation_type == "propagation_fetch":
             for frame_idx in processing_order:
-                obj_id_to_mask = self.cached_frame_outputs[frame_idx]
+                obj_id_to_mask = self._cached_masks(frame_idx)
                 yield (
                     frame_idx,
                     self._postprocess_output(
