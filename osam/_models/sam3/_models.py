@@ -227,15 +227,23 @@ class Sam3(types.Model):
         masks_native: NDArray[np.float32] = cast(NDArray[np.float32], outputs[2])
         mask_h, mask_w = masks_native.shape[2], masks_native.shape[3]
 
-        # Scale normalized boxes to inclusive pixel coordinates in the image
-        boxes = np.minimum(
+        # Scale normalized box edges to the first and last pixels whose
+        # centers they enclose, a center on an edge included.
+        edges = (
             boxes_norm
             * np.array(
                 [original_width, original_height, original_width, original_height],
                 dtype=np.float32,
-            ),
+            )
+            - 0.5
+        )
+        boxes = np.clip(
+            np.concatenate([np.ceil(edges[:, :2]), np.floor(edges[:, 2:])], axis=1),
+            0,
             [original_width - 1, original_height - 1] * 2,
         )
+        # A box narrower than a pixel still encloses the pixel at its start.
+        boxes[:, 2:] = np.maximum(boxes[:, 2:], boxes[:, :2])
         # Scale normalized boxes to native mask coordinates
         boxes_mask = boxes_norm * np.array(
             [mask_w, mask_h, mask_w, mask_h], dtype=np.float32

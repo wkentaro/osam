@@ -10,15 +10,18 @@ from osam._models.sam3._models import Sam3
 @pytest.mark.parametrize(
     "box, expected",
     [
-        ([-0.3, -0.3, 0.5, 0.5], (0, 0, 50, 50)),
+        ([-0.3, -0.3, 0.5, 0.5], (0, 0, 49, 49)),
         ([0.5, 0.5, 1.3, 1.3], (50, 50, 99, 99)),
+        ([0.2, 0.3, 0.4, 0.5], (20, 30, 39, 49)),
+        ([0.206, 0.306, 0.214, 0.314], (21, 31, 21, 31)),
+        ([0.375, 0.125, 0.625, 0.875], (37, 12, 62, 87)),
     ],
 )
-def test_generate_keeps_mask_of_box_past_image_edge(
+def test_generate_boxes_the_pixels_inside_the_predicted_edges(
     box: list[float], expected: tuple[int, int, int, int]
 ) -> None:
-    # The decoder can predict a box past the image for an object cut off by
-    # the edge.
+    # The decoder predicts box edges, past the image for an object cut off by
+    # the image edge, and the box keeps the pixels whose centers they enclose.
     language_encoder = pytypes.SimpleNamespace(
         run=lambda *_: [np.ones((1, 32), bool), np.zeros((32, 1, 8), np.float32)]
     )
