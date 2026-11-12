@@ -60,8 +60,15 @@ class Model(abc.ABC):
                     name=self.name,
                     e=e,
                 )
+        if device is None and self._picks_cpu():
+            device = "cpu"
         if device is not None:
             _onnx.device_providers(device=device)  # fail before downloading
+            if not self._runs_on(device=device):
+                raise RuntimeError(
+                    f"{self.name} fails on {device} with onnxruntime "
+                    f"{onnxruntime.__version__}"
+                )
         # Without a device, past CoreML, the files of the one picked otherwise.
         files_device: str = device or _onnx.default_device()
         self.pull(device=files_device)
@@ -109,6 +116,12 @@ class Model(abc.ABC):
         return cls._blobs
 
     @classmethod
+    def _runs_on(cls, *, device: str) -> bool:
+        # Whether the installed onnxruntime runs the model right on device;
+        # picking a device automatically picks the CPU instead of one it doesn't.
+        return True
+
+    @classmethod
     def _runs_faster_on_coreml(cls) -> bool:
         # Than on WebGPU, so that picking a device automatically picks CoreML.
         return False
@@ -119,11 +132,19 @@ class Model(abc.ABC):
         return cls._runs_faster_on_coreml() and _onnx.picks_coreml()
 
     @classmethod
+    def _picks_cpu(cls) -> bool:
+        # Whether picking a device automatically picks the CPU, as the model
+        # fails on the device picked otherwise.
+        return not cls._runs_on(device=_onnx.default_device())
+
+    @classmethod
     def _blobs_of(cls, *, device: str | None) -> dict[str, Blob]:
         # The files a model loads on device, or with the device it picks itself.
         if device is not None:
             return cls._device_blobs(device=device)
-        blobs: dict[str, Blob] = cls._device_blobs(device=_onnx.default_device())
+        blobs: dict[str, Blob] = cls._device_blobs(
+            device="cpu" if cls._picks_cpu() else _onnx.default_device()
+        )
         if not cls._picks_coreml():
             return blobs
         # CoreML's, unless only the others are on disk, such as offline after

@@ -37,6 +37,8 @@ pip install osam[cpu]  # or osam[gpu] for NVIDIA GPUs
 `osam[gpu]` installs `onnxruntime-gpu` together with the CUDA and cuDNN
 libraries, so no system CUDA install is needed. Install only one onnxruntime
 build: `onnxruntime` and `onnxruntime-gpu` overwrite each other's files.
+SAM3 needs Python 3.11 or later on CUDA. On Python 3.10, which gets
+onnxruntime-gpu 1.23, it runs on the CPU, and `device="cuda"` raises an error.
 
 For other GPUs (AMD, Intel, or NVIDIA without the CUDA libraries), install
 `osam[webgpu]`; osam then uses the GPU without `--device`. It runs on Vulkan,

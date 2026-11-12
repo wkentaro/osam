@@ -54,8 +54,7 @@ cpu = [
   "onnx>=1.17.0; sys_platform == 'darwin'",
 ]
 gpu = [
-  # 1.23.2 cannot create CUDA sessions for SAM3's opset-21 models (#43), so
-  # SAM3 falls back to CPU on Python 3.10.
+  # 1.23.2 runs SAM3 wrong on CUDA (#43), so SAM3 runs on CPU on Python 3.10.
   "onnxruntime-gpu[cuda,cudnn]>=1.24.1; python_version >= '3.11'",
   "onnxruntime-gpu[cuda,cudnn]>=1.23.2,<1.24; python_version < '3.11'",
 ]

@@ -189,6 +189,14 @@ class Sam3(types.Model):
 
     @classmethod
     @override
+    def _runs_on(cls, *, device: str) -> bool:
+        # onnxruntime-gpu before 1.24, the last on Python 3.10, creates its
+        # CUDA sessions but fails point and box prompts with a Reshape error
+        # and finds no objects for some text prompts.
+        return device != "cuda" or _ORT_VERSION >= (1, 24)
+
+    @classmethod
+    @override
     def _runs_faster_on_coreml(cls) -> bool:
         # Its image encoder, in float16, which onnxruntime runs fast from 1.24.
         return _ORT_VERSION >= (1, 24)
