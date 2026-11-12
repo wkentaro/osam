@@ -427,17 +427,21 @@ def _wait(*, process: _Process, timeout: float | None) -> bool:
 def _response_error(*, status_code: int, data: bytes) -> _errors.ResponseError:
     code: str | None = None
     images: list[str] | None = None
+    result: str | None = None
     try:
         body: dict[str, Any] = json.loads(data)
         message: str = body["error"]
         code = body.get("code")
         images = body.get("images")
+        result = body.get("result")
     except (ValueError, KeyError, TypeError, AttributeError):
         message = data.decode(errors="replace")
     error_type: type[_errors.ResponseError] = _errors.RESPONSE_ERRORS.get(
         status_code, _errors.ResponseError
     )
-    return error_type(message, status_code=status_code, code=code, images=images)
+    return error_type(
+        message, status_code=status_code, code=code, images=images, result=result
+    )
 
 
 def _serve_stdio() -> None:

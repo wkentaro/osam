@@ -15,6 +15,8 @@ THRESHOLDS: Final = frozenset({"iou_threshold", "score_threshold", "max_annotati
 
 
 class Prompt(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="forbid")
+
     # One object: points with at most one box.
     points: list[tuple[float, float]] | None = pydantic.Field(
         default=None, description="x, y in pixels"

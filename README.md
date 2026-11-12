@@ -360,7 +360,8 @@ in seconds or as a duration such as `"10m"`, with `-1` to keep it loaded and `0`
 to unload it now. `/api/ps` lists the loaded models and `/api/version` the
 server's version. Errors come back as `{"error": "...", "code": "..."}`,
 where `code`, such as `"model_not_found"` or `"missing_images"`, stays the same
-across releases, and `osam.ResponseError.code` holds it. `/api/models`,
+across releases, and `osam.ResponseError.code` holds it. Unknown request and
+prompt fields return 422 instead of being ignored. `/api/models`,
 `/api/pull` and `DELETE /api/models/{name}` match `osam list`, `osam pull` and
 `osam rm`; each model in `/api/models` also lists its `capabilities`, such as
 `"segment"`, and the `prompt_kinds` it takes, such as `"points"` and
@@ -387,7 +388,8 @@ annotation with its `object_id`, then
 `{"done": true, "objects": [...], "result": "sha256:...", "cache": "partial"}`
 and `"images"`, a reference to each frame to send next.
 A `base` other than the server's result gets 409 with `"code": "base_changed"`
-and the new `result`. `/api/models` lists `"track"` in the `capabilities` of
+and the new `result`, also available as `osam.ResponseError.result` in Python.
+`/api/models` lists `"track"` in the `capabilities` of
 a model that tracks, SAM3.
 
 The server keeps the last video's tracking state in memory, so that the next

@@ -501,6 +501,41 @@ def test_track_reports_errors(
     assert response.status_code == 400, response.text
 
 
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/api/load", {"model": "fake", "keeep_alive": 0}),
+        ("/api/pull", {"model": "fake", "keeep_alive": 0}),
+        ("/api/segment", {"model": "fake", "image": _TINY_IMAGE_B64, "text": "person"}),
+        (
+            "/api/track",
+            {
+                "model": "fake",
+                "frames": [_TINY_IMAGE_B64],
+                "actions": [{"type": "prompt", "frame": 0, "texts": ["person"]}],
+                "text": "person",
+            },
+        ),
+        (
+            "/api/track",
+            {
+                "model": "fake",
+                "frames": [_TINY_IMAGE_B64],
+                "actions": [{"type": "prompt", "frame": 0, "text": "person"}],
+            },
+        ),
+    ],
+)
+def test_requests_reject_unknown_fields(
+    app: fastapi.FastAPI, runtime: _runtime.Runtime, path: str, body: dict
+) -> None:
+    response = TestClient(app).post(path, json=body)
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "invalid_request"
+    assert "Extra inputs" in response.json()["error"]
+    assert runtime.ps() == []
+
+
 def test_sam3_tracks() -> None:
     with contextlib.closing(_runtime.Runtime()) as runtime:
         app = _server.create_app(runtime=runtime)
