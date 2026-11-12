@@ -233,6 +233,11 @@ def _load_json(ctx, param, value: str | None) -> dict | None:
     help="directory to write a PNG per frame to, for --video",
 )
 @click.option(
+    "--overwrite",
+    is_flag=True,
+    help="replace existing video output files; input frames are never overwritten",
+)
+@click.option(
     "--prompt",
     callback=_load_json,
     help="prompt as JSON, @file to read it from a file, or - for stdin",
@@ -277,6 +282,7 @@ def run(
     image_path: str | None,
     video_dir: str | None,
     output_dir: str | None,
+    overwrite: bool,
     prompt,
     points: list[list[float]],
     boxes: list[list[float]],
@@ -292,6 +298,8 @@ def run(
         raise click.UsageError("give one of --image or --video")
     if video_dir is not None and output_dir is None and not json:
         raise click.UsageError("--video needs -o, or --json")
+    if overwrite and (video_dir is None or output_dir is None):
+        raise click.UsageError("--overwrite needs --video and -o")
 
     thresholds: dict = {
         "score_threshold": score_threshold,
@@ -350,6 +358,7 @@ def run(
             prompt=prompt_flags,
             device=device,
             json=json,
+            overwrite=overwrite,
         )
         return
 
@@ -479,6 +488,7 @@ def _track(
     prompt: dict,
     device: types.Device | None,
     json: bool,
+    overwrite: bool = False,
 ) -> None:
     # Frames in name order, numbers by value, so frame_2 comes before frame_10.
     # Only images, so a .DS_Store or a label file beside the frames is no frame.
@@ -502,6 +512,24 @@ def _track(
         raise click.UsageError(
             f"{video_dir} has frames of the same name, which -o would write to one file"
         )
+    outputs: list[pathlib.Path] = []
+    source_ids: set[tuple[int, int]] = set()
+    if output_dir is not None:
+        for path in paths:
+            stat = path.stat()
+            source_ids.add((stat.st_dev, stat.st_ino))
+        outputs = [pathlib.Path(output_dir) / f"{path.stem}.png" for path in paths]
+        for output in outputs:
+            try:
+                stat = output.stat()
+            except FileNotFoundError:
+                continue
+            if (stat.st_dev, stat.st_ino) in source_ids:
+                raise click.UsageError(f"{output} would overwrite an input frame")
+            if not overwrite:
+                raise click.UsageError(
+                    f"{output} already exists; use --overwrite to replace it"
+                )
     try:
         frames: list[np.ndarray] = [
             np.asarray(PIL.Image.open(path).convert("RGB")) for path in paths
@@ -534,12 +562,22 @@ def _track(
     if output_dir is None:
         return
     os.makedirs(output_dir, exist_ok=True)
-    for path, frame in zip(paths, response.frames):
+    for output, frame in zip(outputs, response.frames):
         visualization: np.ndarray = _visualize_objects(
             image=frames[frame.frame], annotations=frame.annotations
         )
-        with open(os.path.join(output_dir, f"{path.stem}.png"), "wb") as f:
-            f.write(_json.image_ndarray_to_png(ndarray=visualization))
+        png = _json.image_ndarray_to_png(ndarray=visualization)
+        try:
+            # An alias may have appeared during inference, so check the opened file.
+            with output.open("ab" if overwrite else "xb") as f:
+                stat = os.fstat(f.fileno())
+                if (stat.st_dev, stat.st_ino) in source_ids:
+                    raise click.UsageError(f"{output} would overwrite an input frame")
+                if overwrite:
+                    f.truncate(0)
+                f.write(png)
+        except OSError as e:
+            raise click.ClickException(f"can't write {output}: {e}") from e
 
 
 if __name__ == "__main__":

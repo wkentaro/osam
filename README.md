@@ -234,6 +234,9 @@ osam run sam3 --image examples/_images/dogs.jpg --prompt @prompt.json \
 <img src="assets/dogs_efficientsam.png" width="24%"> <img src="assets/dogs_sam2.png" width="24%"> <img src="assets/dogs_sam3.png" width="24%"> <img src="assets/dogs_sam3_box.png" width="24%">\
 <i>Output images: 'efficientsam_point.png', 'sam2_box.png', 'sam3_text.png', 'sam3_box.png'</i>
 
+Video output refuses to replace existing files unless `--overwrite` is given.
+Input frames are protected even with `--overwrite`.
+
 Each command starts a private server for its run, so every `osam run` loads
 the model again. To keep it loaded across commands, start `osam serve` and set
 `OSAM_HOST`, which `list`, `pull`, `rm` and `run` then use:
