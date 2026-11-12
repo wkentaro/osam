@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.10.3 - 2026-11-12
+
+### Fixed
+
+- SAM, SAM2, EfficientSAM and SAM3 read prompt points and boxes at the prompted pixel's center, where they sat up to half a resized pixel off. SAM3 text boxes end at the object's last pixel, where they reached one past it. ([#265](https://github.com/wkentaro/osam/pull/265))
+
 ## 0.10.2 - 2026-11-06
 
 ### Fixed
