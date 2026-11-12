@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 
 import osam
 from osam import _json
+from osam import _requests
 from osam import _runtime
 from osam import _server
 from osam import _types as types
@@ -428,6 +429,33 @@ def test_track_streams_frames_and_caches_action_prefixes(
     assert response.status_code == 409, response.text
     assert response.json()["code"] == "base_changed"
     assert response.json()["result"] == f"sha256:{1:064d}"
+
+
+def test_track_keeps_copies_of_its_inputs_and_results(
+    monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
+) -> None:
+    _patch_tracking(monkeypatch=monkeypatch, model_type=runtime.model_type(name="fake"))
+    request = _requests.TrackRequest.model_validate(
+        {
+            "model": "fake",
+            "frames": [np.zeros((1, 1, 3), np.uint8)],
+            "actions": [
+                {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+            ],
+        }
+    )
+    (annotation,) = runtime.track(request=request).frames[0].annotations
+    assert annotation.mask is not None
+    annotation.mask[:] = False
+    (annotation,) = runtime.track(request=request).frames[0].annotations
+    assert annotation.mask is not None and annotation.mask.all()
+
+    # And keeps a copy of a frame, which the caller may change.
+    frame = request.frames[0]
+    assert isinstance(frame, np.ndarray)
+    ref: str = _json.image_ref(image=frame)
+    frame[:] = 255
+    assert not runtime._frames[ref].any()
 
 
 def test_track_reports_errors(

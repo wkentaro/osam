@@ -293,8 +293,13 @@ class Runtime:
                 else:
                     missing.append(frame)
             else:
-                refs.append(_json.image_ref(image=frame))
-                images.append(frame)
+                ref: str = _json.image_ref(image=frame)
+                refs.append(ref)
+                # A copy, so that a caller in this process can't change the
+                # frame its reference names.
+                images.append(
+                    self._frames[ref] if ref in self._frames else frame.copy()
+                )
         if missing:
             raise _errors.UnknownImageError(refs=missing)
         for ref, image in zip(refs, images):
@@ -357,9 +362,15 @@ class Runtime:
             frames=[
                 TrackFrame(
                     frame=i,
-                    annotations=track.frames[i]
-                    if request.include_masks
-                    else [a.model_copy(update={"mask": None}) for a in track.frames[i]],
+                    # Copies, so that a caller in this process can't change
+                    # the cached results.
+                    annotations=[
+                        a.model_copy(
+                            update={} if request.include_masks else {"mask": None},
+                            deep=True,
+                        )
+                        for a in track.frames[i]
+                    ],
                 )
                 for i in range(request.first_frame, last_frame + 1)
             ],
