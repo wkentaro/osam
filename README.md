@@ -354,7 +354,8 @@ It takes `frames`, each an image file or a reference as in `/api/segment`, and
 
 It streams one line per frame, `{"frame": 0, "annotations": [...]}`, each
 annotation with its `object_id`, then
-`{"done": true, "objects": [...], "result": "sha256:...", "cache": "partial"}`.
+`{"done": true, "objects": [...], "result": "sha256:...", "cache": "partial"}`
+and `"images"`, a reference to each frame to send next.
 A `base` other than the server's result gets 409 with `"code": "base_changed"`
 and the new `result`. `/api/models` lists `"track"` in the `capabilities` of
 a model that tracks, SAM3.

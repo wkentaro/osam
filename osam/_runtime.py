@@ -378,6 +378,7 @@ class Runtime:
                 objects=sorted(objects.values(), key=lambda o: o.object_id),
                 result=track.result,
                 cache=cache,
+                images=refs,
             ),
         )
 

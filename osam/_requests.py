@@ -183,6 +183,10 @@ class TrackDone(pydantic.BaseModel):
         description="hit ran no model, partial applied only the new actions, "
         "and miss replayed every action"
     )
+    images: list[ImageRef] = pydantic.Field(
+        description="A reference to each of the request's frames, to send as "
+        "frames with further actions on them"
+    )
 
 
 class TrackResponse(pydantic.BaseModel):

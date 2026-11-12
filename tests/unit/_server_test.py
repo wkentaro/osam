@@ -386,11 +386,12 @@ def test_track_streams_frames_and_caches_action_prefixes(
         "objects": [{"object_id": 0, "first_frame": 0, "last_frame": 2}],
         "result": f"sha256:{1:064d}",
         "cache": "miss",
+        "images": [_json.image_ref(image=np.zeros((1, 1, 3), np.uint8))] * 3,
     }
     assert applied == ["prompt"]
 
-    # By reference, and the same actions: no model runs.
-    ref = _json.image_ref(image=np.zeros((1, 1, 3), np.uint8))
+    # By the references it returned, and the same actions: no model runs.
+    ref: str = done["images"][0]
     add = {"type": "add", "frame": 1, "box": [0, 0, 1, 1], "base": done["result"]}
     frames, done = _post_track(
         client=client,
