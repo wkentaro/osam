@@ -2,15 +2,20 @@ version = 1
 revision = 5
 requires-python = ">=3.10"
 resolution-markers = [
+    "python_full_version >= '3.13' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-cpu'",
+    "python_full_version == '3.12.*' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-cpu'",
+    "python_full_version == '3.11.*' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-cpu'",
+    "python_full_version < '3.11' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-cpu'",
     "python_full_version >= '3.13' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
-    "python_full_version >= '3.13' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
     "python_full_version == '3.12.*' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
-    "python_full_version == '3.12.*' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
-    "python_full_version >= '3.11' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-dev'",
     "python_full_version == '3.11.*' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
-    "python_full_version == '3.11.*' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
-    "python_full_version < '3.11' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-dev'",
     "python_full_version < '3.11' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version >= '3.13' and sys_platform == 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.12.*' and sys_platform == 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version >= '3.13' and sys_platform != 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.12.*' and sys_platform != 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.11.*' and sys_platform != 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
     "python_full_version < '3.11' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
 ]
 conflicts = [[
@@ -21,7 +26,7 @@ conflicts = [[
     { package = "osam", extra = "webgpu" },
 ], [
     { package = "osam", extra = "gpu" },
-    { package = "osam", group = "dev" },
+    { package = "osam", group = "cpu" },
 ]]
 
 [[package]]
@@ -539,17 +544,17 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "colorama", marker = "python_full_version < '3.11' and sys_platform == 'win32'" },
-    { name = "decorator", marker = "python_full_version < '3.11'" },
-    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
-    { name = "jedi", marker = "python_full_version < '3.11'" },
-    { name = "matplotlib-inline", marker = "python_full_version < '3.11'" },
-    { name = "pexpect", marker = "python_full_version < '3.11' and sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "prompt-toolkit", marker = "python_full_version < '3.11'" },
-    { name = "pygments", marker = "python_full_version < '3.11'" },
-    { name = "stack-data", marker = "python_full_version < '3.11'" },
-    { name = "traitlets", marker = "python_full_version < '3.11'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "decorator" },
+    { name = "exceptiongroup" },
+    { name = "jedi" },
+    { name = "matplotlib-inline" },
+    { name = "pexpect", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "prompt-toolkit" },
+    { name = "pygments" },
+    { name = "stack-data" },
+    { name = "traitlets" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e5/61/1810830e8b93c72dcd3c0f150c80a00c3deb229562d9423807ec92c3a539/ipython-8.38.0.tar.gz", hash = "sha256:9cfea8c903ce0867cc2f23199ed8545eb741f3a69420bfcf3743ad1cec856d39", size = 5513996, upload-time = "2026-01-05T10:59:06.901Z" }
 wheels = [
@@ -561,22 +566,31 @@ name = "ipython"
 version = "9.9.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.13'",
-    "python_full_version == '3.12.*'",
-    "python_full_version == '3.11.*'",
+    "python_full_version >= '3.13' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-cpu'",
+    "python_full_version == '3.12.*' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-cpu'",
+    "python_full_version == '3.11.*' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-cpu'",
+    "python_full_version >= '3.13' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.12.*' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.11.*' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version >= '3.13' and sys_platform == 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.12.*' and sys_platform == 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version >= '3.13' and sys_platform != 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.12.*' and sys_platform != 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.11.*' and sys_platform != 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
 ]
 dependencies = [
-    { name = "colorama", marker = "python_full_version >= '3.11' and sys_platform == 'win32'" },
-    { name = "decorator", marker = "python_full_version >= '3.11'" },
-    { name = "ipython-pygments-lexers", marker = "python_full_version >= '3.11'" },
-    { name = "jedi", marker = "python_full_version >= '3.11'" },
-    { name = "matplotlib-inline", marker = "python_full_version >= '3.11'" },
-    { name = "pexpect", marker = "python_full_version >= '3.11' and sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "prompt-toolkit", marker = "python_full_version >= '3.11'" },
-    { name = "pygments", marker = "python_full_version >= '3.11'" },
-    { name = "stack-data", marker = "python_full_version >= '3.11'" },
-    { name = "traitlets", marker = "python_full_version >= '3.11'" },
-    { name = "typing-extensions", marker = "python_full_version == '3.11.*'" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "decorator" },
+    { name = "ipython-pygments-lexers" },
+    { name = "jedi" },
+    { name = "matplotlib-inline" },
+    { name = "pexpect", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "prompt-toolkit" },
+    { name = "pygments" },
+    { name = "stack-data" },
+    { name = "traitlets" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/46/dd/fb08d22ec0c27e73c8bc8f71810709870d51cadaf27b7ddd3f011236c100/ipython-9.9.0.tar.gz", hash = "sha256:48fbed1b2de5e2c7177eefa144aba7fcb82dac514f09b57e2ac9da34ddb54220", size = 4425043, upload-time = "2026-01-05T12:36:46.233Z" }
 wheels = [
@@ -588,7 +602,7 @@ name = "ipython-pygments-lexers"
 version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pygments", marker = "python_full_version >= '3.11'" },
+    { name = "pygments" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ef/4c/5dd1d8af08107f88c7f741ead7a40854b8ac24ddf9ae850afbcf698aa552/ipython_pygments_lexers-1.1.1.tar.gz", hash = "sha256:09c0138009e56b6854f9535736f4171d855c8c08a563a0dcd8022f78355c7e81", size = 8393, upload-time = "2025-01-17T11:24:34.505Z" }
 wheels = [
@@ -784,8 +798,8 @@ name = "ml-dtypes"
 version = "0.5.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0e/4a/c27b42ed9b1c7d13d9ba8b6905dece787d6259152f2309338aed29b2447b/ml_dtypes-0.5.4.tar.gz", hash = "sha256:8ab06a50fb9bf9666dd0fe5dfb4676fa2b0ac0f31ecff72a6c3af8e22c063453", size = 692314, upload-time = "2025-11-17T22:32:31.031Z" }
 wheels = [
@@ -904,13 +918,18 @@ name = "numpy"
 version = "2.4.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
+    "python_full_version >= '3.13' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-cpu'",
+    "python_full_version == '3.12.*' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-cpu'",
+    "python_full_version == '3.11.*' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-cpu'",
     "python_full_version >= '3.13' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
-    "python_full_version >= '3.13' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
     "python_full_version == '3.12.*' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
-    "python_full_version == '3.12.*' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
-    "python_full_version >= '3.11' and extra != 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu' and extra != 'extra-4-osam-webgpu' and extra != 'group-4-osam-dev'",
     "python_full_version == '3.11.*' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
-    "python_full_version == '3.11.*' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version >= '3.13' and sys_platform == 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.12.*' and sys_platform == 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version >= '3.13' and sys_platform != 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.12.*' and sys_platform != 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.11.*' and sys_platform != 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/24/62/ae72ff66c0f1fd959925b4c11f8c2dea61f47f6acaea75a08512cdfe3fed/numpy-2.4.1.tar.gz", hash = "sha256:a1ceafc5042451a858231588a104093474c6a5c57dcc724841f5c888d237d690", size = 20721320, upload-time = "2026-01-10T06:44:59.619Z" }
 wheels = [
@@ -1155,8 +1174,8 @@ version = "1.20.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ml-dtypes" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "protobuf" },
     { name = "typing-extensions" },
 ]
@@ -1231,9 +1250,15 @@ name = "onnxruntime"
 version = "1.30.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.13'",
-    "python_full_version == '3.12.*'",
-    "python_full_version == '3.11.*'",
+    "python_full_version >= '3.13' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.12.*' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.11.*' and extra == 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version >= '3.13' and sys_platform == 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.12.*' and sys_platform == 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version >= '3.13' and sys_platform != 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.12.*' and sys_platform != 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
+    "python_full_version == '3.11.*' and sys_platform != 'darwin' and extra != 'extra-4-osam-cpu' and extra != 'extra-4-osam-gpu'",
 ]
 dependencies = [
     { name = "flatbuffers", marker = "python_full_version >= '3.11'" },
@@ -1323,7 +1348,9 @@ name = "onnxruntime-gpu"
 version = "1.31.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.11'",
+    "python_full_version >= '3.13'",
+    "python_full_version == '3.12.*'",
+    "python_full_version == '3.11.*'",
 ]
 dependencies = [
     { name = "flatbuffers", marker = "python_full_version >= '3.11'" },
@@ -1364,6 +1391,7 @@ cudnn = [
 [[package]]
 name = "osam"
 source = { editable = "." }
+default-groups = ["cpu", "dev"]
 dependencies = [
     { name = "click" },
     { name = "fastapi" },
@@ -1381,12 +1409,12 @@ dependencies = [
 [package.optional-dependencies]
 cpu = [
     { name = "onnx", marker = "sys_platform == 'darwin'" },
-    { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-cpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "onnxruntime", version = "1.30.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-cpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-cpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-cpu')" },
+    { name = "onnxruntime", version = "1.30.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-cpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-cpu')" },
 ]
 gpu = [
-    { name = "onnxruntime-gpu", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, extra = ["cuda", "cudnn"], marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "onnxruntime-gpu", version = "1.31.1", source = { registry = "https://pypi.org/simple" }, extra = ["cuda", "cudnn"], marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "onnxruntime-gpu", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, extra = ["cuda", "cudnn"], marker = "(python_full_version < '3.11' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-cpu')" },
+    { name = "onnxruntime-gpu", version = "1.31.1", source = { registry = "https://pypi.org/simple" }, extra = ["cuda", "cudnn"], marker = "(python_full_version >= '3.11' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-cpu')" },
 ]
 webgpu = [
     { name = "onnx", marker = "python_full_version >= '3.11' and sys_platform == 'darwin'" },
@@ -1395,15 +1423,17 @@ webgpu = [
 ]
 
 [package.dev-dependencies]
+cpu = [
+    { name = "osam", marker = "extra == 'extra-4-osam-cpu' or extra != 'extra-4-osam-gpu' or extra == 'extra-4-osam-webgpu' or extra == 'group-4-osam-cpu'" },
+    { name = "osam", extra = ["cpu"], marker = "extra == 'extra-4-osam-cpu' or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-cpu')" },
+]
 dev = [
     { name = "gruff" },
     { name = "httpx" },
-    { name = "ipython", version = "8.38.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
-    { name = "ipython", version = "9.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra != 'extra-4-osam-gpu') or (extra == 'extra-4-osam-cpu' and extra == 'extra-4-osam-gpu') or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
+    { name = "ipython", version = "8.38.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "ipython", version = "9.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "mdformat" },
     { name = "onnx" },
-    { name = "osam", marker = "extra == 'extra-4-osam-cpu' or extra != 'extra-4-osam-gpu' or extra == 'extra-4-osam-webgpu' or extra == 'group-4-osam-dev'" },
-    { name = "osam", extra = ["cpu"], marker = "extra == 'extra-4-osam-cpu' or (extra == 'extra-4-osam-gpu' and extra == 'extra-4-osam-webgpu') or (extra == 'extra-4-osam-gpu' and extra == 'group-4-osam-dev')" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
@@ -1439,13 +1469,13 @@ requires-dist = [
 provides-extras = ["cpu", "gpu", "webgpu"]
 
 [package.metadata.requires-dev]
+cpu = [{ name = "osam", extras = ["cpu"] }]
 dev = [
     { name = "gruff", specifier = "==0.2.5" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "ipython", specifier = ">=8.38.0" },
     { name = "mdformat", specifier = ">=1.0.0" },
     { name = "onnx", specifier = ">=1.17.0" },
-    { name = "osam", extras = ["cpu"] },
     { name = "pytest", specifier = ">=8.3.4" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-xdist", specifier = ">=3.6.1" },
@@ -1831,7 +1861,7 @@ name = "pytest-cov"
 version = "7.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "coverage", extra = ["toml"], marker = "extra == 'extra-4-osam-cpu' or extra != 'extra-4-osam-gpu' or extra == 'extra-4-osam-webgpu' or extra == 'group-4-osam-dev'" },
+    { name = "coverage", extra = ["toml"] },
     { name = "pluggy" },
     { name = "pytest" },
 ]

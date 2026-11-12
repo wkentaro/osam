@@ -69,6 +69,7 @@ webgpu = [
 ]
 
 [tool.uv]
+default-groups = ["cpu", "dev"]
 conflicts = [
   [
     { extra = "cpu" },
@@ -80,13 +81,14 @@ conflicts = [
   ],
   [
     { extra = "gpu" },
-    { group = "dev" },
+    { group = "cpu" },
   ],
 ]
 
 [dependency-groups]
+# A group of its own, so that `uv run --no-group cpu --extra gpu` keeps dev.
+cpu = ["osam[cpu]"]
 dev = [
-  "osam[cpu]",
   "httpx>=0.27",
   "pytest-xdist>=3.6.1",
   "pytest>=8.3.4",
