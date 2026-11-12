@@ -7,6 +7,7 @@ import numpy.typing as npt
 from osam import types
 from osam._models.sam import SamBase
 from osam._models.sam import get_input_size
+from osam.types._prompt import scale_points
 
 
 class Sam2(SamBase):
@@ -57,13 +58,12 @@ class Sam2(SamBase):
             encoder_session=self._inference_sessions["encoder"]
         )
 
-        input_point: npt.NDArray[np.float32] = np.array(prompt.points, dtype=np.float32)
-        input_point = input_point / np.array(
-            [
-                image_embedding.original_width / input_size,
-                image_embedding.original_height / input_size,
-            ],
-            dtype=np.float32,
+        input_point: npt.NDArray[np.float32] = scale_points(
+            points=np.asarray(prompt.points),
+            scale=(
+                input_size / image_embedding.original_width,
+                input_size / image_embedding.original_height,
+            ),
         )
         input_label: npt.NDArray[np.float32] = np.array(
             prompt.point_labels, dtype=np.float32

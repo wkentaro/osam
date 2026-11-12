@@ -5,6 +5,7 @@ import numpy.typing as npt
 
 from osam import types
 from osam._models.sam import SamBase
+from osam.types._prompt import scale_points
 
 
 class EfficientSam(SamBase):
@@ -38,7 +39,14 @@ class EfficientSam(SamBase):
         image_embedding: types.ImageEmbedding,
         prompt: types.Prompt,
     ) -> npt.NDArray[np.bool_]:
-        input_point: npt.NDArray[np.float32] = np.array(prompt.points, dtype=np.float32)
+        # The decoder scales the points by 1024 / size itself.
+        scale = 1024 / np.array(
+            [image_embedding.original_width, image_embedding.original_height],
+            dtype=np.float32,
+        )
+        input_point: npt.NDArray[np.float32] = (
+            scale_points(points=np.asarray(prompt.points), scale=scale) / scale
+        )
         input_label: npt.NDArray[np.float32] = np.array(
             prompt.point_labels, dtype=np.float32
         )

@@ -7,6 +7,7 @@ from loguru import logger
 from numpy.typing import NDArray
 
 from osam import types
+from osam.types._prompt import scale_points
 
 from ..yoloworld.clip import tokenize
 
@@ -310,7 +311,9 @@ class Sam3(types.Model):
             "image_embeddings": image_embedding.extra_features[3][None],
             "high_res_features1": image_embedding.extra_features[4][None],
             "high_res_features2": image_embedding.extra_features[5][None],
-            "point_coords": (points / [width, height] * 1008).astype(np.float32)[None],
+            "point_coords": scale_points(
+                points=points, scale=1008 / np.array([width, height])
+            )[None],
             "point_labels": point_labels.astype(np.float32)[None],
             "mask_input": np.zeros((1, 1, 288, 288), dtype=np.float32),
             "has_mask_input": np.array([0], dtype=np.float32),
