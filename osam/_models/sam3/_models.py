@@ -386,15 +386,19 @@ class Sam3(types.Model):
         masks_native: NDArray[np.float32] = np.concatenate([run[2] for run in runs])
         row_texts: list[str] = [text for text, run in zip(texts, runs) for _ in run[1]]
 
-        # Scale normalized boxes to inclusive pixel coordinates in the image
-        boxes = np.minimum(
+        # Scale normalized box edges to the first and last pixels they enclose.
+        boxes = np.clip(
             boxes_norm
             * np.array(
                 [original_width, original_height, original_width, original_height],
                 dtype=np.float32,
-            ),
+            )
+            - [0, 0, 1, 1],
+            0,
             [original_width - 1, original_height - 1] * 2,
         )
+        # A box narrower than a pixel still encloses the pixel at its start.
+        boxes[:, 2:] = np.maximum(boxes[:, 2:], boxes[:, :2])
 
         # Keep the highest-scoring annotations, in text then decoder order.
         keep = np.sort(np.argsort(-scores, kind="stable")[:max_annotations])
