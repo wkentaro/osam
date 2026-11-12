@@ -526,7 +526,13 @@ def test_track_sends_every_frame_when_the_server_loses_more(
     frames = [np.full((2, 2, 3), value, np.uint8) for value in range(3)]
     refs = [_http._json.image_ref(image=frame) for frame in frames]
     posted: list[list[bool]] = []
-    done = {"done": True, "objects": [], "result": "sha256:0", "cache": "miss"}
+    done = {
+        "done": True,
+        "objects": [],
+        "result": "sha256:0",
+        "cache": "miss",
+        "images": refs,
+    }
 
     def stream(*, path: str, body: dict[str, Any]):
         posted.append([f.startswith("sha256:") for f in body["frames"]])
