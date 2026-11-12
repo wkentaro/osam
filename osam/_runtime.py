@@ -229,10 +229,12 @@ class Runtime:
                 self._keep_alive(model_name=model_type.name, seconds=request.keep_alive)
 
     def close(self) -> None:
-        # Unloads every model and stops their timers, which hold this runtime.
+        # Unloads models, stops their timers, and releases cached video data.
         with self._lock:
             while self._loaded:
                 self._unload(model_name=next(iter(self._loaded)))
+            self._frames.clear()
+            self._tracks.clear()
 
     def model_type(self, *, name: str) -> type[types.Model]:
         # Raises UnknownModelError for a model it doesn't run.
