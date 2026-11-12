@@ -148,3 +148,25 @@ def test_dropping_the_predictor_frees_it_without_gc() -> None:
         assert ref() is None
     finally:
         gc.enable()
+
+
+def test_progress_cancels_inside_the_hotstart_buffer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    video = object.__new__(_video.VideoInference)
+    video.num_frames = 100
+    ran: list[int] = []
+
+    def infer(frame: int, reverse: bool) -> dict:
+        ran.append(frame)
+        return {"removed_obj_ids": set()}
+
+    def progress(frame: int) -> None:
+        if frame == 2:
+            raise RuntimeError("cancel")
+
+    monkeypatch.setattr(video, "_run_single_frame_inference", infer)
+    # No result has been yielded yet, but cancellation must already take effect.
+    with pytest.raises(RuntimeError, match="cancel"):
+        next(video._propagate_full(0, None, False, progress))
+    assert ran == [0, 1]

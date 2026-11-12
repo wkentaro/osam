@@ -3,6 +3,7 @@
 # so does Client(in_process=True).
 import builtins
 import collections
+import concurrent.futures
 import dataclasses
 import hashlib
 import threading
@@ -215,16 +216,31 @@ class Runtime:
             finally:
                 self._keep_alive(model_name=model_type.name, seconds=request.keep_alive)
 
-    def track(self, *, request: TrackRequest) -> types.TrackResponse:
+    def track(
+        self,
+        *,
+        request: TrackRequest,
+        progress: Callable[[types.TrackProgress], None] | None = None,
+        cancel: threading.Event | None = None,
+    ) -> types.TrackResponse:
         # Raises UnknownImageError for frame references it doesn't have,
         # _errors.BaseChangedError for an action on another result, and ValueError for
         # actions the model or the result doesn't take.
+        _check_cancel(cancel=cancel)
+        if progress is not None:
+            progress(types.TrackProgress(total_frames=len(request.frames)))
         model_type: type[types.Model] = self.model_type(name=request.model)
         if not model_type.tracks():
             raise ValueError(f"{model_type.name} doesn't track")
         with self._lock:
+            _check_cancel(cancel=cancel)
             try:
-                return self._track(request=request, model_type=model_type)
+                return self._track(
+                    request=request,
+                    model_type=model_type,
+                    progress=progress,
+                    cancel=cancel,
+                )
             finally:
                 self._keep_alive(model_name=model_type.name, seconds=request.keep_alive)
 
@@ -278,12 +294,18 @@ class Runtime:
         _evict(cache=self._embeddings, max_bytes=self._embedding_cache_bytes)
 
     def _track(
-        self, *, request: TrackRequest, model_type: type[types.Model]
+        self,
+        *,
+        request: TrackRequest,
+        model_type: type[types.Model],
+        progress: Callable[[types.TrackProgress], None] | None,
+        cancel: threading.Event | None,
     ) -> types.TrackResponse:
         refs: builtins.list[str] = []
         images: builtins.list[np.ndarray] = []
         missing: builtins.list[str] = []
         for frame in request.frames:
+            _check_cancel(cancel=cancel)
             if isinstance(frame, str):
                 refs.append(frame)
                 if frame in self._frames:
@@ -315,7 +337,8 @@ class Runtime:
                 f"first_frame and last_frame must be in order and under {num_frames}"
             )
 
-        model: types.Model = self._load(model_name=model_type.name)
+        model: types.Model = self._load(model_name=model_type.name, cancel=cancel)
+        _check_cancel(cancel=cancel)
         video: tuple[str, str, tuple[str, ...]] = (
             model_type.name,
             model.device,
@@ -341,6 +364,8 @@ class Runtime:
                     num_frames=num_frames,
                     height=images[0].shape[0],
                     width=images[0].shape[1],
+                    progress=progress,
+                    cancel=cancel,
                 )
             finally:
                 self._track_images = []
@@ -392,6 +417,8 @@ class Runtime:
         num_frames: int,
         height: int,
         width: int,
+        progress: Callable[[types.TrackProgress], None] | None,
+        cancel: threading.Event | None,
     ) -> tuple[_Track, typing.Literal["hit", "partial", "miss"]]:
         # Applies the actions the live timeline hasn't, or replays them all
         # on a new one, checking each action's base before applying it.
@@ -424,17 +451,29 @@ class Runtime:
         applied: int = len(live.actions)
         try:
             for i in range(applied, len(actions)):
+
+                def on_frame(frame: int, *, index: int = i) -> None:
+                    _check_cancel(cancel=cancel)
+                    if progress is not None:
+                        progress(
+                            types.TrackProgress(
+                                action=index, frame=frame, total_frames=num_frames
+                            )
+                        )
+
+                on_frame(getattr(request.actions[i], "frame", 0))
                 action: types.Action = request.actions[i]
                 if not isinstance(action, types.PromptAction) and (
                     action.base != live.results[i - 1]
                 ):
                     raise _errors.BaseChangedError(index=i, result=live.results[i - 1])
-                live.timeline.apply(action=action)
+                live.timeline.apply(action=action, on_frame=on_frame)
+                _check_cancel(cancel=cancel)
                 live.actions.append(actions[i])
                 live.results.append(live.timeline.result())
         except _errors.BaseChangedError:
             raise
-        except Exception:
+        except BaseException:
             # An action may have half applied.
             self._timeline = None
             raise
@@ -447,7 +486,9 @@ class Runtime:
         )
         return track, cache
 
-    def _load(self, *, model_name: str) -> types.Model:
+    def _load(
+        self, *, model_name: str, cancel: threading.Event | None = None
+    ) -> types.Model:
         # Under _lock. When full, the least recently used model unloads first;
         # one call runs at a time, so that model is idle.
         if model_name in self._loaded:
@@ -458,7 +499,8 @@ class Runtime:
         # Before unloading anything, so a failed download leaves the others
         # loaded. Files already on disk are verified once, when the model loads.
         if model_type.get_size(device=self._device) is None:
-            model_type.pull(device=self._device)
+            model_type.pull(device=self._device, cancel=cancel)
+        _check_cancel(cancel=cancel)
         while len(self._loaded) >= self._max_loaded_models:
             self._unload(model_name=next(iter(self._loaded)))
         model: types.Model | None = None
@@ -532,6 +574,11 @@ class Runtime:
             del self._embeddings[key]
         if self._timeline is not None and self._timeline.video[0] == model_name:
             self._timeline = None
+
+
+def _check_cancel(*, cancel: threading.Event | None) -> None:
+    if cancel is not None and cancel.is_set():
+        raise concurrent.futures.CancelledError("tracking cancelled")
 
 
 def _evict(*, cache: collections.OrderedDict, max_bytes: int) -> None:

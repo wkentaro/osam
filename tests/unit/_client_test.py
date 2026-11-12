@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import multiprocessing
 import pathlib
 import socket
@@ -269,11 +270,11 @@ def test_frozen_application_starts_through_multiprocessing(
 
 
 @contextlib.contextmanager
-def _serving() -> Iterator[str]:
+def _serving(*, runtime: _runtime.Runtime | None = None) -> Iterator[str]:
     # osam serve in this process, so a test can patch it.
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
-    runtime = _runtime.Runtime()
+    runtime = runtime or _runtime.Runtime()
     server = uvicorn.Server(
         uvicorn.Config(_server.create_app(runtime=runtime), log_level="warning")
     )
@@ -560,9 +561,292 @@ def test_track_sends_every_frame_when_the_server_loses_more(
         if len(posted) < 3:
             missing = refs[2:] if len(posted) == 1 else refs[:2]
             raise osam.ResponseError("", 412, "missing_images", images=missing)
-        return iter([done])
+        yield done
 
     monkeypatch.setattr(_backend(client), "_stream", stream)
     prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
     assert client.track("efficientsam:10m", frames, [prompt]).done.result == "sha256:0"
     assert posted == [[True, True, True], [True, True, False], [False, False, False]]
+
+
+@pytest.mark.parametrize("cancel_from_callback", [False, True])
+def test_disconnected_tracking_stops_before_the_clip_finishes(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    cancel_from_callback: bool,
+) -> None:
+    import http.client
+    import json
+
+    from . import _fakes
+    from ._server_test import _FakeTimeline
+    from ._server_test import _patch_tracking
+
+    model = _fakes.model_type(name="fake:latest")
+    runtime = _runtime.Runtime(model_types=[model])
+    _patch_tracking(monkeypatch=monkeypatch, model_type=model)
+    started, stopped = threading.Event(), threading.Event()
+    processed: list[int] = []
+
+    def slow(self, *, action, on_frame=None):
+        self._count += 1
+        started.set()
+        try:
+            for frame in range(self._num_frames):
+                if on_frame is not None:
+                    on_frame(frame)
+                processed.append(frame)
+                time.sleep(0.01)
+        finally:
+            stopped.set()
+
+    monkeypatch.setattr(_FakeTimeline, "apply", slow)
+    frames = [np.zeros((1, 1, 3), np.uint8)] * 200
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    with _serving(runtime=runtime) as host, osam.Client(host=host) as client:
+        logger = logging.getLogger("uvicorn.error")
+        monkeypatch.setattr(logger, "handlers", [*logger.handlers, caplog.handler])
+        if cancel_from_callback:
+
+            def progress(event: osam.types.TrackProgress) -> None:
+                if event.frame == 3:
+                    raise RuntimeError("cancel from UI")
+
+            with pytest.raises(RuntimeError, match="cancel from UI"):
+                client.track("fake", frames, [prompt], progress=progress)
+        else:
+            connection = http.client.HTTPConnection(host, timeout=5)
+            inline = _http._json.image_ndarray_to_b64data(ndarray=frames[0])
+            connection.request(
+                "POST",
+                "/api/track",
+                json.dumps(
+                    {"model": "fake", "frames": [inline] * 200, "actions": [prompt]}
+                ),
+                {"Content-Type": "application/json"},
+            )
+            assert started.wait(5)
+            connection.close()
+        assert stopped.wait(5)
+        assert len(processed) < len(frames)
+        # No stale partial timeline, and the worker is available again.
+        client.load("fake", keep_alive=-1)
+        assert runtime._timeline is None
+        assert "Video tracking failed" not in caplog.text
+        response = client.track(
+            "fake", frames[:1], [prompt], progress=lambda event: None
+        )
+        assert response.done.cache == "miss"
+        assert response.frames[0].frame == 0
+
+
+def test_cancelled_queued_tracking_does_not_run_inference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import http.client
+    import json
+
+    from . import _fakes
+    from ._server_test import _FakeTimeline
+    from ._server_test import _patch_tracking
+
+    model = _fakes.model_type(name="fake:latest")
+    runtime = _runtime.Runtime(model_types=[model])
+    _patch_tracking(monkeypatch=monkeypatch, model_type=model)
+    started, release = threading.Event(), threading.Event()
+    calls: list[int] = []
+
+    def slow(self, *, action, on_frame=None):
+        calls.append(action.frame)
+        self._count += 1
+        started.set()
+        assert release.wait(5)
+
+    monkeypatch.setattr(_FakeTimeline, "apply", slow)
+    errors: list[BaseException] = []
+    with _serving(runtime=runtime) as host, osam.Client(host=host) as client:
+
+        def first() -> None:
+            try:
+                client.track(
+                    "fake",
+                    [np.zeros((1, 1, 3), np.uint8)],
+                    [
+                        {
+                            "type": "prompt",
+                            "frame": 0,
+                            "points": [[0, 0]],
+                            "point_labels": [1],
+                        }
+                    ],
+                )
+            except BaseException as exc:
+                errors.append(exc)
+
+        thread = threading.Thread(target=first)
+        thread.start()
+        try:
+            assert started.wait(5)
+            connection = http.client.HTTPConnection(host, timeout=5)
+            inline = _http._json.image_ndarray_to_b64data(
+                ndarray=np.ones((1, 1, 3), np.uint8)
+            )
+            connection.request(
+                "POST",
+                "/api/track",
+                json.dumps(
+                    {
+                        "model": "fake",
+                        "frames": [inline],
+                        "actions": [
+                            {
+                                "type": "prompt",
+                                "frame": 0,
+                                "points": [[0, 0]],
+                                "point_labels": [1],
+                            }
+                        ],
+                    }
+                ),
+                {"Content-Type": "application/json"},
+            )
+            response = connection.getresponse()
+            assert json.loads(response.readline())["progress"] is True
+            response.close()
+            connection.close()
+            time.sleep(0.2)  # let the server receive the disconnect before unblocking
+        finally:
+            release.set()
+            thread.join(5)
+        assert not thread.is_alive()
+        assert not errors
+        # This queued load also proves the cancelled tracking worker has exited.
+        client.load("fake", keep_alive=-1)
+        assert calls == [0]
+
+
+def test_track_progress_errors_retry_frames_and_expose_conflicts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from . import _fakes
+    from ._server_test import _patch_tracking
+
+    model = _fakes.model_type(name="fake:latest")
+    runtime = _runtime.Runtime(model_types=[model])
+    _patch_tracking(monkeypatch=monkeypatch, model_type=model)
+    frames = [np.zeros((1, 1, 3), np.uint8)] * 3
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    events: list[osam.types.TrackProgress] = []
+    with _serving(runtime=runtime) as host, osam.Client(host=host) as client:
+        response = client.track("fake", frames, [prompt], progress=events.append)
+        assert response.done.cache == "miss"
+        assert events[0].frame is None
+        assert any(e.frame == 2 for e in events)
+        assert len(runtime._frames) == 1  # streamed 412 was retried inline
+        with pytest.raises(osam.ResponseError) as exc:
+            client.track(
+                "fake",
+                frames,
+                [prompt, {"type": "remove", "object_id": 0, "base": "wrong"}],
+                progress=events.append,
+            )
+        assert exc.value.status_code == 409
+        assert exc.value.code == "base_changed"
+        assert exc.value.result == response.done.result
+
+
+def test_track_stream_failure_closes_connection_before_private_restart(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = _backend(client)
+    closed: list[bool] = []
+    restarts: list[object] = []
+
+    def stream(**kwargs):
+        try:
+            yield {
+                "error": "model failed",
+                "code": "internal_error",
+                "status_code": 500,
+            }
+        finally:
+            closed.append(True)
+
+    def restart(*, process, error):
+        assert closed == [True]
+        restarts.append(process)
+
+    monkeypatch.setattr(backend, "_stream", stream)
+    monkeypatch.setattr(backend, "_restart", restart)
+    with pytest.raises(osam.ResponseError) as exc:
+        client.track(
+            "sam3",
+            [np.zeros((1, 1, 3), np.uint8)],
+            [{"type": "prompt", "frame": 0, "texts": ["person"]}],
+            progress=lambda event: None,
+        )
+    assert exc.value.status_code == 500
+    assert restarts == [backend._process]
+
+
+def test_track_never_retries_an_exception_from_the_progress_callback(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    closed: list[bool] = []
+
+    def stream(**kwargs):
+        try:
+            yield {"progress": True, "total_frames": 1}
+        finally:
+            closed.append(True)
+
+    error = osam.ResponseError("cancel", 412, "missing_images")
+
+    def progress(event: osam.types.TrackProgress) -> None:
+        raise error
+
+    monkeypatch.setattr(_backend(client), "_stream", stream)
+    with pytest.raises(osam.ResponseError) as exc:
+        client.track(
+            "sam3",
+            [np.zeros((1, 1, 3), np.uint8)],
+            [{"type": "prompt", "frame": 0, "texts": ["person"]}],
+            progress=progress,
+        )
+    assert exc.value is error
+    assert closed == [True]
+
+
+@pytest.mark.parametrize("done", [False, True])
+def test_track_requires_a_terminal_record_and_closes_at_done(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch, done: bool
+) -> None:
+    closed: list[bool] = []
+
+    def stream(**kwargs):
+        try:
+            yield {"frame": 0, "annotations": []}
+            if done:
+                yield {
+                    "done": True,
+                    "objects": [],
+                    "result": "sha256:0",
+                    "cache": "hit",
+                    "images": [],
+                }
+                raise AssertionError("read past the terminal record")
+        finally:
+            closed.append(True)
+
+    monkeypatch.setattr(_backend(client), "_stream", stream)
+    args = (
+        "sam3",
+        [np.zeros((1, 1, 3), np.uint8)],
+        [{"type": "prompt", "frame": 0, "texts": ["person"]}],
+    )
+    if done:
+        assert client.track(*args).done.result == "sha256:0"
+    else:
+        with pytest.raises(RuntimeError, match="without a done record"):
+            client.track(*args)
+    assert closed == [True]

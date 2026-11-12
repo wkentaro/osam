@@ -1,10 +1,19 @@
 # The errors osam reports to a caller, and how each one crosses HTTP: the
-# server answers with the status and code in REPORTED, and the client raises
+# server reports the status and code in REPORTED, and the client raises
 # the type in RESPONSE_ERRORS for that status, so a call raises the same
 # builtin on a server as in process. An error not listed here is a 500, the
 # one status after which the client restarts a private server.
 from typing import Final
 from typing import NamedTuple
+
+import pydantic
+
+
+class ErrorBody(pydantic.BaseModel):
+    error: str
+    code: str
+    images: list[str] | None = None
+    result: str | None = None
 
 
 class UnknownModelError(LookupError):
@@ -41,7 +50,7 @@ class DownloadError(RuntimeError):
 
 
 class ResponseError(Exception):
-    """An error the server returned, with its HTTP status code and its code,
+    """An error the server returned, with its status code and its code,
     such as "model_not_found", which stays the same across releases."""
 
     status_code: int
