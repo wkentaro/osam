@@ -77,6 +77,32 @@ def _error(
     )
 
 
+def _report(*, exc: Exception) -> dict[str, Any]:
+    # The fields of _error for exc. Two errors carry a field more: the images
+    # to send again, in place of their references, and the result to show
+    # before the edit is made again.
+    reported: _errors.Reported = next(
+        (
+            _errors.REPORTED[t]
+            for t in type(exc).__mro__
+            if issubclass(t, Exception) and t in _errors.REPORTED
+        ),
+        _errors.INTERNAL,
+    )
+    fields: dict[str, Any] = {
+        "message": str(exc),
+        "status_code": reported.status_code,
+        "code": reported.code,
+    }
+    if reported is _errors.INTERNAL:
+        fields["message"] = str(exc) or type(exc).__name__
+    if isinstance(exc, _errors.UnknownImageError):
+        fields["images"] = exc.refs
+    if isinstance(exc, _errors.BaseChangedError):
+        fields["result"] = exc.result
+    return fields
+
+
 def _describe_validation_errors(*, errors: Sequence[Any]) -> str:
     return "; ".join(
         f"{'.'.join(map(str, error['loc']))}: {error['msg']}" for error in errors
@@ -108,43 +134,10 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
         ),
     )
     # Anything else is a 500, still in that shape; uvicorn logs the traceback.
-    app.add_exception_handler(
-        Exception,
-        lambda request, exc: _error(
-            message=str(exc) or type(exc).__name__,
-            status_code=_errors.INTERNAL.status_code,
-            code=_errors.INTERNAL.code,
-        ),
-    )
-    for error_type, reported in _errors.REPORTED.items():
+    for error_type in [Exception, *_errors.REPORTED]:
         app.add_exception_handler(
-            error_type,
-            lambda request, exc, reported=reported: _error(
-                message=str(exc), status_code=reported.status_code, code=reported.code
-            ),
+            error_type, lambda request, exc: _error(**_report(exc=exc))
         )
-    # These two carry a field more: the images to send again, in place of
-    # their references, and the result to show before the edit is made again.
-    missing: _errors.Reported = _errors.REPORTED[_errors.UnknownImageError]
-    app.add_exception_handler(
-        _errors.UnknownImageError,
-        lambda request, exc: _error(
-            message=str(exc),
-            status_code=missing.status_code,
-            code=missing.code,
-            images=exc.refs,
-        ),
-    )
-    changed: _errors.Reported = _errors.REPORTED[_errors.BaseChangedError]
-    app.add_exception_handler(
-        _errors.BaseChangedError,
-        lambda request, exc: _error(
-            message=str(exc),
-            status_code=changed.status_code,
-            code=changed.code,
-            result=exc.result,
-        ),
-    )
     app.add_exception_handler(
         fastapi.exceptions.RequestValidationError,
         lambda request, exc: _error(
@@ -260,29 +253,12 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
                     exc, (concurrent.futures.CancelledError, types.PullCancelledError)
                 ):
                     return
-                reported = next(
-                    (
-                        _errors.REPORTED[t]
-                        for t in type(exc).__mro__
-                        if issubclass(t, Exception) and t in _errors.REPORTED
-                    ),
-                    _errors.INTERNAL,
-                )
-                if reported is _errors.INTERNAL:
+                fields = _report(exc=exc)
+                if fields["status_code"] == _errors.INTERNAL.status_code:
                     logging.getLogger("uvicorn.error").exception(
                         "Video tracking failed"
                     )
-                event = types.TrackError(
-                    error=str(exc) or type(exc).__name__,
-                    code=reported.code,
-                    status_code=reported.status_code,
-                    images=exc.refs
-                    if isinstance(exc, _errors.UnknownImageError)
-                    else None,
-                    result=exc.result
-                    if isinstance(exc, _errors.BaseChangedError)
-                    else None,
-                )
+                event = types.TrackError(error=fields.pop("message"), **fields)
             if not cancel.is_set():
                 loop.call_soon_threadsafe(events.put_nowait, event)
 

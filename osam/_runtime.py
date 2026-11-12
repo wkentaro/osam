@@ -226,7 +226,6 @@ class Runtime:
         # Raises UnknownImageError for frame references it doesn't have,
         # _errors.BaseChangedError for an action on another result, and ValueError for
         # actions the model or the result doesn't take.
-        _check_cancel(cancel=cancel)
         if progress is not None:
             progress(types.TrackProgress(total_frames=len(request.frames)))
         model_type: type[types.Model] = self.model_type(name=request.model)
