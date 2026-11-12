@@ -390,5 +390,6 @@ a model that tracks, SAM3.
 The server keeps the last video's tracking state in memory, so that the next
 edit applies without tracking from the start. It takes about 1.1 MB per object
 per frame at 1280x800 and 1.3 MB at 1080p: 3.8 GB for 3 objects over 1000
-frames at 1080p. A request for another video, or with actions that don't extend
-the last ones, replaces it, and unloading the model frees it.
+frames at 1080p. A request that tracks again, for another video or with actions
+that don't extend the last ones, replaces it; one answered from the server's
+cache of results leaves it. Unloading the model frees it.
