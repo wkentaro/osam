@@ -16,6 +16,7 @@ from osam._models.sam3._models import Sam3
         ([0.5, 0.5, 1.3, 1.3], (50, 50, 99, 99)),
         ([0.2, 0.3, 0.4, 0.5], (20, 30, 39, 49)),
         ([0.206, 0.306, 0.214, 0.314], (21, 31, 21, 31)),
+        ([0.375, 0.125, 0.625, 0.875], (37, 12, 62, 87)),
     ],
 )
 def test_decode_boxes_the_pixels_inside_the_predicted_edges(

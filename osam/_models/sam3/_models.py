@@ -386,14 +386,18 @@ class Sam3(types.Model):
         masks_native: NDArray[np.float32] = np.concatenate([run[2] for run in runs])
         row_texts: list[str] = [text for text, run in zip(texts, runs) for _ in run[1]]
 
-        # Scale normalized box edges to the first and last pixels they enclose.
-        boxes = np.clip(
+        # Scale normalized box edges to the first and last pixels whose
+        # centers they enclose, a center on an edge included.
+        edges = (
             boxes_norm
             * np.array(
                 [original_width, original_height, original_width, original_height],
                 dtype=np.float32,
             )
-            - [0, 0, 1, 1],
+            - 0.5
+        )
+        boxes = np.clip(
+            np.concatenate([np.ceil(edges[:, :2]), np.floor(edges[:, 2:])], axis=1),
             0,
             [original_width - 1, original_height - 1] * 2,
         )
