@@ -6,18 +6,17 @@ import numpy as np
 import PIL.Image
 
 
-def image_ndarray_to_png(*, ndarray: np.ndarray, compress_level: int = 6) -> bytes:
+def image_ndarray_to_png(*, ndarray: np.ndarray) -> bytes:
+    # Level 1, not PIL's default 6, for every caller waits on the encoder: it
+    # encodes a 2560x1600 image in 0.2 s, not 0.8 s, for 6% more bytes, and
+    # osam run --video writes 200 frames at 960x540 25 s sooner.
     with io.BytesIO() as f:
-        PIL.Image.fromarray(ndarray).save(
-            f, format="PNG", compress_level=compress_level
-        )
+        PIL.Image.fromarray(ndarray).save(f, format="PNG", compress_level=1)
         return f.getvalue()
 
 
 def image_ndarray_to_b64data(*, ndarray):
-    # Level 1 encodes a 2560x1600 image in 0.2 s, not 0.8 s, for 6% more bytes,
-    # which a local server reads faster than it would wait for the encoder.
-    png: bytes = image_ndarray_to_png(ndarray=ndarray, compress_level=1)
+    png: bytes = image_ndarray_to_png(ndarray=ndarray)
     return base64.b64encode(png).decode("utf-8")
 
 
