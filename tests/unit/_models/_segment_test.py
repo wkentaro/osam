@@ -1,4 +1,5 @@
 import pathlib
+from collections.abc import Iterator
 
 import imgviz
 import pytest
@@ -14,6 +15,14 @@ image_path = (
 # One model at a time, freed before the next loads, as several stay too large
 # for a test machine.
 _loaded: list[types.Model] = []
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _unload() -> Iterator[None]:
+    # And freed after this module too, as the same worker loads SAM3 again for
+    # the tracking tests.
+    yield
+    _loaded.clear()
 
 
 def _model(*, name: str) -> types.Model:
