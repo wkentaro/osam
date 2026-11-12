@@ -1,9 +1,11 @@
 import types as pytypes
 
 import numpy as np
+import PIL.Image
 import pytest
 
 from osam import _types as types
+from osam._models.sam3 import _models
 from osam._models.sam3._models import Sam3
 
 
@@ -217,3 +219,26 @@ def test_remove_deletes_the_files_an_upgrade_leaves(
         "sha256:c6b984d95ca7ca0564356253b92ee30287188cfffab5d4f87709b79d5d9aa6c8"
         in removed
     )
+
+
+def test_crop_mask_matches_the_mask_resized_to_the_image() -> None:
+    # As sam3-onnx resizes the whole mask, on boxes that end on odd native
+    # pixels and on the image's edges.
+    mask = np.random.default_rng(0).random((36, 36)).astype(np.float32)
+    height, width = 100, 160
+    full = (
+        np.asarray(
+            PIL.Image.fromarray(mask).resize(
+                (width, height), resample=PIL.Image.Resampling.BILINEAR
+            )
+        )
+        > 0.5
+    )
+    for xmin, ymin, xmax, ymax in [(7, 3, 61, 50), (0, 0, 159, 99), (150, 90, 159, 99)]:
+        bounding_box = types.BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
+        np.testing.assert_array_equal(
+            _models._crop_mask(
+                mask=mask, bounding_box=bounding_box, height=height, width=width
+            ),
+            full[ymin : ymax + 1, xmin : xmax + 1],
+        )
