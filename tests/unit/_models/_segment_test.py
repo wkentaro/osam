@@ -99,6 +99,20 @@ def test_segment_box_to_mask_sam2(model: str) -> None:
         assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
 
 
+@pytest.mark.extra
+def test_segment_box_to_mask_sam() -> None:
+    # The middle dog, which a box prompt missed when the decoder got
+    # has_mask_input=-1: a mask of about 1% of the box.
+    box = (768, 480, 1792, 1520)
+    (annotation,) = _segment(model="sam:100m", prompt=types.Prompt(box=box))
+
+    assert annotation.mask is not None
+    assert annotation.mask.sum() > 0.2 * (box[2] - box[0]) * (box[3] - box[1])
+    bb = annotation.bounding_box
+    assert bb is not None
+    assert box[0] <= bb.xmin and bb.xmax <= box[2]
+
+
 def test_segment_negative_box_rejected_by_sam2() -> None:
     with pytest.raises(ValueError, match="takes box, points, not example_boxes"):
         _segment(

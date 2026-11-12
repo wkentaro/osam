@@ -118,12 +118,13 @@ class Sam(SamBase):
             encoder_session=self._inference_sessions["encoder"]
         )
 
-        onnx_coord: npt.NDArray[np.float32] = np.concatenate(
-            [points, np.array([[0.0, 0.0]])], axis=0
-        )[None, :, :]
-        onnx_label: npt.NDArray[np.float32] = np.concatenate(
-            [point_labels, np.array([-1])], axis=0
-        )[None, :].astype(np.float32)
+        # A padding point, label -1, only without a box, as segment-anything
+        # pads in PromptEncoder._embed_points(pad=boxes is None).
+        if 2 not in point_labels:
+            points = np.concatenate([points, np.array([[0.0, 0.0]])], axis=0)
+            point_labels = np.concatenate([point_labels, np.array([-1])], axis=0)
+        onnx_coord: npt.NDArray[np.float32] = points[None, :, :]
+        onnx_label: npt.NDArray[np.float32] = point_labels[None, :].astype(np.float32)
 
         new_height, new_width = _compute_resized_hw(
             height=image_embedding.original_height,
@@ -145,7 +146,7 @@ class Sam(SamBase):
             "point_coords": onnx_coord,
             "point_labels": onnx_label,
             "mask_input": np.zeros((1, 1, 256, 256), dtype=np.float32),
-            "has_mask_input": np.array([-1], dtype=np.float32),
+            "has_mask_input": np.array([0], dtype=np.float32),  # no mask_input
             "orig_im_size": np.array(
                 (image_embedding.original_height, image_embedding.original_width),
                 dtype=np.float32,
