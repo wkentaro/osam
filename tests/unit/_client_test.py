@@ -230,6 +230,16 @@ def test_private_server_ignores_osam_serve_settings(
         assert client.version() == osam.__version__
 
 
+def test_private_server_settings_outrank_osam_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OSAM_HOST", "127.0.0.1:1")  # nothing listens there
+    with osam.Client(auto_pull=False) as client:
+        assert client.version() == osam.__version__
+    with pytest.raises(ConnectionError):
+        osam.Client()
+
+
 def test_private_server_keeps_max_loaded_models() -> None:
     with osam.Client(max_loaded_models=2) as client:
         for model in ["efficientsam:10m", "sam2:tiny"]:
