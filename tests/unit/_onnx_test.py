@@ -481,6 +481,9 @@ def test_sam3_picks_the_files_on_disk_when_coreml_files_are_missing(
     monkeypatch.setattr(Blob, "pull", lambda b, **kwargs: pulled.append(b))
     _models.Sam3.pull()
     assert pulled == list(coreml.values())
+    assert _models.Sam3.get_download_size() == sum(
+        blob.download_size or 0 for blob in coreml.values()
+    )
     on_disk.extend(coreml.values())
     assert _models.Sam3._blobs_of(device=None) == coreml
 

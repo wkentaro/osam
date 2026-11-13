@@ -165,10 +165,12 @@ class Sam100m(Sam):
         "encoder": types.Blob(
             url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_b_01ec64.quantized.encoder.onnx",
             hash="sha256:3346b9cc551c9902fbf3b203935e933592b22e042365f58321c17fc12641fd6a",
+            download_size=99_827_688,
         ),
         "decoder": types.Blob(
             url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_b_01ec64.quantized.decoder.onnx",
             hash="sha256:edbcf1a0afaa55621fb0abe6b3db1516818b609ea9368f309746a3afc68f7613",
+            download_size=8_743_656,
         ),
     }
 
@@ -180,10 +182,12 @@ class Sam300m(Sam):
         "encoder": types.Blob(
             url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_l_0b3195.quantized.encoder.onnx",
             hash="sha256:f7158a4a1fe7f670ef47ea2f7f852685425c1ed6caa40f5df86cbe2b0502034f",
+            download_size=322_569_107,
         ),
         "decoder": types.Blob(
             url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_l_0b3195.quantized.decoder.onnx",
             hash="sha256:552ebb23bf52c5e5b971ac710d1eb8dccfd88b36cc6aff881d1536d1662e6d7b",
+            download_size=8_743_680,
         ),
     }
 
@@ -195,9 +199,11 @@ class Sam600m(Sam):
         "encoder": types.Blob(
             url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_h_4b8939.quantized.encoder.onnx",
             hash="sha256:a5c745fd4279efc5e5436b412200e983dafc2249ce172af6cc0002a71bb5f485",
+            download_size=656_243_518,
         ),
         "decoder": types.Blob(
             url="https://github.com/wkentaro/labelme/releases/download/sam-20230416/sam_vit_h_4b8939.quantized.decoder.onnx",
             hash="sha256:020b385a45ffe51097e1acd10cd791075a86171153505f789a793bc382eef210",
+            download_size=8_743_672,
         ),
     }

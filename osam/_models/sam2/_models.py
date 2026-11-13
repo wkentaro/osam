@@ -108,10 +108,12 @@ class Sam2Tiny(Sam2):
         "encoder": types.Blob(
             url="https://github.com/wkentaro/osam/releases/download/sam2.1/sam2.1_tiny_preprocess.onnx",
             hash="sha256:5557482c56565f6a6c8206874b1a11c392cef8a1766477bf035b919092f2b619",
+            download_size=134_261_189,
         ),
         "decoder": types.Blob(
             url="https://github.com/wkentaro/osam/releases/download/sam2.1/sam2.1_tiny.onnx",
             hash="sha256:11a2c86fabbea9d0268213a9205c99a7f7e379caa0493bd13f5cca8ffaae6777",
+            download_size=20_642_497,
         ),
     }
 
@@ -123,10 +125,12 @@ class Sam2Small(Sam2):
         "encoder": types.Blob(
             url="https://github.com/wkentaro/osam/releases/download/sam2.1/sam2.1_small_preprocess.onnx",
             hash="sha256:06016c6dfb146ce10e4dadfdf49e88a05c8d1f97a6b7c57e150e60d2d46a72e7",
+            download_size=162_703_365,
         ),
         "decoder": types.Blob(
             url="https://github.com/wkentaro/osam/releases/download/sam2.1/sam2.1_small.onnx",
             hash="sha256:153aaef5047a3b95285d90cbb39dad6c7b5821bfd944dbf56483f3f735936941",
+            download_size=20_642_497,
         ),
     }
 
@@ -138,10 +142,12 @@ class Sam2BasePlus(Sam2):
         "encoder": types.Blob(
             url="https://github.com/wkentaro/osam/releases/download/sam2.1/sam2.1_base_plus_preprocess.onnx",
             hash="sha256:ce95c44082b4532c25ae01e11da3c9337dab7b04341455c09ae599dc9ae5c438",
+            download_size=306_084_742,
         ),
         "decoder": types.Blob(
             url="https://github.com/wkentaro/osam/releases/download/sam2.1/sam2.1_base_plus.onnx",
             hash="sha256:2ad091af889b20ad2035503b4355cd8924fcf0e29fa6536924c48dc220ecdc56",
+            download_size=20_642_497,
         ),
     }
 
@@ -153,9 +159,11 @@ class Sam2Large(Sam2):
         "encoder": types.Blob(
             url="https://github.com/wkentaro/osam/releases/download/sam2.1/sam2.1_large_preprocess.onnx",
             hash="sha256:ab676f957528918496990f242163fd6b41a7222ae255862e846d9ab35115c12e",
+            download_size=889_342_060,
         ),
         "decoder": types.Blob(
             url="https://github.com/wkentaro/osam/releases/download/sam2.1/sam2.1_large.onnx",
             hash="sha256:a3ebc6b8e254bd4ca1346901b9472bc2fae9e827cfd67d67e162d0ae2b1ec9a0",
+            download_size=20_642_521,
         ),
     }

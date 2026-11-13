@@ -41,6 +41,9 @@ class Blob:
     url: str
     hash: str
     attachments: list[Blob] = dataclasses.field(default_factory=list)
+    # Bytes of this file, not its attachments, before it is pulled; None if
+    # unknown.
+    download_size: int | None = None
 
     @property
     def filename(self) -> str:

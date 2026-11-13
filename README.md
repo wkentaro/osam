@@ -389,8 +389,9 @@ across releases, and `osam.ResponseError.code` holds it. Unknown request and
 prompt fields return 422 instead of being ignored. `/api/models`,
 `/api/pull` and `DELETE /api/models/{name}` match `osam list`, `osam pull` and
 `osam rm`; each model in `/api/models` also lists its `capabilities`, such as
-`"segment"`, and the `prompt_kinds` it takes, such as `"points"` and
-`"texts"`. `/api/pull` streams NDJSON lines such as
+`"segment"`, the `prompt_kinds` it takes, such as `"points"` and
+`"texts"`, and its `download_size` in bytes for the server's device, known
+before a pull. `/api/pull` streams NDJSON lines such as
 `{"status": "pulling encoder.onnx", "completed": 524288, "total": 24799761}` and
 ends with `{"status": "success"}` or `{"error": "...", "code": "pull_failed"}`. The full schema is at
 <http://127.0.0.1:11368/docs>.

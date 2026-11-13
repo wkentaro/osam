@@ -59,7 +59,8 @@ def any_client(request: pytest.FixtureRequest, client: osam.Client):
 def test_client_segments(any_client: osam.Client) -> None:
     client = any_client
     assert client.version() == osam.__version__
-    assert "efficientsam:10m" in {model.name for model in client.list()}
+    [info] = [model for model in client.list() if model.name == "efficientsam:10m"]
+    assert info.download_size == 41_365_489
 
     (annotation,) = client.segment(
         "efficientsam:10m", _IMAGE, points=np.array([[1280, 800]]), point_labels=[1]
