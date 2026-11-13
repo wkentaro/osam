@@ -165,14 +165,7 @@ class Runtime:
         # Most recently used first, as Ollama lists them.
         with self._loaded_lock:
             loaded: tuple[_Loaded, ...] = tuple(self._loaded.values())
-        return [
-            types.RunningModel(
-                name=entry.model.name,
-                device=entry.model.device,
-                expires_at=entry.expires_at,
-            )
-            for entry in reversed(loaded)
-        ]
+        return [_running(entry=entry) for entry in reversed(loaded)]
 
     def pull(
         self,
@@ -201,14 +194,17 @@ class Runtime:
         with self._lock:
             model_type.remove()
 
-    def load(self, *, request: LoadRequest) -> None:
+    def load(self, *, request: LoadRequest) -> types.RunningModel | None:
         # Loads the model, pulling it if needed, and keeps it loaded for
         # keep_alive seconds; negative keeps it loaded, 0 unloads it, as in Ollama.
+        # Returns where it runs, or None once unloaded.
         name: str = self.model_type(name=request.model).name
         with self._lock:
             if request.keep_alive != 0:
                 self._load(model_name=name)
             self._keep_alive(model_name=name, seconds=request.keep_alive)
+            entry: _Loaded | None = self._loaded.get(name)
+            return None if entry is None else _running(entry=entry)
 
     def segment(self, *, request: SegmentRequest) -> SegmentResponse:
         # Raises UnknownImageError for an image reference it has no embedding for,
@@ -590,3 +586,9 @@ def _evict(*, cache: collections.OrderedDict, max_bytes: int) -> None:
     # Least recently used first, keeping the newest even when it alone is larger.
     while len(cache) > 1 and sum(v.nbytes for v in cache.values()) > max_bytes:
         cache.popitem(last=False)
+
+
+def _running(*, entry: _Loaded) -> types.RunningModel:
+    return types.RunningModel(
+        name=entry.model.name, device=entry.model.device, expires_at=entry.expires_at
+    )

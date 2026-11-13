@@ -298,8 +298,9 @@ ymax, or finds every match of `texts`, `example_boxes`, or both, such as
 `client.segment("sam3", image, texts=["dog"])`. `example_box_labels` marks an
 example box 0 to exclude what it covers. Coordinates are in pixels. Each
 annotation's `mask` covers its `bounding_box`, and is `None` from YOLO-World.
-`client.load(model, keep_alive=-1)` loads a model ahead of time, and
-`keep_alive=0` unloads it.
+`client.load(model, keep_alive=-1)` loads a model ahead of time and returns it
+as `client.ps()` lists it, with the `device` it runs on, and `keep_alive=0`
+unloads it and returns `None`.
 
 `osam.non_maximum_suppression` keeps the best of
 overlapping boxes, given as (N, 4) boxes and (N, C) per-class scores, on CPU.
@@ -369,7 +370,8 @@ base64 < examples/_images/dogs.jpg \
 ```
 
 `/api/segment` takes the model, the image base64-encoded, and the keyword
-arguments of `client.segment`. `/api/load` takes `model` and `keep_alive`.
+arguments of `client.segment`. `/api/load` takes `model` and `keep_alive`, and returns the model as `/api/ps`
+lists it, or `null` once unloaded.
 `osam serve --device` picks the execution device for every
 request. The server keeps one model loaded. An application using two passes
 `--max-loaded-models 2`, or `osam.Client(max_loaded_models=2)` for its private

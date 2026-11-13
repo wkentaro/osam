@@ -38,7 +38,7 @@ class _Backend(Protocol):
 
     def remove(self, *, model: str) -> None: ...
 
-    def load(self, *, request: _requests.LoadRequest) -> None: ...
+    def load(self, *, request: _requests.LoadRequest) -> types.RunningModel | None: ...
 
     def segment(
         self, *, request: _requests.SegmentRequest
@@ -151,14 +151,17 @@ class Client:
     def remove(self, model: str) -> None:
         self._backend.remove(model=model)
 
-    def load(self, model: str, *, keep_alive: float | str | None = None) -> None:
+    def load(
+        self, model: str, *, keep_alive: float | str | None = None
+    ) -> types.RunningModel | None:
         """Load model, pulling it if needed with auto_pull, and keep it loaded
-        for keep_alive.
+        for keep_alive. Returns it as ps lists it, with the device it runs on,
+        or None once keep_alive 0 unloads it.
 
         keep_alive: in seconds or as "5m"; -1 keeps it loaded, 0 unloads it
         now. None leaves the server's default of five minutes.
         """
-        self._backend.load(
+        return self._backend.load(
             request=_requests.LoadRequest.model_validate(
                 _requests.to_json_fields(
                     fields={"model": model, "keep_alive": keep_alive}

@@ -158,8 +158,10 @@ class HttpBackend:
     def remove(self, *, model: str) -> None:
         self._request(method="DELETE", path=f"/api/models/{urllib.parse.quote(model)}")
 
-    def load(self, *, request: _requests.LoadRequest) -> None:
-        self._request(method="POST", path="/api/load", body=request.model_dump())
+    def load(self, *, request: _requests.LoadRequest) -> types.RunningModel | None:
+        body = self._request(method="POST", path="/api/load", body=request.model_dump())
+        # None once unloaded, or from an older server, which returns no body.
+        return None if body is None else types.RunningModel.model_validate(body)
 
     def segment(
         self, *, request: _requests.SegmentRequest

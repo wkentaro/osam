@@ -83,8 +83,9 @@ def test_client_segments(any_client: osam.Client) -> None:
     assert local.bounding_box == annotation.bounding_box
     assert local.mask is not None
     assert (local.mask == annotation.mask).all()
-    assert [model.name for model in client.ps()] == ["efficientsam:10m"]
-    client.load("efficientsam:10m", keep_alive=0)
+    assert client.load("efficientsam:10m", keep_alive=-1) == client.ps()[0]
+    assert client.ps()[0].name == "efficientsam:10m"
+    assert client.load("efficientsam:10m", keep_alive=0) is None
     assert client.ps() == []
 
     # Prompts the model doesn't take, as a local call would raise them.

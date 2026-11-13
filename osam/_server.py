@@ -286,8 +286,8 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
         return _TrackStream(stream(), cancel=cancel)
 
     @app.post("/api/load")
-    async def load(request: LoadRequest) -> None:
-        await run(call=functools.partial(runtime.load, request=request))
+    async def load(request: LoadRequest) -> types.RunningModel | None:
+        return await run(call=functools.partial(runtime.load, request=request))
 
     return app
 
