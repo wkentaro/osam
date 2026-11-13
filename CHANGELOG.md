@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.11.3 - 2026-11-13
+
+### Added
+
+- `Client(auto_pull=False)` makes `load` and the calls that load raise `NotPulledError` for missing or damaged model files, with the device whose files to pull, instead of downloading them, such as the CPU files after an automatic device falls back to the CPU. A server reports it as a 404 `model_not_pulled` with the device in the body. ([#288](https://github.com/wkentaro/osam/pull/288))
+
 ## 0.11.2 - 2026-11-13
 
 ### Changed
