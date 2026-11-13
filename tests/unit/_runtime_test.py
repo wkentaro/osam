@@ -12,6 +12,7 @@ import pytest
 from osam import _errors
 from osam import _requests
 from osam import _runtime
+from osam import types
 
 from . import _fakes
 
@@ -118,7 +119,7 @@ def test_two_models_stay_loaded(
         monkeypatch.setattr(
             runtime.model_type(name=name),
             "__init__",
-            lambda self, device=None: loaded.append(self.name),
+            lambda self, device=None, auto_pull=True: loaded.append(self.name),
         )
 
     _segment(runtime=runtime, model="a")
@@ -149,6 +150,21 @@ def test_load_does_not_pull_a_model_already_on_disk(
     monkeypatch.setattr(b, "pull", pulled)
     _segment(runtime=runtime, model="b:1")
     assert _running(runtime=runtime) == ["b:1"]
+
+
+def test_load_without_auto_pull_raises_before_pulling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    a = _fakes.model_type(name="a:latest")
+    missing = types.Blob(url="https://example.com/a.onnx", hash="sha256:" + "0" * 64)
+    monkeypatch.setattr(a, "_blobs", {"a": missing})
+    monkeypatch.setattr(a, "pull", lambda *args, **kwargs: pytest.fail("pulled"))
+    with contextlib.closing(
+        _runtime.Runtime(device="cpu", auto_pull=False, model_types=[a])
+    ) as runtime:
+        with pytest.raises(_errors.NotPulledError) as e:
+            _segment(runtime=runtime, model="a")
+    assert e.value.device == "cpu"
 
 
 def test_failed_load_unloads_the_others_and_retries(
@@ -199,7 +215,7 @@ def test_cpu_fallback_next_to_a_gpu_model_retries(
         monkeypatch.setattr(
             cpu,
             "__init__",
-            lambda self, device=None: running_at_each_load.append(
+            lambda self, device=None, auto_pull=True: running_at_each_load.append(
                 _running(runtime=runtime)
             ),
         )

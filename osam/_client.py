@@ -64,6 +64,11 @@ class Client:
 
     device, max_loaded_models: as in `osam serve --device` and
     `--max-loaded-models`, for the private server or this process.
+    auto_pull: False makes load, and calls that load, such as segment, raise
+    osam.types.NotPulledError for a model whose files aren't on disk, such as
+    the CPU's after an automatic device falls back to it, instead of pulling
+    them; a server reports it as a ResponseError with code
+    "model_not_pulled".
     timeout: seconds to wait for each response, such as 600, or None to wait
     forever. A request that times out raises TimeoutError, and a private
     server restarts, so a hung model stops.
@@ -81,6 +86,7 @@ class Client:
         max_loaded_models: int | None = None,
         timeout: float | None = None,
         in_process: bool = False,
+        auto_pull: bool = True,
     ):
         if not in_process:
             self._backend = _http.HttpBackend(
@@ -88,6 +94,7 @@ class Client:
                 device=device,
                 max_loaded_models=max_loaded_models,
                 timeout=timeout,
+                auto_pull=auto_pull,
             )
             return
         if (host, timeout) != (None, None):
@@ -97,6 +104,7 @@ class Client:
         self._backend = _runtime.Runtime(
             device=device,
             max_loaded_models=1 if max_loaded_models is None else max_loaded_models,
+            auto_pull=auto_pull,
         )
 
     def close(self) -> None:
@@ -143,7 +151,8 @@ class Client:
         self._backend.remove(model=model)
 
     def load(self, model: str, *, keep_alive: float | str | None = None) -> None:
-        """Load model, pulling it if needed, and keep it loaded for keep_alive.
+        """Load model, pulling it if needed with auto_pull, and keep it loaded
+        for keep_alive.
 
         keep_alive: in seconds or as "5m"; -1 keeps it loaded, 0 unloads it
         now. None leaves the server's default of five minutes.

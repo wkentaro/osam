@@ -12,6 +12,7 @@ import onnxruntime
 from loguru import logger
 
 from .. import _onnx
+from .._errors import NotPulledError
 from ..types import Annotation
 from ..types import Blob
 from ..types import BoundingBox
@@ -41,17 +42,19 @@ class Model(abc.ABC):
     _coreml_blobs: frozenset[str] | None = None
     _inference_sessions: dict[str, onnxruntime.InferenceSession]
 
-    def __init__(self, device: Device | None = None):
+    def __init__(self, device: Device | None = None, *, auto_pull: bool = True):
         """Load the model.
 
         device: "cpu", "cuda", "coreml", or "webgpu". None picks OSAM_ONNX_PROVIDERS,
         or the first available of CUDA and a hardware WebGPU adapter, falling
         back to CPU; CoreML before WebGPU for a model that runs faster there.
+        auto_pull: False raises osam.types.NotPulledError for files not on
+        disk, such as the CPU's after a fallback, instead of pulling them.
         """
         logger.debug("Initializing model {name}", name=self.name)
         if device is None and self._picks_coreml():
             try:
-                self.__init__(device="coreml")
+                self.__init__(device="coreml", auto_pull=auto_pull)
                 return
             except Exception as e:
                 logger.warning(
@@ -70,7 +73,7 @@ class Model(abc.ABC):
                 )
         # Without a device, past CoreML, the files of the one picked otherwise.
         files_device: str = device or _onnx.default_device()
-        self.pull(device=files_device)
+        self._pull(device=files_device, auto_pull=auto_pull, cancel=None)
         blobs: dict[str, Blob] = self._device_blobs(device=files_device)
         if device is None:
             self._inference_sessions = _onnx.load_inference_sessions(blobs=blobs)
@@ -80,7 +83,7 @@ class Model(abc.ABC):
             # float32 instead of a GPU's float16.
             del self._inference_sessions  # free them before loading the others
             device = "cpu"
-            self.pull(device=device)
+            self._pull(device=device, auto_pull=auto_pull, cancel=None)
             blobs = self._device_blobs(device=device)
         self._inference_sessions = {
             key: _onnx.create_device_session(
@@ -100,6 +103,21 @@ class Model(abc.ABC):
                 k: s.get_providers()[0] for k, s in self._inference_sessions.items()
             },
         )
+
+    @classmethod
+    def _pull(
+        cls,
+        *,
+        device: str | None,
+        auto_pull: bool,
+        cancel: threading.Event | None,
+    ) -> None:
+        # Pulls the files of device, or with auto_pull off, raises for missing or
+        # damaged ones instead of downloading them again.
+        if auto_pull:
+            cls.pull(device=device, cancel=cancel)
+        elif not all(blob.verified() for blob in cls._blobs_of(device=device).values()):
+            raise NotPulledError(model=cls.name, device=device)
 
     @property
     def device(self) -> str:

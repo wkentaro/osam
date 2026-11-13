@@ -62,12 +62,18 @@ class HttpBackend:
         device: types.Device | None = None,
         max_loaded_models: int | None = None,
         timeout: float | None = None,
+        auto_pull: bool = True,
     ):
         self._timeout = timeout
         host = host or os.environ.get("OSAM_HOST") or None
-        if host is not None and (device, max_loaded_models) != (None, None):
+        if host is not None and (device, max_loaded_models, auto_pull) != (
+            None,
+            None,
+            True,
+        ):
             raise ValueError(
-                "device and max_loaded_models set up a private server; host has its own"
+                "device, max_loaded_models and auto_pull set up a private server; "
+                "host has its own"
             )
         if max_loaded_models is not None and max_loaded_models < 1:
             raise ValueError(
@@ -76,6 +82,7 @@ class HttpBackend:
         self._server_settings = {
             "device": device,
             "max_loaded_models": max_loaded_models or 1,
+            "auto_pull": auto_pull,
         }
         self._lock = threading.Lock()
         self._endpoint = ("127.0.0.1", 0, None)
@@ -541,19 +548,26 @@ def _response_error(*, status_code: int, data: bytes) -> _errors.ResponseError:
     code: str | None = None
     images: list[str] | None = None
     result: str | None = None
+    device: str | None = None
     try:
         body: dict[str, Any] = json.loads(data)
         message: str = body["error"]
         code = body.get("code")
         images = body.get("images")
         result = body.get("result")
+        device = body.get("device")
     except (ValueError, KeyError, TypeError, AttributeError):
         message = data.decode(errors="replace")
     error_type: type[_errors.ResponseError] = _errors.RESPONSE_ERRORS.get(
         status_code, _errors.ResponseError
     )
     return error_type(
-        message, status_code=status_code, code=code, images=images, result=result
+        message,
+        status_code=status_code,
+        code=code,
+        images=images,
+        result=result,
+        device=device,
     )
 
 
