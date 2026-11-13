@@ -1,5 +1,6 @@
 import contextlib
 import http.client
+import http.server
 import json
 import logging
 import multiprocessing
@@ -333,6 +334,90 @@ def test_raising_from_progress_stops_the_pull(monkeypatch: pytest.MonkeyPatch) -
         with pytest.raises(Stop):
             osam.Client(host=host).pull("efficientsam:10m", progress=progress)
         assert cancelled.wait(timeout=5)
+
+
+def test_cancel_stops_a_stalled_pull(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A download that sends one chunk and then nothing, until it is cancelled.
+    stopped = threading.Event()
+
+    def pull(device, progress, cancel) -> None:
+        progress("encoder.onnx", 1, 1000)
+        assert cancel.wait(timeout=10)
+        stopped.set()
+        raise osam.types.PullCancelledError("cancelled")
+
+    model_type = _registry.get_model_type_by_name(name="efficientsam:10m")
+    monkeypatch.setattr(model_type, "pull", pull)
+
+    with _serving() as host, osam.Client(in_process=True) as in_process:
+        for client in [osam.Client(host=host), in_process]:
+            stopped.clear()
+            cancel = threading.Event()
+            started = time.monotonic()
+            with pytest.raises(osam.types.PullCancelledError):
+                client.pull(
+                    "efficientsam:10m",
+                    progress=lambda _: threading.Timer(0.2, cancel.set).start(),
+                    cancel=cancel,
+                )
+            assert time.monotonic() - started < 2
+            assert stopped.wait(timeout=5)
+
+
+@pytest.mark.parametrize(
+    "sent",
+    [
+        pytest.param((200, b'{"status": "pulling encoder.onnx"}\n'), id="after a line"),
+        pytest.param((200, b'{"status": "pull'), id="mid line"),
+        pytest.param((502, b'{"error": "fail'), id="mid an error"),
+        pytest.param(None, id="before the headers"),
+    ],
+)
+def test_cancel_stops_a_stalled_pull_on_a_closing_connection(
+    sent: tuple[int, bytes] | None,
+) -> None:
+    # A server, such as one behind a proxy, that answers "Connection: close",
+    # so http.client hands the socket to the response, and stalls after
+    # sending what it sent.
+    release = threading.Event()
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self._send(
+                status=200, body=json.dumps({"version": osam.__version__}).encode()
+            )
+
+        def do_POST(self) -> None:
+            self.rfile.read(int(self.headers["Content-Length"]))
+            if sent is not None:
+                self._send(status=sent[0], body=sent[1])
+            release.wait(timeout=10)
+
+        def _send(self, *, status: int, body: bytes) -> None:
+            self.send_response(status)
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+            self.wfile.flush()
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    with http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            client = osam.Client(host=f"127.0.0.1:{server.server_port}")
+            cancel = threading.Event()
+            threading.Timer(0.3, cancel.set).start()
+            started = time.monotonic()
+            with pytest.raises(osam.types.PullCancelledError):
+                client.pull("efficientsam:10m", cancel=cancel)
+            assert time.monotonic() - started < 2
+        finally:
+            release.set()
+            server.shutdown()
+            thread.join()
 
 
 def test_failed_pull_raises_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
