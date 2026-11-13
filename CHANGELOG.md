@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.11.5 - 2026-11-13
+
+### Fixed
+
+- A client given `device`, `max_loaded_models` or `auto_pull` starts its private server even with `OSAM_HOST` set, instead of raising `ValueError`. ([#292](https://github.com/wkentaro/osam/pull/292))
+
 ## 0.11.4 - 2026-11-13
 
 ### Fixed
