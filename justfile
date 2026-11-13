@@ -29,7 +29,7 @@ lint:
 
 # Run tests
 test *pytest_args="--numprocesses=auto":
-    uv run pytest -v --dist loadgroup tests/ "$@"
+    uv run pytest -v --durations=20 --dist loadgroup tests/ "$@"
 
 # Run tests with coverage
 coverage:
