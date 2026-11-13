@@ -43,7 +43,8 @@ onnxruntime-gpu 1.23, it runs on the CPU, and `device="cuda"` raises an error.
 For other GPUs (AMD, Intel, or NVIDIA without the CUDA libraries), install
 `osam[webgpu]`; osam then uses the GPU without `--device`. It runs on Vulkan,
 Direct3D 12 or Metal, and needs Python 3.11 or later. On Linux it also needs
-the system Vulkan loader (`libvulkan.so.1`).
+the system Vulkan loader (`libvulkan.so.1`). `osam[cpu]` includes it on Apple
+silicon with macOS 14 or later.
 
 ## Quickstart
 

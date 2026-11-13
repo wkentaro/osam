@@ -52,6 +52,12 @@ cpu = [
   "onnxruntime<1.24; python_version < '3.11'",
   # Rewrites SAM3's Gemm weights for CoreML.
   "onnx>=1.17.0; sys_platform == 'darwin'",
+  # SAM3 runs its image encoder on CoreML and the rest on WebGPU, 4 times as
+  # fast as the rest on CPU. The pins are those of webgpu below, whose
+  # onnxruntime ships only for Apple silicon on macOS 14 (Darwin 23) or later.
+  # Not "osam[webgpu]; <marker>", which the wheel flattens without the marker.
+  "onnxruntime>=1.27,<1.31; sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '23' and python_version >= '3.11'",
+  "onnxruntime-ep-webgpu>=0.5; sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '23' and python_version >= '3.11'",
 ]
 gpu = [
   # 1.23.2 runs SAM3 wrong on CUDA (#43), so SAM3 runs on CPU on Python 3.10.
