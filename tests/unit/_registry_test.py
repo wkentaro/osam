@@ -31,3 +31,11 @@ def test_yoloworld_metadata_points_to_artifact_provenance() -> None:
     assert license_revision == source_revision
     assert len(source_revision) == 40
     assert all(character in "0123456789abcdef" for character in source_revision)
+
+
+def test_registered_blobs_know_their_download_size() -> None:
+    for model_type in _registry.registered_model_types:
+        for blob in model_type._blobs.values():
+            assert blob.download_size, blob.url
+            # A pulled file is the size its definition says.
+            assert blob.size in (None, blob.download_size), blob.url

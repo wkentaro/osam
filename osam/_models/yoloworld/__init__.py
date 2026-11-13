@@ -105,10 +105,12 @@ class YoloWorldXL(_YoloWorld):
         "textual": types.Blob(
             url="https://clip-as-service.s3.us-east-2.amazonaws.com/models/onnx/ViT-B-32/textual.onnx",
             hash="sha256:55c85d8cbb096023781c1d13c557eb95d26034c111bd001b7360fdb7399eec68",
+            download_size=254_120_034,
         ),
         "yolo": types.Blob(
             url="https://github.com/wkentaro/yolo-world-onnx/releases/download/v0.1.0/yolo_world_v2_xl_vlpan_bn_2e-3_100e_4x8gpus_obj365v1_goldg_train_lvis_minival.onnx",
             hash="sha256:92660c6456766439a2670cf19a8a258ccd3588118622a15959f39e253731c05d",
+            download_size=418_730_806,
         ),
     }
 

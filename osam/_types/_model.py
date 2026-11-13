@@ -213,6 +213,16 @@ class Model(abc.ABC):
         return size
 
     @classmethod
+    def get_download_size(cls, *, device: str | None = None) -> int | None:
+        size = 0
+        for top in cls._blobs_of(device=device).values():
+            for blob, _ in top._files:  # with its attachments
+                if blob.download_size is None:
+                    return None
+                size += blob.download_size
+        return size
+
+    @classmethod
     def get_modified_at(cls, *, device: str | None = None) -> float | None:
         modified_at: float = 0
         for blob in cls._blobs_of(device=device).values():

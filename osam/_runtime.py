@@ -151,6 +151,7 @@ class Runtime:
                 name=model_type.name,
                 id=model_type.get_id(device=self._device),
                 size=model_type.get_size(device=self._device),
+                download_size=model_type.get_download_size(device=self._device),
                 modified_at=model_type.get_modified_at(device=self._device),
                 metadata=model_type.metadata,
                 capabilities=["segment", "track"]

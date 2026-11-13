@@ -11,6 +11,11 @@ class ModelInfo(pydantic.BaseModel):
     name: str
     id: str
     size: int | None = pydantic.Field(description="Bytes on disk; null if not pulled")
+    download_size: int | None = pydantic.Field(
+        default=None,
+        description="Bytes a pull downloads for the device, pulled or not; "
+        "null if unknown",
+    )
     modified_at: float | None = pydantic.Field(
         description="Unix time of the last download; null if not pulled"
     )
