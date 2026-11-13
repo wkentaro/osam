@@ -6,6 +6,7 @@ import multiprocessing
 import multiprocessing.connection
 import os
 import secrets
+import socket
 import subprocess
 import sys
 import threading
@@ -129,14 +130,22 @@ class HttpBackend:
         *,
         model: str,
         progress: Callable[[dict[str, Any]], None] | None = None,
+        cancel: threading.Event | None = None,
     ) -> None:
-        for line in self._stream(path="/api/pull", body={"model": model}):
+        for line in self._stream(
+            path="/api/pull", body={"model": model}, cancel=cancel
+        ):
             if "error" in line:
                 raise _errors.PullError(
                     line["error"], status_code=200, code=line.get("code")
                 )
             if progress is not None:
                 progress(line)
+            if line.get("status") == "success":
+                return
+        # A cancel ends the stream before its success line.
+        if cancel is not None and cancel.is_set():
+            raise types.PullCancelledError(f"Pull of {model!r} was cancelled")
 
     def remove(self, *, model: str) -> None:
         self._request(method="DELETE", path=f"/api/models/{urllib.parse.quote(model)}")
@@ -310,31 +319,73 @@ class HttpBackend:
         return json.loads(data) if data else None
 
     def _stream(
-        self, *, path: str, body: dict[str, Any]
+        self,
+        *,
+        path: str,
+        body: dict[str, Any],
+        cancel: threading.Event | None = None,
     ) -> Generator[dict[str, Any], None, None]:
         # Retries like _request only until the stream starts; a timeout after
-        # that restarts a private server and raises.
-        connection, response = self._restarting(
-            call=lambda: self._open_stream(path=path, body=body)
-        )
+        # that restarts a private server and raises. Setting cancel shuts the
+        # connection down, which ends a read waiting on the server, and the
+        # stream with it, whatever the read had got to.
+        done = threading.Event()
         try:
-            with self._restart_on_timeout():
-                for line in response:
-                    yield json.loads(line)
+            try:
+                connection, response = self._restarting(
+                    call=lambda: self._open_stream(
+                        path=path, body=body, cancel=cancel, done=done
+                    )
+                )
+            except _Cancelled:
+                return
+            try:
+                with self._restart_on_timeout():
+                    for line in response:
+                        yield json.loads(line)
+            # ValueError: a line the shutdown cut in half.
+            except (OSError, http.client.HTTPException, ValueError):
+                if cancel is None or not cancel.is_set():
+                    raise
+            finally:
+                # Closing it early tells the server to stop, as for an
+                # unfinished pull. The response holds the socket once the
+                # connection lets go of it, as for "Connection: close".
+                response.close()
+                connection.close()
         finally:
-            # Closing it early tells the server to stop, as for an unfinished pull.
-            connection.close()
+            done.set()
 
     def _open_stream(
-        self, *, path: str, body: dict[str, Any]
+        self,
+        *,
+        path: str,
+        body: dict[str, Any],
+        cancel: threading.Event | None = None,
+        done: threading.Event | None = None,
     ) -> tuple[http.client.HTTPConnection, http.client.HTTPResponse]:
+        # Raises _Cancelled when a cancel cuts the wait for the headers short.
         connection = self._connect(method="POST", path=path, body=body)
+        if cancel is not None:
+            assert done is not None
+            # Watches the socket before getresponse, which can wait on a
+            # stalled server, and which drops it from a connection that will
+            # close.
+            threading.Thread(
+                target=_shut_down_on_cancel,
+                kwargs={"sock": connection.sock, "cancel": cancel, "done": done},
+                daemon=True,
+            ).start()
         try:
             response = connection.getresponse()
             if response.status >= 400:
                 raise _response_error(status_code=response.status, data=response.read())
-        except BaseException:
+        except BaseException as e:
             connection.close()
+            # Not an OSError, so that _restarting doesn't restart the server.
+            # A cancel can also cut an error body short.
+            if cancel is not None and cancel.is_set() and isinstance(e, Exception):
+                raise _Cancelled from e
             raise
         return connection, response
 
@@ -445,6 +496,33 @@ def _start_frozen(
             ) from None
         raise
     return process, conn, port
+
+
+class _Cancelled(Exception):
+    # A stream that a cancel cut short before its headers arrived.
+    pass
+
+
+def _shut_down_on_cancel(
+    *,
+    sock: socket.socket,
+    cancel: threading.Event,
+    done: threading.Event,
+) -> None:
+    # ponytail: polls, as a thread can't wait for either of two events; a
+    # cancel lands within 0.1 s.
+    while not cancel.wait(timeout=0.1):
+        if done.is_set():
+            return
+    if done.is_set():
+        return
+    with contextlib.suppress(OSError):  # closed meanwhile
+        sock.shutdown(socket.SHUT_RDWR)
+    if sys.platform == "win32":
+        # Windows wakes a blocked recv only on closesocket, which close
+        # defers while the response's file holds the socket.
+        with contextlib.suppress(OSError, ValueError):
+            socket.socket(fileno=sock.detach()).close()
 
 
 def _wait(*, process: _Process, timeout: float | None) -> bool:

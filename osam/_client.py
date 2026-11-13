@@ -1,4 +1,5 @@
 import builtins
+import threading
 from collections.abc import Callable
 from collections.abc import Sequence
 from typing import Any
@@ -32,6 +33,7 @@ class _Backend(Protocol):
         *,
         model: str,
         progress: Callable[[dict[str, Any]], None] | None = None,
+        cancel: threading.Event | None = None,
     ) -> None: ...
 
     def remove(self, *, model: str) -> None: ...
@@ -123,15 +125,19 @@ class Client:
         model: str,
         *,
         progress: Callable[[dict[str, Any]], None] | None = None,
+        cancel: threading.Event | None = None,
     ) -> None:
         """Download a model, calling progress with each line the server sends.
 
         Lines look like {"status": "pulling encoder.onnx", "completed": 524288,
-        "total": 24799761}. An exception raised from progress, such as on a
-        cancel, stops the download on the server too.
+        "total": 24799761}. An exception raised from progress stops the
+        download on the server too.
+        Setting cancel, such as from another thread, stops the download even
+        while no data arrives, deletes its partial files, and raises
+        osam.types.PullCancelledError.
         A download that fails raises RuntimeError.
         """
-        self._backend.pull(model=model, progress=progress)
+        self._backend.pull(model=model, progress=progress, cancel=cancel)
 
     def remove(self, model: str) -> None:
         self._backend.remove(model=model)
