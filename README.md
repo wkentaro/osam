@@ -138,6 +138,18 @@ prompt.
 See [docs/benchmark.md](docs/benchmark.md) for SAM3 per prompt, load times
 and CPU/CoreML parity.
 
+#### Video tracking (ms per frame)
+
+| Model | CPU<br>i9-12900K | CUDA<br>RTX 3080 Ti | WebGPU<br>RTX 3080 Ti | CPU<br>Apple M5 | CoreML<br>Apple M5 | WebGPU<br>Apple M5 |
+| ---------------- | ---: | ---: | ---: | ---: | ---: | ---: |
+| SAM3 | 12267 | 266 | 890 | 12987 | 1775 | 3407 |
+
+Measured with osam 0.11.2 on the first 40 frames of SAM 2's `bedroom.mp4`
+(960x540), tracking the 2 people a text prompt of "person" finds, with
+onnxruntime 1.30.0 and onnxruntime-ep-webgpu 0.5.0 (onnxruntime-gpu 1.31.1 for
+CUDA). CoreML runs SAM3's image encoder and memory attention, and WebGPU the
+rest.
+
 ### Custom download endpoint
 
 Models are downloaded from their canonical URLs by default. To download from a
