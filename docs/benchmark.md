@@ -111,9 +111,10 @@ lowest single frame in parentheses:
 | osam, WebGPU, Apple M5 | 0.993 (0.81) | 0.996 (0.99) |
 | Meta's release, bfloat16, RTX 3080 Ti | 0.991 (0.82) | 0.993 (0.97) |
 
-The lowest frames are all 100 to 106, where one person jumps in front of the
-other and the hidden person's mask is small, so a few hundred pixels move its
-IoU. osam on CUDA stays at 1.00 there. Against Meta's release instead of the
+The frames at 0.81 to 0.83 on the M5 and in Meta's release all fall between
+100 and 106, where one person jumps in front of the other and the hidden
+person's mask is small, so a few hundred pixels move its IoU. osam on CUDA
+stays at 0.99 or above there. Against Meta's release instead of the
 reference, osam scores 0.991 and 0.993 on CUDA, 0.990 and 0.993 on CoreML, and
 0.988 and 0.991 on WebGPU.
 
