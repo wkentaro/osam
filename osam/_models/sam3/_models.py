@@ -112,6 +112,19 @@ _V0_6_0_FILES: Final[dict[str, types.Blob]] = {
     ),
 }
 
+# The fixed memory attention of 7 memories and 16 pointers, which osam 0.11.1
+# ran and an upgrade leaves on disk for remove to delete.
+_SMALL_FIXED_FILES: Final[dict[str, types.Blob]] = {
+    "a800a98/memory_attention_fixed": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_attention_fixed.onnx",
+        hash="sha256:5934b587489f52cce77fa445c48ebdf1c09ee79c57d5d7342e0a727f27323449",
+    ),
+    "a800a98/memory_attention_fixed_fp16": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_attention_fixed_fp16.onnx",
+        hash="sha256:80fe0ef83dd53d64b9918fa23c97ab0473502c0c9f2369ac81c4017220c92bc7",
+    ),
+}
+
 
 # SAM3InteractiveImagePredictor's max_hole_area, in low-res mask pixels.
 MAX_HOLE_AREA: Final = 256
@@ -177,7 +190,7 @@ class Sam3(types.Model):
 
     prompt_kinds = frozenset({"points", "box", "texts", "example_boxes"})
 
-    _blobs = {**_FILES, **_V0_6_0_FILES}
+    _blobs = {**_FILES, **_V0_6_0_FILES, **_SMALL_FIXED_FILES}
 
     # CoreML runs the image encoder 3 times as fast as WebGPU does. It takes
     # 11 s to compile the decoder for 140 ms less per run, and can't load the

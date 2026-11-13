@@ -64,6 +64,15 @@ def test_fixed_memory_attention_inputs_pad_and_mark_validity() -> None:
         _tracker.FIXED_NUM_MEMORIES - 2
     )
     assert inputs["obj_ptr_valid"].sum() == 1
+    # The most the tracker gives: 4 conditioning frames and 6 recent ones, and
+    # their pointers, which an older copy of 7 and 16 had no room for.
+    full = _tracker._pad_memory_attention_inputs(
+        memory=np.ones((10, 3), np.float32),
+        memory_tpos=np.arange(10, dtype=np.int64),
+        obj_ptrs=np.ones((19, 4), np.float32),
+        obj_ptr_tpos=np.zeros(19, np.float32),
+    )
+    assert full["memory_valid"].all() and full["obj_ptr_valid"].all()
 
 
 def test_component_areas_are_8_connected() -> None:
