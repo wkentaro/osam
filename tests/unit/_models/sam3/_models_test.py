@@ -223,6 +223,11 @@ def test_remove_deletes_the_files_an_upgrade_leaves(
         "sha256:c6b984d95ca7ca0564356253b92ee30287188cfffab5d4f87709b79d5d9aa6c8"
         in removed
     )
+    # The fixed memory attention of 7 memories, in float32 and float16.
+    assert {
+        "sha256:5934b587489f52cce77fa445c48ebdf1c09ee79c57d5d7342e0a727f27323449",
+        "sha256:80fe0ef83dd53d64b9918fa23c97ab0473502c0c9f2369ac81c4017220c92bc7",
+    } <= set(removed)
 
 
 def test_crop_mask_matches_the_mask_resized_to_the_image() -> None:

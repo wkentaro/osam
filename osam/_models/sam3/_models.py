@@ -75,12 +75,12 @@ _FILES: Final[dict[str, types.Blob]] = {
         hash="sha256:6dc7d2462eb856af15f4393dab9b66013aa26caf34b09ccd889a063377f2aa44",
     ),
     "memory_attention_fixed": types.Blob(
-        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_attention_fixed.onnx",
-        hash="sha256:5934b587489f52cce77fa445c48ebdf1c09ee79c57d5d7342e0a727f27323449",
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/4a4f8eebd08633b2921458695d6122502d274420/sam3_memory_attention_fixed.onnx",
+        hash="sha256:3bfb17fbc361cef1e2e56b75a9cf3df150f09d821e65fe27a583e77880365584",
     ),
     "memory_attention_fixed_fp16": types.Blob(
-        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_attention_fixed_fp16.onnx",
-        hash="sha256:80fe0ef83dd53d64b9918fa23c97ab0473502c0c9f2369ac81c4017220c92bc7",
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/4a4f8eebd08633b2921458695d6122502d274420/sam3_memory_attention_fixed_fp16.onnx",
+        hash="sha256:d8ec74eab6ff97964f440d2cd944290bc50c0f46ba4ecab2c96e363b39a8569e",
     ),
     "memory_encoder": types.Blob(
         url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_encoder.onnx",
@@ -109,6 +109,19 @@ _V0_6_0_FILES: Final[dict[str, types.Blob]] = {
     "v0.6.0/point_decoder": types.Blob(
         url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.6.0/resolve/40ffee63eb38bc3779318319bf81e9db06687d91/sam3_point_decoder.onnx",
         hash="sha256:410871f485362f7b6762e890a3a3ee1619cbc6ae07f7c0e7c88fd319c37a09bb",
+    ),
+}
+
+# The fixed memory attention of 7 memories and 16 pointers, which osam 0.11.1
+# ran and an upgrade leaves on disk for remove to delete.
+_SMALL_FIXED_FILES: Final[dict[str, types.Blob]] = {
+    "a800a98/memory_attention_fixed": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_attention_fixed.onnx",
+        hash="sha256:5934b587489f52cce77fa445c48ebdf1c09ee79c57d5d7342e0a727f27323449",
+    ),
+    "a800a98/memory_attention_fixed_fp16": types.Blob(
+        url="https://huggingface.co/wkentaro/sam3-onnx-models-v0.7.0/resolve/a800a982cf32ace0638ffa16b86c742ff152796b/sam3_memory_attention_fixed_fp16.onnx",
+        hash="sha256:80fe0ef83dd53d64b9918fa23c97ab0473502c0c9f2369ac81c4017220c92bc7",
     ),
 }
 
@@ -177,14 +190,14 @@ class Sam3(types.Model):
 
     prompt_kinds = frozenset({"points", "box", "texts", "example_boxes"})
 
-    _blobs = {**_FILES, **_V0_6_0_FILES}
+    _blobs = {**_FILES, **_V0_6_0_FILES, **_SMALL_FIXED_FILES}
 
     # CoreML runs the image encoder 3 times as fast as WebGPU does. It takes
     # 11 s to compile the decoder for 140 ms less per run, and can't load the
     # point decoder, whose point_coords dimension is unbounded.
     # The tracker runs memory_attention_fixed, a copy of memory_attention
-    # padded to a fixed shape, on CoreML in half the time WebGPU takes for the
-    # other, and the other when the memories outgrow it.
+    # padded to the most memories and pointers it gives, on CoreML in half the
+    # time WebGPU takes for the other.
     _coreml_blobs = frozenset({"image_encoder", "memory_attention_fixed"})
 
     @classmethod
