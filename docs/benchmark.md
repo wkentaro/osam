@@ -161,7 +161,10 @@ python iou.py osam.npz meta.npz
 import glob, statistics, sys, time
 import numpy as np, PIL.Image, osam
 
-frames = [np.asarray(PIL.Image.open(p).convert("RGB")) for p in sorted(glob.glob(sys.argv[1] + "/*.jpg"))]
+frames = [
+    np.asarray(PIL.Image.open(p).convert("RGB"))
+    for p in sorted(glob.glob(sys.argv[1] + "/*.jpg"))
+]
 actions = [{"type": "prompt", "frame": 0, "texts": ["person"]}]
 times = []
 for run in range(6):  # run 0 warms up
@@ -196,10 +199,16 @@ predictor = build_sam3_video_predictor(gpus_to_use=[0])
 times = []
 for run in range(6):  # run 0 warms up
     t = time.perf_counter()
-    session = predictor.handle_request(dict(type="start_session", resource_path=sys.argv[1]))["session_id"]
-    predictor.handle_request(dict(type="add_prompt", session_id=session, frame_index=0, text="person"))
+    session = predictor.handle_request(
+        dict(type="start_session", resource_path=sys.argv[1])
+    )["session_id"]
+    predictor.handle_request(
+        dict(type="add_prompt", session_id=session, frame_index=0, text="person")
+    )
     masks, n = {}, 0
-    for r in predictor.handle_stream_request(dict(type="propagate_in_video", session_id=session)):
+    for r in predictor.handle_stream_request(
+        dict(type="propagate_in_video", session_id=session)
+    ):
         n += 1
         for i, m in zip(r["outputs"]["out_obj_ids"], r["outputs"]["out_binary_masks"]):
             masks[f"{r['frame_index']}_{i}"] = np.asarray(m, bool)
@@ -222,9 +231,13 @@ assert set(a.files) == set(b.files), "different frames or objects"
 ious = {}
 for k in a.files:
     union = (a[k] | b[k]).sum()
-    ious.setdefault(k.split("_")[1], []).append((a[k] & b[k]).sum() / union if union else 1.0)
+    ious.setdefault(k.split("_")[1], []).append(
+        (a[k] & b[k]).sum() / union if union else 1.0
+    )
 for obj, v in sorted(ious.items()):
-    print(f"object {obj}: mean IoU {np.mean(v):.3f}, min {np.min(v):.3f}, {len(v)} frames")
+    print(
+        f"object {obj}: mean IoU {np.mean(v):.3f}, min {np.min(v):.3f}, {len(v)} frames"
+    )
 ```
 
 `size.py`, run with each environment's Python:
@@ -235,10 +248,16 @@ import os
 
 cuda = other = 0
 for dist in md.distributions():
-    size = sum(os.path.getsize(f.locate()) for f in dist.files or [] if os.path.isfile(f.locate()))
+    size = sum(
+        os.path.getsize(f.locate())
+        for f in dist.files or []
+        if os.path.isfile(f.locate())
+    )
     if dist.metadata["Name"].lower().startswith(("nvidia-", "cuda-")):
         cuda += size
     else:
         other += size
-print(f"{other / 1e9:.2f} GB + {cuda / 1e9:.2f} GB CUDA = {(other + cuda) / 1e9:.2f} GB")
+print(
+    f"{other / 1e9:.2f} GB + {cuda / 1e9:.2f} GB CUDA = {(other + cuda) / 1e9:.2f} GB"
+)
 ```
