@@ -469,6 +469,8 @@ def _start_subprocess(
         process.kill()
         process.stdin.close()
         raise
+    finally:
+        process.stdout.close()  # the child reports only how it started
     return process, process.stdin, port
 
 

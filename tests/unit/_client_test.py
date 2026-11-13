@@ -1,4 +1,5 @@
 import contextlib
+import gc
 import http.client
 import http.server
 import json
@@ -155,6 +156,14 @@ def test_in_process_close_unloads_its_models() -> None:
             ("efficientsam:10m", "cpu")
         ]
     assert client.ps() == []
+
+
+@pytest.mark.filterwarnings("error::ResourceWarning")
+@pytest.mark.filterwarnings("error::pytest.PytestUnraisableExceptionWarning")
+def test_private_server_close_leaves_no_pipe_open() -> None:
+    client = osam.Client()
+    client.close()
+    gc.collect()
 
 
 def test_private_server_needs_its_token(client: osam.Client) -> None:
