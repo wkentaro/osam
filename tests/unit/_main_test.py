@@ -341,3 +341,16 @@ def test_video_output_requires_explicit_overwrite(
         assert np.asarray(PIL.Image.open(target)).min() == 255
     assert calls == [True]
     assert source.read_bytes() == original
+
+
+def test_run_rejects_device_with_osam_host(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    monkeypatch.setenv("OSAM_HOST", "127.0.0.1:1")
+    image = tmp_path / "image.png"
+    PIL.Image.fromarray(np.zeros((4, 4, 3), np.uint8)).save(image)
+    result = CliRunner().invoke(
+        __main__.run, ["efficientsam:10m", "--image", str(image), "--device", "cpu"]
+    )
+    assert result.exit_code == 2  # noqa: PLR2004
+    assert "unset OSAM_HOST" in result.output

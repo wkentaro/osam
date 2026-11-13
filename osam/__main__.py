@@ -165,6 +165,10 @@ def serve(
 def _client(*, device: types.Device | None = None) -> Iterator[Client]:
     # OSAM_HOST points every command at a running `osam serve`. Expected
     # failures, such as an unknown model or an unreachable host, print one line.
+    if device is not None and os.environ.get("OSAM_HOST"):
+        # A library client with a device skips OSAM_HOST for a private server;
+        # here that would quietly bypass the server the user pointed at.
+        raise click.UsageError("--device sets up a private server; unset OSAM_HOST")
     try:
         with Client(device=device) as client:
             yield client

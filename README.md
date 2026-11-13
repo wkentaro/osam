@@ -309,7 +309,8 @@ when your program exits, so each program keeps its model and image embeddings
 loaded between calls. Further prompts on the same image skip the image encoder.
 A frozen application, such as a PyInstaller bundle, must call
 `multiprocessing.freeze_support()` first. `osam.Client(host="gpu-box:11368")`, or
-`OSAM_HOST`, uses a running `osam serve` instead; it checks that both run the
+`OSAM_HOST` for a client given no `device`, `max_loaded_models` or `auto_pull`,
+uses a running `osam serve` instead; it checks that both run the
 same minor version of osam. Errors from the server raise `osam.ResponseError`.
 `timeout=600` raises `TimeoutError` when a response takes longer, and restarts
 a private server, so a hung model stops.

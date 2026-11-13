@@ -58,8 +58,9 @@ class Client:
 
     With no host, it starts a private server for this process, which exits
     with it; a frozen application must call multiprocessing.freeze_support()
-    first. host, or OSAM_HOST when host is None, connects to a running
-    `osam serve` instead, such as "127.0.0.1:11368". in_process=True runs
+    first. host, or OSAM_HOST when host is None and no private-server
+    setting below is given, connects to a running `osam serve` instead,
+    such as "127.0.0.1:11368". in_process=True runs
     models in this process, with no server; it takes no host or timeout.
 
     device, max_loaded_models: as in `osam serve --device` and

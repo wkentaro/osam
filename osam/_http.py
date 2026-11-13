@@ -65,12 +65,13 @@ class HttpBackend:
         auto_pull: bool = True,
     ):
         self._timeout = timeout
-        host = host or os.environ.get("OSAM_HOST") or None
-        if host is not None and (device, max_loaded_models, auto_pull) != (
-            None,
-            None,
-            True,
-        ):
+        # Settings ask for a private server, so they outrank OSAM_HOST, which
+        # only picks the server for a caller that sets none.
+        private_settings = (device, max_loaded_models, auto_pull) != (None, None, True)
+        if not host and not private_settings:
+            host = os.environ.get("OSAM_HOST")
+        host = host or None
+        if host is not None and private_settings:
             raise ValueError(
                 "device, max_loaded_models and auto_pull set up a private server; "
                 "host has its own"
