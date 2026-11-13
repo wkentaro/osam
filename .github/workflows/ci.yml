@@ -66,19 +66,20 @@ jobs:
         include:
           - os: ubuntu-latest
             python-version: '3.10'
-            pytest-args: -n 2  # large models exceed runner memory with 3 workers
+            # large models exceed runner memory with 3 workers
+            pytest-args: -n 2 -m 'not model_conformance'
           - os: ubuntu-latest
             python-version: '3.14'
             # onnxruntime 1.24 or later, which Python 3.11+ installs
-            pytest-args: -n 2
+            pytest-args: -n 2 -m 'not model_conformance'
           - os: macos-latest
             python-version: '3.10'
-            pytest-args: -n 4 -m 'not extra'    # minimum version by 'not extra'
+            pytest-args: -n 4 -m 'not extra and not model_conformance'
           - os: windows-latest
             python-version: '3.10'
             # minimum version by 'not extra'
             # windows filesystem cannot handle parallel tests well
-            pytest-args: -n 0 -m 'not extra'
+            pytest-args: -n 0 -m 'not extra and not model_conformance'
     steps:
       - uses: actions/checkout@v7
       - uses: extractions/setup-just@4a174aa1487e2bcb3f86a8fe24a05361a4f4fff1
@@ -96,3 +97,26 @@ jobs:
             osam-models-${{ runner.os }}-
       - run: just setup
       - run: just test ${{ matrix.pytest-args }}
+  model-conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.14']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: extractions/setup-just@4a174aa1487e2bcb3f86a8fe24a05361a4f4fff1
+        with:
+          just-version: 1.58.0
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/osam/models/blobs
+          key: osam-models-${{ runner.os }}-${{ hashFiles('osam/_models/**') }}
+          restore-keys: |
+            osam-models-${{ runner.os }}-
+      - run: just setup
+      - run: just test -n 0 -m model_conformance -rP -o faulthandler_timeout=120
