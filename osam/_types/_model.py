@@ -182,11 +182,15 @@ class Model(abc.ABC):
         cancel: threading.Event | None = None,
         timeout: float | tuple[float, float] | None = 30,
     ) -> None:
+        for blob in cls._blobs_of(device=cls._pull_device(device=device)).values():
+            blob.pull(progress=progress, cancel=cancel, timeout=timeout)
+
+    @classmethod
+    def _pull_device(cls, *, device: str | None) -> str | None:
         # The files loading tries first, even with others on disk.
         if device is None and cls._picks_coreml():
-            device = "coreml"
-        for blob in cls._blobs_of(device=device).values():
-            blob.pull(progress=progress, cancel=cancel, timeout=timeout)
+            return "coreml"
+        return device
 
     @classmethod
     def remove(cls):
@@ -215,7 +219,8 @@ class Model(abc.ABC):
     @classmethod
     def get_download_size(cls, *, device: str | None = None) -> int | None:
         size = 0
-        for top in cls._blobs_of(device=device).values():
+        # What pull downloads, with or without the files on disk.
+        for top in cls._blobs_of(device=cls._pull_device(device=device)).values():
             for blob, _ in top._files:  # with its attachments
                 if blob.download_size is None:
                     return None
