@@ -78,9 +78,9 @@ def _error(
 
 
 def _report(*, exc: Exception) -> dict[str, Any]:
-    # The fields of _error for exc. Two errors carry a field more: the images
-    # to send again, in place of their references, and the result to show
-    # before the edit is made again.
+    # The fields of _error for exc. Three errors carry a field more: the images
+    # to send again, in place of their references, the result to show before
+    # the edit is made again, and the device whose files to pull.
     reported: _errors.Reported = next(
         (
             _errors.REPORTED[t]
@@ -100,6 +100,8 @@ def _report(*, exc: Exception) -> dict[str, Any]:
         fields["images"] = exc.refs
     if isinstance(exc, _errors.BaseChangedError):
         fields["result"] = exc.result
+    if isinstance(exc, _errors.NotPulledError):
+        fields["device"] = exc.device
     return fields
 
 

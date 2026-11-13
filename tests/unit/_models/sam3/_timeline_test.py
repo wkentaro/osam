@@ -149,7 +149,7 @@ def test_replay_gives_the_same_result() -> None:
         name = "sam3:latest"
         new_timeline = Sam3.new_timeline
 
-        def __init__(self, device=None):
+        def __init__(self, device=None, auto_pull=True):
             super().__init__(device=device)
             self._inference_sessions = sessions
 

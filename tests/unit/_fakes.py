@@ -13,7 +13,7 @@ class FakeModel(types.Model):
     # The device it lands on when Runtime picks one.
     device: str = "cpu"
 
-    def __init__(self, device: types.Device | None = None):
+    def __init__(self, device: types.Device | None = None, *, auto_pull: bool = True):
         if device is not None:
             self.device = device
 

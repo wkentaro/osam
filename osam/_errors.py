@@ -14,11 +14,25 @@ class ErrorBody(pydantic.BaseModel):
     code: str
     images: list[str] | None = None
     result: str | None = None
+    device: str | None = None
 
 
 class UnknownModelError(LookupError):
     # A model name osam doesn't know.
     pass
+
+
+class NotPulledError(LookupError):
+    """A model whose files for device aren't on disk, from a client that
+    doesn't pull them on load; pull them with that device, None for the one
+    osam picks."""
+
+    device: str | None
+
+    def __init__(self, *, model: str, device: str | None):
+        on: str = "" if device is None else f" for {device}"
+        super().__init__(f"{model} isn't pulled{on}; pull it first")
+        self.device = device
 
 
 class UnknownImageError(LookupError):
@@ -59,6 +73,9 @@ class ResponseError(Exception):
     images: list[str]
     # The current result of a "base_changed" conflict.
     result: str | None
+    # The device whose files a "model_not_pulled" error asks to pull, None for
+    # the one the server picks.
+    device: str | None
 
     def __init__(
         self,
@@ -67,12 +84,14 @@ class ResponseError(Exception):
         code: str | None = None,
         images: list[str] | None = None,
         result: str | None = None,
+        device: str | None = None,
     ):
         super().__init__(message)
         self.status_code = status_code
         self.code = code
         self.images = images or []
         self.result = result
+        self.device = device
 
 
 class InvalidRequestError(ResponseError, ValueError):
@@ -103,6 +122,7 @@ INTERNAL: Final = Reported(status_code=500, code="internal_error")
 # An error is reported as its own entry, or else its nearest base class's.
 REPORTED: Final[dict[type[Exception], Reported]] = {
     UnknownModelError: Reported(status_code=404, code="model_not_found"),
+    NotPulledError: Reported(status_code=404, code="model_not_pulled"),
     UnknownImageError: Reported(status_code=412, code="missing_images"),
     ValueError: Reported(status_code=400, code="invalid_request"),
     BaseChangedError: Reported(status_code=409, code="base_changed"),

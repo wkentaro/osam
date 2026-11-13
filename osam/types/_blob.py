@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import os
 import shutil
 import threading
@@ -94,6 +95,22 @@ class Blob:
     def modified_at(self) -> float | None:
         stats = self._stats()
         return None if stats is None else max(stat.st_mtime for stat in stats)
+
+    def verified(self) -> bool:
+        # Whether every file is on disk with its hash, as pull checks before
+        # downloading again.
+        for blob, path in self._files:
+            algorithm, digest = blob.hash.split(":")
+            hasher = hashlib.new(algorithm)
+            try:
+                with open(path, "rb") as f:
+                    while chunk := f.read(2**20):
+                        hasher.update(chunk)
+            except (FileNotFoundError, NotADirectoryError):
+                return False
+            if hasher.hexdigest() != digest:
+                return False
+        return True
 
     def pull(
         self,

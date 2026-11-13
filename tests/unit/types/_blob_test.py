@@ -1,3 +1,4 @@
+import hashlib
 import os
 import pathlib
 import threading
@@ -592,3 +593,20 @@ def test_size_is_none_when_the_file_disappears_after_the_check(
     blob = Blob(url="https://example.com/model.onnx", hash="sha256:abc")
     assert blob.size is None
     assert blob.modified_at is None
+
+
+def test_verified_rejects_a_damaged_file(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows
+    blob = Blob(
+        url="https://example.com/m.onnx",
+        hash="sha256:" + hashlib.sha256(b"weights").hexdigest(),
+    )
+    assert not blob.verified()
+    os.makedirs(os.path.dirname(blob.path))
+    pathlib.Path(blob.path).write_bytes(b"damaged")
+    assert not blob.verified()
+    pathlib.Path(blob.path).write_bytes(b"weights")
+    assert blob.verified()

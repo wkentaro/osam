@@ -111,6 +111,21 @@ def test_unknown_model_raises_lookup_error(any_client: osam.Client) -> None:
             assert (e.value.status_code, e.value.code) == (404, "model_not_found")
 
 
+def test_not_pulled_error_keeps_its_device_over_http() -> None:
+    response = _server._error(
+        **_server._report(exc=_errors.NotPulledError(model="m", device="cpu"))
+    )
+    error = _http._response_error(
+        status_code=response.status_code, data=bytes(response.body)
+    )
+    assert isinstance(error, LookupError)
+    assert (error.status_code, error.code, error.device) == (
+        404,
+        "model_not_pulled",
+        "cpu",
+    )
+
+
 def test_invalid_arguments_raise_before_a_request(
     client: osam.Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:

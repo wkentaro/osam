@@ -13,6 +13,7 @@ import pytest
 from onnx import helper
 from onnx import numpy_helper
 
+from osam import _errors
 from osam import _onnx
 from osam._onnx import resolve_providers
 from osam._types import _model
@@ -146,9 +147,7 @@ def fake_sessions(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
         "get_available_providers",
         lambda: ["CoreMLExecutionProvider", "CPUExecutionProvider"],
     )
-    monkeypatch.setattr(
-        _model.Model, "pull", classmethod(lambda cls, device=None: None)
-    )
+    monkeypatch.setattr(_model.Model, "pull", classmethod(lambda cls, **kwargs: None))
     return sessions
 
 
@@ -367,6 +366,28 @@ def test_model_device_reports_the_picked_device(
     cpu = [blob.path for blob in Sam3._device_blobs(device="cpu").values()]
     loaded = [path for path, p in fake_sessions if p != "fallback disabled"]
     assert loaded[-len(cpu) :] == cpu
+
+
+def test_cpu_fallback_without_auto_pull_raises_for_the_cpu_files(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_webgpu: list[Any],
+    fake_sessions: list[tuple[str, Any]],
+) -> None:
+    from osam._models.sam3._models import Sam3
+
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    monkeypatch.setattr(Sam3, "_runs_faster_on_coreml", classmethod(lambda cls: False))
+    fake_webgpu.append(_webgpu_adapter())
+    ort: Any = onnxruntime
+    monkeypatch.setattr(
+        ort.InferenceSession, "get_providers", lambda self: ["CPUExecutionProvider"]
+    )
+    # Only the WebGPU files are on disk.
+    cpu = {blob.path for blob in Sam3._device_blobs(device="cpu").values()}
+    monkeypatch.setattr(Blob, "verified", lambda self: self.path not in cpu)
+    with pytest.raises(_errors.NotPulledError) as e:
+        Sam3(auto_pull=False)
+    assert e.value.device == "cpu"
 
 
 def test_partial_fallback_moves_every_session_to_cpu(

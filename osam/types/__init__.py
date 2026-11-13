@@ -1,3 +1,4 @@
+from .._errors import NotPulledError
 from ._annotation import Annotation
 from ._blob import Blob
 from ._blob import PullCancelledError
@@ -16,6 +17,7 @@ from ._track import TrackResponse
 __all__ = [
     "Annotation",
     "Blob",
+    "NotPulledError",
     "PullCancelledError",
     "BoundingBox",
     "Device",

@@ -89,6 +89,8 @@ class Runtime:
 
     _device: Final[types.Device | None]
     _max_loaded_models: Final[int]
+    # Whether loading pulls missing files, or raises NotPulledError.
+    _auto_pull: Final[bool]
     _model_types: Final[Sequence[type[types.Model]]]
     _lock: threading.Lock
     # By model name, least recently used first. Written under _lock and
@@ -114,6 +116,7 @@ class Runtime:
         *,
         device: types.Device | None = None,
         max_loaded_models: int = 1,
+        auto_pull: bool = True,
         model_types: Sequence[type[types.Model]] = _registry.registered_model_types,
     ):
         if device not in (None, *typing.get_args(types.Device)):
@@ -128,6 +131,7 @@ class Runtime:
             )
         self._device = device
         self._max_loaded_models = max_loaded_models
+        self._auto_pull = auto_pull
         self._model_types = model_types
         self._lock = threading.Lock()
         self._loaded = collections.OrderedDict()
@@ -498,13 +502,15 @@ class Runtime:
         # Before unloading anything, so a failed download leaves the others
         # loaded. Files already on disk are verified once, when the model loads.
         if model_type.get_size(device=self._device) is None:
-            model_type.pull(device=self._device, cancel=cancel)
+            model_type._pull(
+                device=self._device, auto_pull=self._auto_pull, cancel=cancel
+            )
         _check_cancel(cancel=cancel)
         while len(self._loaded) >= self._max_loaded_models:
             self._unload(model_name=next(iter(self._loaded)))
         model: types.Model | None = None
         try:
-            model = model_type(device=self._device)
+            model = model_type(device=self._device, auto_pull=self._auto_pull)
         except Exception:
             if not self._loaded:
                 raise
@@ -529,7 +535,7 @@ class Runtime:
             # the failed load's sessions, and their memory, alive.
             while self._loaded:
                 self._unload(model_name=next(iter(self._loaded)))
-            model = model_type(device=self._device)
+            model = model_type(device=self._device, auto_pull=self._auto_pull)
         with self._loaded_lock:
             self._loaded[model_name] = _Loaded(model=model)
         return model
