@@ -60,7 +60,9 @@ def test_fixed_memory_attention_inputs_pad_and_mark_validity() -> None:
     )
     assert inputs["memory"].shape == (_tracker.FIXED_NUM_MEMORIES, 3)
     assert inputs["obj_ptrs"].shape == (_tracker.FIXED_NUM_OBJ_PTRS, 4)
-    assert inputs["memory_valid"].tolist() == [1, 1] + [0] * 5
+    assert inputs["memory_valid"].tolist() == [1, 1] + [0] * (
+        _tracker.FIXED_NUM_MEMORIES - 2
+    )
     assert inputs["obj_ptr_valid"].sum() == 1
 
 
