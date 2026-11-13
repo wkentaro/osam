@@ -88,21 +88,34 @@ people. Measured on 2026-11-13 with osam 0.11.2.
 
 | | osam | Meta |
 | --- | --- | --- |
-| Masks | IoU 0.99 to Meta's | Reference |
+| Masks, IoU to Meta's model in float32 | 0.999 on CUDA | 0.99, as released in bfloat16 |
 | Time per tracked frame, RTX 3080 Ti | 266 ms | 232 ms |
 | Runs on macOS | Yes, on CoreML or WebGPU | No |
 | Installed size | 2.6 GB | 7.3 GB |
 
 ### Masks
 
-Mean IoU of each person's mask to Meta's over the 200 frames, with the lowest
-single frame in parentheses:
+The reference is Meta's model run in float32. Meta's release runs it under
+bfloat16 autocast, and its ViT MLP casts to bfloat16 by hand
+([`addmm_act`](https://github.com/facebookresearch/sam3/blob/660a5e9e1b8b4c02c0ad97229b88a09a6e4ff5b7/sam3/perflib/fused.py)),
+so the release is itself an approximation of the model. `track_meta.py float32` turns both off and keeps the memories Meta stores in bfloat16 by
+design, which osam stores the same way.
 
-| Device | Person 0 | Person 1 |
+Mean IoU of each person's mask to the reference over the 200 frames, with the
+lowest single frame in parentheses:
+
+| | Person 0 | Person 1 |
 | --- | --- | --- |
-| CUDA, RTX 3080 Ti | 0.991 (0.82) | 0.993 (0.97) |
-| CoreML, Apple M5 | 0.990 (0.81) | 0.993 (0.97) |
-| WebGPU, Apple M5 | 0.988 (0.80) | 0.991 (0.97) |
+| osam, CUDA, RTX 3080 Ti | 0.999 (0.97) | 0.999 (0.99) |
+| osam, CoreML, Apple M5 | 0.993 (0.83) | 0.998 (0.99) |
+| osam, WebGPU, Apple M5 | 0.993 (0.81) | 0.996 (0.99) |
+| Meta's release, bfloat16, RTX 3080 Ti | 0.991 (0.82) | 0.993 (0.97) |
+
+The lowest frames are all 100 to 106, where one person jumps in front of the
+other and the hidden person's mask is small, so a few hundred pixels move its
+IoU. osam on CUDA stays at 1.00 there. Against Meta's release instead of the
+reference, osam scores 0.991 and 0.993 on CUDA, 0.990 and 0.993 on CoreML, and
+0.988 and 0.991 on WebGPU.
 
 ### Time per tracked frame
 
@@ -151,7 +164,8 @@ python track_meta.py frames40 meta40.npz
 
 python track_osam.py frames cuda osam.npz
 python track_meta.py frames meta.npz
-python iou.py osam.npz meta.npz
+python track_meta.py frames meta32.npz float32
+python iou.py osam.npz meta32.npz
 ```
 
 `track_osam.py`:
@@ -190,11 +204,43 @@ np.savez_compressed(sys.argv[3], **masks)
 `track_meta.py`:
 
 ```python
-# python track_meta.py FRAMES_DIR OUT.npz
-import statistics, sys, time
+# python track_meta.py FRAMES_DIR OUT.npz [float32]
+import contextlib, statistics, sys, time
 import numpy as np, torch
+
+float32 = sys.argv[3:] == ["float32"]
+if float32:
+    # Turn off bfloat16 autocast before sam3 applies it at import.
+    class NoAutocast(contextlib.ContextDecorator):
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    torch.autocast = NoAutocast
+
+    # Run each layer in float32 on the tensors Meta stores in bfloat16.
+    def float32_input(forward):
+        return lambda self, x, *args, **kwargs: forward(
+            self, x.float(), *args, **kwargs
+        )
+
+    for layer in (torch.nn.Linear, torch.nn.Conv2d, torch.nn.ConvTranspose2d):
+        layer.forward = float32_input(layer.forward)
+    import sam3.model.vitdet
+
+    # Replace the ViT MLP that casts to bfloat16 by hand.
+    sam3.model.vitdet.addmm_act = lambda act, linear, x: act()(linear(x))
+
 from sam3.model_builder import build_sam3_video_predictor
 
+if float32:
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
 predictor = build_sam3_video_predictor(gpus_to_use=[0])
 times = []
 for run in range(6):  # run 0 warms up
