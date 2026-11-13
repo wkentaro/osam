@@ -599,6 +599,7 @@ def test_verified_rejects_a_damaged_file(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows
     blob = Blob(
         url="https://example.com/m.onnx",
         hash="sha256:" + hashlib.sha256(b"weights").hexdigest(),
