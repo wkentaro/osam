@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.11.6 - 2026-11-13
+
+### Added
+
+- `Client.list()` and `/api/models` report each model's `download_size`: the bytes a pull downloads for the device, known before the model is pulled. ([#294](https://github.com/wkentaro/osam/pull/294))
+- `Client.load()` and `/api/load` return the loaded model as `ps()` lists it, with the device it runs on, or `None` once `keep_alive=0` unloads it. ([#295](https://github.com/wkentaro/osam/pull/295))
+
 ## 0.11.5 - 2026-11-13
 
 ### Fixed
