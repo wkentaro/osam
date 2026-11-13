@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.11.2 - 2026-11-13
+
+### Changed
+
+- SAM3 tracking on CoreML keeps memory attention on CoreML for every frame, instead of falling back to WebGPU after the first few. ([#285](https://github.com/wkentaro/osam/pull/285))
+- `osam[cpu]` installs the WebGPU plugin on Apple silicon with macOS 14 or later and Python 3.11 or later, so SAM3 tracks a frame on an M5 in 1.8 s instead of 7.4 s. ([#286](https://github.com/wkentaro/osam/pull/286))
+
 ## 0.11.1 - 2026-11-13
 
 ### Added
