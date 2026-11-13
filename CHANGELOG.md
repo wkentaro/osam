@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.11.1 - 2026-11-13
+
+### Added
+
+- `Client.pull(cancel=event)` stops a download once the event is set, even while no data arrives, deletes its partial files, and raises `PullCancelledError`, both in process and through a server. ([#284](https://github.com/wkentaro/osam/pull/284))
+
 ## 0.11.0 - 2026-11-13
 
 ### Added
