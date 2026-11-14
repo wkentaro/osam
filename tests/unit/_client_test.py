@@ -168,6 +168,14 @@ def test_private_server_close_leaves_no_pipe_open() -> None:
     gc.collect()
 
 
+def test_private_server_exits_without_a_resource_warning(
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("PYTHONWARNINGS", "always::ResourceWarning")
+    osam.Client().close()  # waits for the server to exit
+    assert "ResourceWarning" not in capfd.readouterr().err
+
+
 def test_private_server_needs_its_token(client: osam.Client) -> None:
     connection = _http.http.client.HTTPConnection(*_backend(client)._endpoint[:2])
     connection.request("GET", "/api/version")

@@ -7,7 +7,6 @@ import os
 import secrets
 import socket
 import threading
-import time
 from collections.abc import Callable
 from collections.abc import Sequence
 from typing import Any
@@ -335,16 +334,11 @@ def run_private(
     server = uvicorn_server(app=app, log_level="warning")
 
     def exit_with_parent() -> None:
-        # Shutting down waits for requests in flight, which no one is left to
-        # read, so a stuck inference must not keep the process and its GPU
-        # memory alive.
-        GRACE_SECONDS: Final = 5
-
+        # At once: no one is left to read a request in flight, and downloads
+        # move into place only once complete, so nothing is worth waiting for.
         wait_for_parent()
-        server.should_exit = True
-        time.sleep(GRACE_SECONDS)
         os._exit(0)
 
-    threading.Thread(target=exit_with_parent, daemon=True).start()
     report_port(sock.getsockname()[1])
+    threading.Thread(target=exit_with_parent, daemon=True).start()
     server.run(sockets=[sock])
