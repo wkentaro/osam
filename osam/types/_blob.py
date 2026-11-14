@@ -17,8 +17,10 @@ from .. import _errors
 
 _BLOB_ENDPOINT_ENV: Final = "OSAM_BLOB_ENDPOINT"
 _DIRECT: Final = "direct"
-# The cancels of pulls in progress, one entry per pull.
+# The cancels of pulls in progress, one entry per pull, and whether
+# cancel_downloads has run, which cancels later pulls as they start.
 _downloads: list[threading.Event] = []
+_cancelling: threading.Event = threading.Event()
 
 
 def _resolve_endpoints() -> list[str]:
@@ -39,8 +41,9 @@ class PullCancelledError(RuntimeError):
 
 
 def cancel_downloads(*, timeout: float) -> None:
-    # Cancels every pull and waits, up to timeout, for each to delete its
-    # partial file.
+    # Cancels every pull, now and later, and waits, up to timeout, for each to
+    # delete its partial file.
+    _cancelling.set()
     for cancel in list(_downloads):
         cancel.set()
     deadline: float = time.monotonic() + timeout
@@ -234,6 +237,8 @@ class Blob:
         if cancel is None:
             cancel = threading.Event()  # so cancel_downloads can stop it
         _downloads.append(cancel)
+        if _cancelling.is_set():  # checked after registering, so none slips by
+            cancel.set()
         try:
             for blob, path in self._files:
                 _download(blob=blob, path=path)
