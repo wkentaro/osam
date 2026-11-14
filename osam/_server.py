@@ -7,7 +7,6 @@ import os
 import secrets
 import socket
 import threading
-import time
 from collections.abc import Callable
 from collections.abc import Sequence
 from typing import Any
@@ -25,6 +24,7 @@ from ._requests import LoadRequest
 from ._requests import SegmentRequest
 from ._requests import SegmentResponse
 from ._requests import TrackRequest
+from .types import _blob
 
 
 class ModelList(pydantic.BaseModel):
@@ -115,8 +115,6 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
     # The routes of osam serve, running models on runtime, which the caller
     # closes.
     app = fastapi.FastAPI(title="osam", version=runtime.version())
-    # The cancels of running pulls, so a server can stop them before exiting.
-    app.state.pulls = pulls = set[threading.Event]()
     # Every call runs on one thread, in order, as the runtime runs one at a time.
     # Queued requests wait here instead of holding FastAPI's thread pool, so other
     # routes stay free. Its idle thread exits once the app is garbage collected.
@@ -180,7 +178,6 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
             loop.call_soon_threadsafe(lines.put_nowait, line)
 
         def work() -> None:
-            pulls.add(cancel)
             try:
                 runtime.pull(model=model_type.name, progress=progress, cancel=cancel)
                 last: dict[str, Any] = {"status": "success"}
@@ -189,8 +186,6 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
                     "error": str(e),
                     "code": _errors.REPORTED[_errors.DownloadError].code,
                 }
-            finally:
-                pulls.discard(cancel)
             # Through the same queue, so it follows every progress line.
             loop.call_soon_threadsafe(lines.put_nowait, last)
 
@@ -341,16 +336,12 @@ def run_private(
 
     def exit_with_parent() -> None:
         # No one is left to read a request in flight, so the server exits
-        # without waiting for it, but only after a cancelled pull deletes the
-        # partial files it downloaded.
+        # without waiting for it, but only after a cancelled download deletes
+        # its partial file.
         CLEANUP_SECONDS: Final = 5
 
         wait_for_parent()
-        for cancel in list(app.state.pulls):
-            cancel.set()
-        deadline: float = time.monotonic() + CLEANUP_SECONDS
-        while app.state.pulls and time.monotonic() < deadline:
-            time.sleep(0.05)
+        _blob.cancel_downloads(timeout=CLEANUP_SECONDS)
         os._exit(0)
 
     report_port(sock.getsockname()[1])
