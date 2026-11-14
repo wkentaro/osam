@@ -191,8 +191,12 @@ class Runtime:
             )
 
     def remove(self, *, model: str) -> None:
+        # Unloads it first, so no open file keeps the deleted files on disk or
+        # blocks deleting them on Windows.
         model_type: type[types.Model] = self.model_type(name=model)
         with self._lock:
+            if model_type.name in self._loaded:
+                self._unload(model_name=model_type.name)
             model_type.remove()
 
     def load(self, *, request: LoadRequest) -> types.RunningModel | None:
