@@ -91,6 +91,16 @@ def test_keep_alive_unloads_the_model(
     assert runtime.ps() == []
 
 
+def test_remove_unloads_the_model(
+    monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
+) -> None:
+    _segment(runtime=runtime, model="a")
+    _segment(runtime=runtime, model="b:1")
+    monkeypatch.setattr(runtime.model_type(name="a"), "remove", lambda: None)
+    runtime.remove(model="a")
+    assert _running(runtime=runtime) == ["b:1"]
+
+
 def test_segment_reuses_cached_embedding(
     monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
 ) -> None:
