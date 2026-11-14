@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.11.8 - 2026-11-14
+
+### Fixed
+
+- A private server exits as soon as its app does, instead of 5 seconds later, and no longer warns about an unclosed file. ([#298](https://github.com/wkentaro/osam/pull/298))
+
 ## 0.11.7 - 2026-11-14
 
 ### Fixed
