@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.11.7 - 2026-11-14
+
+### Fixed
+
+- Removing a model unloads it first, so a server no longer keeps it loaded from deleted files. ([#297](https://github.com/wkentaro/osam/pull/297))
+
 ## 0.11.6 - 2026-11-13
 
 ### Added
