@@ -610,3 +610,14 @@ def test_verified_rejects_a_damaged_file(
     assert not blob.verified()
     pathlib.Path(blob.path).write_bytes(b"weights")
     assert blob.verified()
+
+
+def test_cancel_downloads_cancels_pulls_that_start_later(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_blob, "_cancelling", threading.Event())
+    _blob.cancel_downloads(timeout=0)
+    blob = Blob(url="https://example.invalid/a.onnx", hash="sha256:" + "0" * 64)
+    with pytest.raises(PullCancelledError):
+        blob.pull()
+    assert _blob._downloads == []

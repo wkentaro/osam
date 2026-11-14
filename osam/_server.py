@@ -7,7 +7,6 @@ import os
 import secrets
 import socket
 import threading
-import time
 from collections.abc import Callable
 from collections.abc import Sequence
 from typing import Any
@@ -25,6 +24,7 @@ from ._requests import LoadRequest
 from ._requests import SegmentRequest
 from ._requests import SegmentResponse
 from ._requests import TrackRequest
+from .types import _blob
 
 
 class ModelList(pydantic.BaseModel):
@@ -335,16 +335,15 @@ def run_private(
     server = uvicorn_server(app=app, log_level="warning")
 
     def exit_with_parent() -> None:
-        # Shutting down waits for requests in flight, which no one is left to
-        # read, so a stuck inference must not keep the process and its GPU
-        # memory alive.
-        GRACE_SECONDS: Final = 5
+        # No one is left to read a request in flight, so the server exits
+        # without waiting for it, but only after a cancelled download deletes
+        # its partial file.
+        CLEANUP_SECONDS: Final = 5
 
         wait_for_parent()
-        server.should_exit = True
-        time.sleep(GRACE_SECONDS)
+        _blob.cancel_downloads(timeout=CLEANUP_SECONDS)
         os._exit(0)
 
-    threading.Thread(target=exit_with_parent, daemon=True).start()
     report_port(sock.getsockname()[1])
+    threading.Thread(target=exit_with_parent, daemon=True).start()
     server.run(sockets=[sock])
