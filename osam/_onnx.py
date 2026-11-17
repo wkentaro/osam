@@ -40,6 +40,8 @@ def resolve_providers() -> list[str]:
 
 def _has_hardware_webgpu() -> bool:
     try:
+        if _webgpu_plugin() is None:
+            return False
         device: Any | None = _webgpu_device()
         return device is not None and _can_use_webgpu(ep_device=device)
     except Exception as e:  # plugin missing or failing to register
@@ -118,11 +120,21 @@ def _can_use_webgpu(*, ep_device: Any) -> bool:
 
 
 @functools.cache
-def _webgpu_device() -> Any | None:
-    # Prefer usable hardware; keep a fallback for explicit WebGPU requests.
+def _webgpu_plugin() -> Any | None:
     try:
         import onnxruntime_ep_webgpu as webgpu_ep  # type: ignore[unresolved-import]
     except ImportError:
+        logger.debug(
+            "Skipping WebGpuExecutionProvider: onnxruntime-ep-webgpu is absent"
+        )
+        return None
+    return webgpu_ep
+
+
+@functools.cache
+def _webgpu_device() -> Any | None:
+    webgpu_ep = _webgpu_plugin()
+    if webgpu_ep is None:
         raise RuntimeError(
             "WebGpuExecutionProvider needs onnxruntime-ep-webgpu: "
             "pip install 'osam[webgpu]'"
