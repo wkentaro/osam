@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.11.9 - 2026-11-17
+
+### Fixed
+
+- Avoid repeated imports of a missing optional WebGPU plugin during automatic device selection and model listing. ([#299](https://github.com/wkentaro/osam/pull/299))
+
 ## 0.11.8 - 2026-11-14
 
 ### Fixed
