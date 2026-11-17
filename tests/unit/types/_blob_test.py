@@ -431,58 +431,37 @@ def test_pull_forwards_timeout_to_gdown(monkeypatch: pytest.MonkeyPatch) -> None
     ]
 
 
-@pytest.fixture
-def _serve_stalled_download(
-    cancel_attempt: int,
-) -> Iterator[tuple[str, list[str], threading.Event]]:
-    paths: list[str] = []
-    cancel = threading.Event()
-    stop = threading.Event()
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
-            paths.append(self.path)
-            if len(paths) != cancel_attempt:
-                self.send_error(503)
-                return
-            self.send_response(200)
-            self.send_header("Content-Length", "1")
-            self.end_headers()
-            # No body means cancellation must be observed without a progress callback.
-            cancel.set()
-            stop.wait()
-
-    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
-        thread = threading.Thread(target=server.serve_forever)
-        thread.start()
-        try:
-            yield f"http://127.0.0.1:{server.server_port}", paths, cancel
-        finally:
-            stop.set()
-            server.shutdown()
-            thread.join()
-
-
 @pytest.mark.parametrize("cancel_attempt", [1, 3])
 def test_pull_cancel_during_timeout(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
     cancel_attempt: int,
-    _serve_stalled_download: tuple[str, list[str], threading.Event],
 ) -> None:
-    url, paths, cancel = _serve_stalled_download
-    endpoint = f"{url}/mirror"
+    endpoint = "https://mirror.example.com"
     monkeypatch.setenv(
         "OSAM_BLOB_ENDPOINT",
         f"{endpoint},direct" if cancel_attempt == 1 else endpoint,
     )
-    monkeypatch.setattr(Blob, "path", property(lambda self: str(tmp_path / "blob")))
-    blob = Blob(url=f"{url}/direct", hash="sha256:abc")
+    blob = Blob(url="https://example.com/model.onnx", hash="sha256:abc")
+    cancel = threading.Event()
+    sources: list[str] = []
+    timeout_error = TimeoutError("Download timed out")
 
-    with pytest.raises(PullCancelledError):
-        blob.pull(cancel=cancel, timeout=0.1)
+    def timeout_download(url: str, **kwargs: Any) -> None:
+        sources.append(url)
+        assert kwargs["cancel"] is cancel
+        assert kwargs["timeout"] == 0.1
+        if len(sources) == cancel_attempt:
+            cancel.set()
+        raise timeout_error
 
-    assert paths == ["/mirror/abc"] * cancel_attempt
+    with mock.patch(
+        "osam.types._blob.gdown.cached_download", side_effect=timeout_download
+    ):
+        with pytest.raises(PullCancelledError) as excinfo:
+            blob.pull(cancel=cancel, timeout=0.1)
+
+    assert sources == [f"{endpoint}/abc"] * cancel_attempt
+    assert excinfo.value.__cause__ is timeout_error
 
 
 @pytest.fixture
