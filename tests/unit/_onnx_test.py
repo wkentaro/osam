@@ -1,3 +1,4 @@
+import builtins
 import os
 import pathlib
 import sys
@@ -252,8 +253,10 @@ def fake_webgpu(
     monkeypatch.setattr(ort, "get_ep_devices", lambda: devices)
     monkeypatch.setattr(ort, "SessionOptions", FakeSessionOptions)
     monkeypatch.setattr(_onnx, "supports_d3d12", lambda *, luid: True)
+    _onnx._webgpu_plugin.cache_clear()
     _onnx._webgpu_device.cache_clear()
     yield devices
+    _onnx._webgpu_plugin.cache_clear()
     _onnx._webgpu_device.cache_clear()
 
 
@@ -280,6 +283,7 @@ def test_device_webgpu_unavailable_raises(
         Sam3(device="webgpu")
 
     monkeypatch.setitem(sys.modules, "onnxruntime_ep_webgpu", None)
+    _onnx._webgpu_plugin.cache_clear()
     _onnx._webgpu_device.cache_clear()
     with pytest.raises(RuntimeError, match=r"pip install 'osam\[webgpu\]'"):
         Sam3(device="webgpu")
@@ -310,6 +314,45 @@ def test_resolve_providers_without_webgpu_plugin_is_cpu(
     monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
     monkeypatch.setitem(sys.modules, "onnxruntime_ep_webgpu", None)
     assert resolve_providers() == ["CPUExecutionProvider"]
+
+
+def test_missing_webgpu_plugin_is_imported_once(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any]
+) -> None:
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    original_import = builtins.__import__
+    attempts: list[str] = []
+
+    def import_module(name: str, /, *args: Any, **kwargs: Any) -> Any:
+        if name == "onnxruntime_ep_webgpu":
+            attempts.append(name)
+            raise ImportError("plugin is not installed")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_module)
+    for _ in range(10):
+        assert resolve_providers() == ["CPUExecutionProvider"]
+    with pytest.raises(RuntimeError, match=r"pip install 'osam\[webgpu\]'"):
+        _onnx.device_providers(device="webgpu")
+    assert attempts == ["onnxruntime_ep_webgpu"]
+
+
+def test_webgpu_registration_failure_is_retried(
+    monkeypatch: pytest.MonkeyPatch, fake_webgpu: list[Any]
+) -> None:
+    monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
+    fake_webgpu.append(_webgpu_adapter())
+    attempts: list[str] = []
+
+    def register(*args: Any) -> None:
+        attempts.append("register")
+        if len(attempts) == 1:
+            raise RuntimeError("temporary registration failure")
+
+    monkeypatch.setattr(onnxruntime, "register_execution_provider_library", register)
+    assert resolve_providers() == ["CPUExecutionProvider"]
+    assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
+    assert attempts == ["register", "register"]
 
 
 def test_sam3_runs_on_cpu_with_cuda_before_onnxruntime_1_24(
