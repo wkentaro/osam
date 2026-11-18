@@ -310,9 +310,9 @@ def test_segment_point_filtered_by_sam3(
 @pytest.mark.parametrize(
     "model",
     [
-        pytest.param("sam:100m", marks=pytest.mark.extra),
+        "sam:100m",
         "sam2:tiny",
-        pytest.param("yoloworld:latest", marks=pytest.mark.extra),
+        "yoloworld:latest",
         "sam3:latest",
     ],
 )
