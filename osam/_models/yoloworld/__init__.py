@@ -122,8 +122,8 @@ def _padding_hw(
     height, width = original_image_hw
     longer: int = max(height, width)
     return (
-        input_size - round(height * input_size / longer),
-        input_size - round(width * input_size / longer),
+        input_size - max(1, round(height * input_size / longer)),
+        input_size - max(1, round(width * input_size / longer)),
     )
 
 

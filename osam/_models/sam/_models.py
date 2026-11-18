@@ -62,8 +62,8 @@ def _compute_resized_hw(
     *, height: int, width: int, target_size: int
 ) -> tuple[int, int]:
     if width > height:
-        return int(round(height * target_size / width)), target_size
-    return target_size, int(round(width * target_size / height))
+        return max(1, round(height * target_size / width)), target_size
+    return target_size, max(1, round(width * target_size / height))
 
 
 class Sam(SamBase):
