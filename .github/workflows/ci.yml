@@ -119,4 +119,4 @@ jobs:
           restore-keys: |
             osam-models-${{ runner.os }}-
       - run: just setup
-      - run: just test -n 0 -m model_conformance -rP -o faulthandler_timeout=120
+      - run: just test -n 0 -m 'model_conformance and not extra' -rP -o faulthandler_timeout=120

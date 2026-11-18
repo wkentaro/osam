@@ -29,15 +29,11 @@ def _unload() -> Iterator[None]:
     _loaded.clear()
 
 
-def _model(*, name: str, device: types.Device | None = None) -> types.Model:
+def _model(*, name: str) -> types.Model:
     model_type = _registry.get_model_type_by_name(name=name)
-    if (
-        not _loaded
-        or _loaded[0].name != model_type.name
-        or device not in (None, _loaded[0].device)
-    ):
+    if not _loaded or _loaded[0].name != model_type.name:
         _loaded.clear()
-        _loaded.append(model_type(device=device))
+        _loaded.append(model_type())
     return _loaded[0]
 
 
@@ -310,6 +306,7 @@ def test_segment_point_filtered_by_sam3(
     assert annotations == []
 
 
+@pytest.mark.model_conformance
 @pytest.mark.parametrize(
     "model",
     [
@@ -320,7 +317,9 @@ def test_segment_point_filtered_by_sam3(
     ],
 )
 def test_encode_image_takes_an_image_resized_to_its_input_shape(model: str) -> None:
-    loaded = _model(name=model, device="cpu")
+    _loaded.clear()
+    loaded = _registry.get_model_type_by_name(name=model)(device="cpu")
+    _loaded.append(loaded)
     with contextlib.closing(_runtime.Runtime(model_types=[type(loaded)])) as runtime:
         (info,) = runtime.list()
     image = imgviz.io.imread(image_path)[:1599]
