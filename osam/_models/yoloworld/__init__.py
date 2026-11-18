@@ -7,6 +7,7 @@ from typing_extensions import override
 
 from ... import _nms
 from ... import _types as types
+from ...types._model_info import fit_hw
 from .. import _clip as clip
 
 __all__ = [
@@ -118,13 +119,10 @@ class YoloWorldXL(_YoloWorld):
 def _padding_hw(
     *, original_image_hw: tuple[int, int], input_size: int
 ) -> tuple[int, int]:
-    # The image scales so its longer side fits input_size; the rest is padding.
-    height, width = original_image_hw
-    longer: int = max(height, width)
-    return (
-        input_size - max(1, round(height * input_size / longer)),
-        input_size - max(1, round(width * input_size / longer)),
+    height, width = fit_hw(
+        height=original_image_hw[0], width=original_image_hw[1], size=input_size
     )
+    return input_size - height, input_size - width
 
 
 def _transform_image(*, image: np.ndarray, input_size: int) -> NDArray[np.float32]:
