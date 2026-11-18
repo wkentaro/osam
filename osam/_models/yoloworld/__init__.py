@@ -136,6 +136,7 @@ def _transform_image(*, image: np.ndarray, input_size: int) -> NDArray[np.float3
         height=input_size - pad_height,
         width=input_size - pad_width,
         interpolation="linear",
+        backend="pillow",
     )
     image_resized = np.pad(
         image_resized,
