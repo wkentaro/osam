@@ -120,8 +120,11 @@ def _padding_hw(
 ) -> tuple[int, int]:
     # The image scales so its longer side fits input_size; the rest is padding.
     height, width = original_image_hw
-    scale = input_size / max(height, width)
-    return input_size - int(height * scale), input_size - int(width * scale)
+    longer: int = max(height, width)
+    return (
+        input_size - round(height * input_size / longer),
+        input_size - round(width * input_size / longer),
+    )
 
 
 def _transform_image(*, image: np.ndarray, input_size: int) -> NDArray[np.float32]:

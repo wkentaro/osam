@@ -18,6 +18,11 @@ def test_untransform_bboxes_keeps_boxes_inside_the_image() -> None:
     assert bboxes.tolist() == [[0, 0, 19, 9]]
 
 
+def test_padding_hw_rounds_the_resized_side() -> None:
+    padding = yoloworld._padding_hw(original_image_hw=(1599, 2560), input_size=640)
+    assert padding == (240, 0)
+
+
 def test_decode_maps_boxes_back_from_the_embedding() -> None:
     # A 10x20 image scales by 32 to 320x640, padded by 160 above and below.
     model = yoloworld.YoloWorldXL.__new__(yoloworld.YoloWorldXL)
