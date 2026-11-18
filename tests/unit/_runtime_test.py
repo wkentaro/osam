@@ -48,6 +48,26 @@ def test_unknown_model_raises(runtime: _runtime.Runtime) -> None:
         _segment(runtime=runtime, model="efficientsam:10m")  # registered, but not here
 
 
+def test_list_gives_the_input_size_and_resize_of_each_registered_model() -> None:
+    with contextlib.closing(_runtime.Runtime()) as runtime:
+        inputs = {
+            info.name: (info.input_size, info.input_resize) for info in runtime.list()
+        }
+    assert inputs == {
+        "efficientsam:10m": (1024, "stretch"),
+        "efficientsam:latest": (1024, "stretch"),
+        "sam:100m": (1024, "fit"),
+        "sam:300m": (1024, "fit"),
+        "sam:latest": (1024, "fit"),
+        "sam2:tiny": (1024, "stretch"),
+        "sam2:small": (1024, "stretch"),
+        "sam2:latest": (1024, "stretch"),
+        "sam2:large": (1024, "stretch"),
+        "sam3:latest": (1008, "stretch"),
+        "yoloworld:latest": (640, "fit"),
+    }
+
+
 def test_keep_alive_unloads_the_model(
     monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
 ) -> None:

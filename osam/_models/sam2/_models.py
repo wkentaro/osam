@@ -18,6 +18,9 @@ class Sam2(SamBase):
         license_spdx="Apache-2.0",
     )
 
+    input_size = 1024
+    input_resize = "stretch"
+
     @override
     def encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         encoder_session = self._inference_sessions["encoder"]

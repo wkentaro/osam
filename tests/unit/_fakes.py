@@ -9,6 +9,8 @@ class FakeModel(types.Model):
     name = "fake:latest"
     metadata = types.ModelMetadata(license_name="MIT", license_url="", source_url="")
     prompt_kinds = frozenset({"points"})
+    input_size = 1024
+    input_resize = "fit"
     _blobs = {}
     # The device it lands on when Runtime picks one.
     device: str = "cpu"

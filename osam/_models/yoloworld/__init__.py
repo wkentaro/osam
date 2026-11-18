@@ -24,7 +24,7 @@ class _YoloWorld(types.Model):
 
     prompt_kinds = frozenset({"texts"})
 
-    _input_size: int
+    input_resize = "fit"
 
     @classmethod
     @override
@@ -38,7 +38,7 @@ class _YoloWorld(types.Model):
         return types.ImageEmbedding(
             original_height=image.shape[0],
             original_width=image.shape[1],
-            embedding=_transform_image(image=image, input_size=self._input_size),
+            embedding=_transform_image(image=image, input_size=self.input_size),
         )
 
     @override
@@ -82,7 +82,7 @@ class _YoloWorld(types.Model):
         )
         bboxes = _untransform_bboxes(
             bboxes=bboxes,
-            input_size=self._input_size,
+            input_size=self.input_size,
             original_image_hw=(embedding.original_height, embedding.original_width),
         )
         return [
@@ -100,7 +100,7 @@ class _YoloWorld(types.Model):
 class YoloWorldXL(_YoloWorld):
     name: str = "yoloworld:latest"
 
-    _input_size = 640
+    input_size = 640
     _blobs = {
         "textual": types.Blob(
             url="https://clip-as-service.s3.us-east-2.amazonaws.com/models/onnx/ViT-B-32/textual.onnx",

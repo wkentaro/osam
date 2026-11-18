@@ -73,6 +73,7 @@ def test_list_models(app: fastapi.FastAPI) -> None:
     assert model["metadata"]["license_name"] == "MIT"
     assert model["capabilities"] == ["segment"]
     assert model["prompt_kinds"] == ["points"]
+    assert (model["input_size"], model["input_resize"]) == (1024, "fit")
 
 
 def test_pull_streams_progress(

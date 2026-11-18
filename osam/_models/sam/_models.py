@@ -67,6 +67,9 @@ def _compute_resized_hw(
 
 
 class Sam(SamBase):
+    input_size = 1024
+    input_resize = "fit"
+
     @override
     def encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         encoder_session = self._inference_sessions["encoder"]

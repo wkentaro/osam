@@ -5,6 +5,7 @@ import pydantic
 from ._model_metadata import ModelMetadata
 
 PromptKind = typing.Literal["points", "box", "texts", "example_boxes"]
+InputResize = typing.Literal["stretch", "fit"]
 
 
 class ModelInfo(pydantic.BaseModel):
@@ -27,6 +28,25 @@ class ModelInfo(pydantic.BaseModel):
     prompt_kinds: list[PromptKind] = pydantic.Field(
         description="The prompt fields it takes; a request with others gets 400"
     )
+    input_size: int = pydantic.Field(
+        description="Side, in pixels, of the square the model resizes every image into"
+    )
+    input_resize: InputResize = pydantic.Field(
+        description="How it resizes an image into the square: stretch to "
+        "input_size by input_size, ignoring the aspect ratio, or fit the longer "
+        "side to input_size, keeping the aspect ratio, and pad the rest"
+    )
+
+    def input_shape(self, *, height: int, width: int) -> tuple[int, int]:
+        """The (height, width) the model resizes an image of this size to.
+
+        An image that already has this shape reaches the image encoder unresized.
+        """
+        if self.input_resize == "stretch":
+            return self.input_size, self.input_size
+        if width > height:
+            return max(1, round(height * self.input_size / width)), self.input_size
+        return self.input_size, max(1, round(width * self.input_size / height))
 
 
 class RunningModel(pydantic.BaseModel):

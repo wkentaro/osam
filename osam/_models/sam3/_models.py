@@ -14,6 +14,7 @@ from osam import _types as types
 
 from .._clip import tokenize
 from ._timeline import Timeline
+from ._tracker import IMAGE_SIZE
 from ._video import component_areas
 
 # sam3-onnx's models, by file name without the sam3_ prefix and .onnx.
@@ -214,6 +215,9 @@ class Sam3(types.Model):
 
     prompt_kinds = frozenset({"points", "box", "texts", "example_boxes"})
 
+    input_size = IMAGE_SIZE
+    input_resize = "stretch"
+
     _blobs = {**_FILES, **_V0_6_0_FILES, **_SMALL_FIXED_FILES}
 
     # CoreML runs the image encoder 3 times as fast as WebGPU does. It takes
@@ -306,7 +310,7 @@ class Sam3(types.Model):
 
         # SAM3 resizes with bilinear interpolation, not PIL's default bicubic.
         pil_image: PIL.Image.Image = PIL.Image.fromarray(image).resize(
-            (1008, 1008), resample=PIL.Image.Resampling.BILINEAR
+            (self.input_size, self.input_size), resample=PIL.Image.Resampling.BILINEAR
         )
         image_input: NDArray[np.uint8] = np.asarray(pil_image).transpose(
             2, 0, 1
@@ -499,7 +503,7 @@ class Sam3(types.Model):
             "high_res_features1": image_embedding.extra_features[4],
             "high_res_features2": image_embedding.extra_features[5],
             "point_coords": types.scale_points(
-                points=points, scale=1008 / np.array([width, height])
+                points=points, scale=self.input_size / np.array([width, height])
             )[None],
             "point_labels": point_labels.astype(np.float32)[None],
             "mask_input": np.zeros((1, 1, 288, 288), dtype=np.float32),
