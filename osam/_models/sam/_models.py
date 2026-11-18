@@ -3,11 +3,11 @@ from typing import cast
 
 import numpy as np
 import numpy.typing as npt
-import onnxruntime
 import PIL.Image
 from typing_extensions import override
 
 from osam import _types as types
+from osam.types._model_info import fit_hw
 
 
 class SamBase(types.Model):
@@ -49,23 +49,6 @@ class SamBase(types.Model):
         )
 
 
-def get_input_size(*, encoder_session: onnxruntime.InferenceSession) -> int:
-    input_height: int
-    input_width: int
-    input_height, input_width = encoder_session.get_inputs()[0].shape[2:]
-    if input_height != input_width:
-        raise ValueError("Input height and width must be equal")
-    return input_height
-
-
-def _compute_resized_hw(
-    *, height: int, width: int, target_size: int
-) -> tuple[int, int]:
-    if width > height:
-        return max(1, round(height * target_size / width)), target_size
-    return target_size, max(1, round(width * target_size / height))
-
-
 class Sam(SamBase):
     input_size = 1024
     input_resize = "fit"
@@ -73,10 +56,10 @@ class Sam(SamBase):
     @override
     def encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         encoder_session = self._inference_sessions["encoder"]
-        input_size: int = get_input_size(encoder_session=encoder_session)
+        input_size: int = self.input_size
 
-        new_height, new_width = _compute_resized_hw(
-            height=image.shape[0], width=image.shape[1], target_size=input_size
+        new_height, new_width = fit_hw(
+            height=image.shape[0], width=image.shape[1], size=input_size
         )
         scaled_image: npt.NDArray = np.asarray(
             PIL.Image.fromarray(image).resize(
@@ -117,14 +100,10 @@ class Sam(SamBase):
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
     ) -> npt.NDArray[np.bool_]:
-        input_size: int = get_input_size(
-            encoder_session=self._inference_sessions["encoder"]
-        )
-
-        new_height, new_width = _compute_resized_hw(
+        new_height, new_width = fit_hw(
             height=image_embedding.original_height,
             width=image_embedding.original_width,
-            target_size=input_size,
+            size=self.input_size,
         )
         points = types.scale_points(
             points=points,
@@ -139,7 +118,9 @@ class Sam(SamBase):
             points = np.concatenate([points, np.array([[0.0, 0.0]])], axis=0)
             point_labels = np.concatenate([point_labels, np.array([-1])], axis=0)
         original_hw = (image_embedding.original_height, image_embedding.original_width)
-        decoder_keeps_short_side = 2 * min(original_hw) * input_size >= max(original_hw)
+        decoder_keeps_short_side = 2 * min(original_hw) * self.input_size >= max(
+            original_hw
+        )
         decode_hw = original_hw if decoder_keeps_short_side else (new_height, new_width)
         onnx_coord: npt.NDArray[np.float32] = points[None, :, :].astype(np.float32)
         onnx_label: npt.NDArray[np.float32] = point_labels[None, :].astype(np.float32)

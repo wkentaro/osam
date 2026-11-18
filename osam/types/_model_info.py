@@ -8,6 +8,12 @@ PromptKind = typing.Literal["points", "box", "texts", "example_boxes"]
 InputResize = typing.Literal["stretch", "fit"]
 
 
+def fit_hw(*, height: int, width: int, size: int) -> tuple[int, int]:
+    if width > height:
+        return max(1, round(height * size / width)), size
+    return size, max(1, round(width * size / height))
+
+
 class ModelInfo(pydantic.BaseModel):
     name: str
     id: str
@@ -44,9 +50,7 @@ class ModelInfo(pydantic.BaseModel):
         """
         if self.input_resize == "stretch":
             return self.input_size, self.input_size
-        if width > height:
-            return max(1, round(height * self.input_size / width)), self.input_size
-        return self.input_size, max(1, round(width * self.input_size / height))
+        return fit_hw(height=height, width=width, size=self.input_size)
 
 
 class RunningModel(pydantic.BaseModel):

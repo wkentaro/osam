@@ -7,7 +7,6 @@ from typing_extensions import override
 
 from osam import _types as types
 from osam._models.sam import SamBase
-from osam._models.sam import get_input_size
 
 
 class Sam2(SamBase):
@@ -25,14 +24,10 @@ class Sam2(SamBase):
     def encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         encoder_session = self._inference_sessions["encoder"]
 
-        input_height: int
-        input_width: int
-        input_height, input_width = encoder_session.get_inputs()[0].shape[2:]
-
         input_: npt.NDArray[np.float32]
         input_ = (
             imgviz.resize(
-                image, width=input_width, height=input_height, backend="pillow"
+                image, width=self.input_size, height=self.input_size, backend="pillow"
             ).astype(np.float32)
             / 255
         )
@@ -61,9 +56,7 @@ class Sam2(SamBase):
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
     ) -> npt.NDArray[np.bool_]:
-        input_size: int = get_input_size(
-            encoder_session=self._inference_sessions["encoder"]
-        )
+        input_size: int = self.input_size
 
         input_point: npt.NDArray[np.float32] = types.scale_points(
             points=points,
