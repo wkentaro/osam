@@ -723,10 +723,8 @@ def test_client_takes_score_only_boxes_inside_the_original_size_alone(
         bounding_box=osam.types.BoundingBox(xmin=4, ymin=4, xmax=7, ymax=7),
         mask_scores=np.full((2, 2), 255, np.uint8),
     )
-    segmented = {
-        "annotations": [annotation.model_dump(mode="json")],
-        "image": f"sha256:{0:064d}",
-    }
+    dumped = annotation.model_dump(mode="json")
+    segmented = {"annotations": [dumped], "image": f"sha256:{0:064d}"}
     with _serving() as host:
         client = osam.Client(host=host)
         monkeypatch.setattr(_backend(client), "_request", lambda **_: segmented)
@@ -741,9 +739,7 @@ def test_client_takes_score_only_boxes_inside_the_original_size_alone(
         ).all()
         with pytest.raises(pydantic.ValidationError, match="outside"):
             client.segment("efficientsam:10m", image, include_mask_scores=True)
-        segmented["annotations"][0]["bounding_box"] = dict(
-            xmin=3, ymin=0, xmax=1, ymax=3
-        )
+        dumped["bounding_box"] = dict(xmin=3, ymin=0, xmax=1, ymax=3)
         with pytest.raises(pydantic.ValidationError, match="inverted"):
             client.segment("efficientsam:10m", image, include_mask_scores=True)
 
