@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import hashlib
+import math
 import threading
 import typing
 from collections.abc import Callable
@@ -9,6 +10,7 @@ from collections.abc import Callable
 import numpy as np
 import numpy.typing as npt
 import onnxruntime
+import PIL.Image
 from loguru import logger
 
 from .. import _onnx
@@ -23,6 +25,7 @@ from ._image_embedding import ImageEmbedding
 from ._prompt import THRESHOLDS
 from ._prompt import Prompt
 from ._prompt import PromptKind
+from ._prompt import scale_prompt
 
 if typing.TYPE_CHECKING:
     from .._models.sam3._timeline import Timeline
@@ -252,7 +255,24 @@ class Model(abc.ABC):
         # The prompt used when a request gives none.
         pass
 
-    def decode(self, *, embedding: ImageEmbedding, prompt: Prompt) -> list[Annotation]:
+    def decode(
+        self,
+        *,
+        embedding: ImageEmbedding,
+        prompt: Prompt,
+        original_size: tuple[int, int] | None = None,
+    ) -> list[Annotation]:
+        width, height = original_size or (
+            embedding.original_width,
+            embedding.original_height,
+        )
+        prompt = scale_prompt(
+            prompt=prompt,
+            scale=(
+                embedding.original_width / width,
+                embedding.original_height / height,
+            ),
+        )
         if not prompt.kinds:
             prompt = self.default_prompt(
                 height=embedding.original_height, width=embedding.original_width
@@ -265,10 +285,14 @@ class Model(abc.ABC):
                 f"{self.name} takes {', '.join(sorted(self.prompt_kinds))}, "
                 f"not {', '.join(sorted(unsupported))}"
             )
-        return self._decode(embedding=embedding, prompt=prompt)
+        return self._decode(
+            embedding=embedding, prompt=prompt, height=height, width=width
+        )
 
     @abc.abstractmethod
-    def _decode(self, *, embedding: ImageEmbedding, prompt: Prompt) -> list[Annotation]:
+    def _decode(
+        self, *, embedding: ImageEmbedding, prompt: Prompt, height: int, width: int
+    ) -> list[Annotation]:
         pass
 
     @classmethod
@@ -287,6 +311,89 @@ class Model(abc.ABC):
         # A video of num_frames frames, whose embeddings get_embedding returns
         # by frame index, for /api/track's actions.
         raise NotImplementedError(f"{self.name} doesn't track")
+
+
+def annotations_from_logits(
+    *,
+    logits: npt.NDArray[np.float32],
+    height: int,
+    width: int,
+    score: float | None = None,
+) -> list[Annotation]:
+    logits = _shrink_logits(logits=logits, height=height, width=width)
+    positive = logits > 0
+    if logits.shape == (height, width):
+        return annotations_from_mask(mask=positive, score=score)
+    ys = np.flatnonzero(positive.any(axis=1))
+    if ys.size == 0:
+        return []
+    xs = np.flatnonzero(positive.any(axis=0))
+    logits_height, logits_width = logits.shape
+    scale_x, scale_y = logits_width / width, logits_height / height
+    x0 = max(0, math.floor((xs[0] - 1) / scale_x))
+    x1 = min(width, math.ceil((xs[-1] + 2) / scale_x))
+    y0 = max(0, math.floor((ys[0] - 1) / scale_y))
+    y1 = min(height, math.ceil((ys[-1] + 2) / scale_y))
+    mask = mask_from_logits(
+        logits=logits, box=(x0, y0, x1, y1), height=height, width=width, threshold=0
+    )
+    return [
+        annotation.model_copy(
+            update={
+                "bounding_box": BoundingBox(
+                    xmin=annotation.bounding_box.xmin + x0,
+                    ymin=annotation.bounding_box.ymin + y0,
+                    xmax=annotation.bounding_box.xmax + x0,
+                    ymax=annotation.bounding_box.ymax + y0,
+                )
+            }
+        )
+        for annotation in annotations_from_mask(mask=mask, score=score)
+        if annotation.bounding_box is not None
+    ]
+
+
+def _shrink_logits(
+    *, logits: npt.NDArray[np.float32], height: int, width: int
+) -> npt.NDArray[np.float32]:
+    if logits.shape[0] <= height and logits.shape[1] <= width:
+        return logits
+    return np.asarray(
+        PIL.Image.fromarray(logits).resize(
+            (min(logits.shape[1], width), min(logits.shape[0], height)),
+            resample=PIL.Image.Resampling.BILINEAR,
+        )
+    )
+
+
+def mask_from_logits(
+    *,
+    logits: npt.NDArray[np.float32],
+    box: tuple[int, int, int, int],
+    height: int,
+    width: int,
+    threshold: float,
+) -> npt.NDArray[np.bool_]:
+    logits = _shrink_logits(logits=logits, height=height, width=width)
+    x0, y0, x1, y1 = box
+    scale_x, scale_y = logits.shape[1] / width, logits.shape[0] / height
+    image = PIL.Image.fromarray(logits)
+    mask = np.empty((y1 - y0, x1 - x0), dtype=bool)
+    STRIP_PIXELS: typing.Final = 1 << 22
+    rows = max(1, STRIP_PIXELS // (x1 - x0))
+    for top in range(y0, y1, rows):
+        bottom = min(top + rows, y1)
+        mask[top - y0 : bottom - y0] = (
+            np.asarray(
+                image.resize(
+                    (x1 - x0, bottom - top),
+                    resample=PIL.Image.Resampling.BILINEAR,
+                    box=(x0 * scale_x, top * scale_y, x1 * scale_x, bottom * scale_y),
+                )
+            )
+            > threshold
+        )
+    return mask
 
 
 def annotations_from_mask(

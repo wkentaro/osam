@@ -31,7 +31,12 @@ class FakeModel(types.Model):
         return types.Prompt()
 
     def _decode(
-        self, *, embedding: types.ImageEmbedding, prompt: types.Prompt
+        self,
+        *,
+        embedding: types.ImageEmbedding,
+        prompt: types.Prompt,
+        height: int,
+        width: int,
     ) -> list[types.Annotation]:
         return []
 

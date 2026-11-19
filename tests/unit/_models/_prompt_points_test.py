@@ -87,3 +87,29 @@ def test_decode_sends_the_clicked_pixel_center_at_its_place_in_the_model(
     np.testing.assert_allclose(
         sent + 0.5, (np.array([(10, 20), (WIDTH - 1, 0)]) + 0.5) * scale, rtol=1e-6
     )
+
+
+def test_sam2_enlarges_the_mask_from_its_scores_to_the_original_size() -> None:
+    ys, xs = np.mgrid[:HEIGHT, :WIDTH]
+    logits = (xs - 2 * ys + 0.5).astype(np.float32)[None, None]
+    model = Sam2.__new__(Sam2)
+    model._inference_sessions = {
+        "decoder": _session(inputs=[], outputs=[logits, np.ones((1, 1)), None]),
+    }
+    embedding = types.ImageEmbedding(
+        original_height=HEIGHT,
+        original_width=WIDTH,
+        embedding=np.zeros((1, 1, 1), np.float32),
+        extra_features=[np.zeros((1, 1, 1), np.float32)] * 2,
+    )
+
+    [annotation] = model.decode(
+        embedding=embedding,
+        prompt=types.Prompt(points=[(40, 10)], point_labels=[1]),
+        original_size=(WIDTH * 8, HEIGHT * 8),
+    )
+
+    assert annotation.mask is not None
+    assert annotation.bounding_box.xmax == WIDTH * 8 - 1
+    left = annotation.mask.argmax(axis=1)
+    assert np.abs(np.diff(left[64:-64])).max() <= 3  # noqa: PLR2004

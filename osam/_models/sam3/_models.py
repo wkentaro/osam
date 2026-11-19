@@ -177,34 +177,6 @@ def _file(*, name: str, device: str) -> str:
     return f"{name}_fp16"
 
 
-def _crop_mask(
-    *,
-    mask: NDArray[np.float32],
-    bounding_box: types.BoundingBox,
-    height: int,
-    width: int,
-) -> NDArray[np.bool_]:
-    # The mask probabilities resized to height x width and thresholded, as
-    # sam3-onnx does, over the bounding box's pixels only.
-    bb = bounding_box
-    mask_h, mask_w = mask.shape
-    return (
-        np.asarray(
-            PIL.Image.fromarray(mask).resize(
-                (bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1),
-                resample=PIL.Image.Resampling.BILINEAR,
-                box=(
-                    bb.xmin * mask_w / width,
-                    bb.ymin * mask_h / height,
-                    (bb.xmax + 1) * mask_w / width,
-                    (bb.ymax + 1) * mask_h / height,
-                ),
-            )
-        )
-        > 0.5
-    )
-
-
 class Sam3(types.Model):
     name = "sam3:latest"
     metadata = types.ModelMetadata(
@@ -360,10 +332,13 @@ class Sam3(types.Model):
 
     @override
     def _decode(
-        self, *, embedding: types.ImageEmbedding, prompt: types.Prompt
+        self,
+        *,
+        embedding: types.ImageEmbedding,
+        prompt: types.Prompt,
+        height: int,
+        width: int,
     ) -> list[types.Annotation]:
-        original_height: int = embedding.original_height
-        original_width: int = embedding.original_width
 
         score_threshold: float = (
             0.1 if prompt.score_threshold is None else prompt.score_threshold
@@ -381,6 +356,8 @@ class Sam3(types.Model):
                 point_labels=point_labels,
                 score_threshold=score_threshold,
                 max_annotations=max_annotations,
+                height=height,
+                width=width,
             )
 
         # The decoder takes a fixed number of boxes, and masks out the unused ones.
@@ -399,7 +376,7 @@ class Sam3(types.Model):
                 raise ValueError(f"at most {max_boxes} boxes are supported")
             corners: NDArray[np.floating] = np.reshape(
                 prompt.example_boxes, (num_boxes, 2, 2)
-            ) / [original_width, original_height]
+            ) / [embedding.original_width, embedding.original_height]
             # (x_center, y_center, width, height)
             box_coords[:num_boxes, 0] = np.c_[
                 corners.mean(axis=1), corners[:, 1] - corners[:, 0]
@@ -442,17 +419,13 @@ class Sam3(types.Model):
         # Scale normalized box edges to the first and last pixels whose
         # centers they enclose, a center on an edge included.
         edges = (
-            boxes_norm
-            * np.array(
-                [original_width, original_height, original_width, original_height],
-                dtype=np.float32,
-            )
+            boxes_norm * np.array([width, height, width, height], dtype=np.float32)
             - 0.5
         )
         boxes = np.clip(
             np.concatenate([np.ceil(edges[:, :2]), np.floor(edges[:, 2:])], axis=1),
             0,
-            [original_width - 1, original_height - 1] * 2,
+            [width - 1, height - 1] * 2,
         )
         # A box narrower than a pixel still encloses the pixel at its start.
         boxes[:, 2:] = np.maximum(boxes[:, 2:], boxes[:, :2])
@@ -470,11 +443,12 @@ class Sam3(types.Model):
                 xmax=round(box[2]),
                 ymax=round(box[3]),
             )
-            cropped_mask: NDArray[np.bool_] = _crop_mask(
-                mask=masks_native[i, 0],
-                bounding_box=bb,
-                height=original_height,
-                width=original_width,
+            cropped_mask: NDArray[np.bool_] = types.mask_from_logits(
+                logits=masks_native[i, 0],
+                box=(bb.xmin, bb.ymin, bb.xmax + 1, bb.ymax + 1),
+                height=height,
+                width=width,
+                threshold=0.5,
             )
             annotations.append(
                 types.Annotation(
@@ -495,15 +469,19 @@ class Sam3(types.Model):
         point_labels: NDArray[np.float32],
         score_threshold: float,
         max_annotations: int,
+        height: int,
+        width: int,
     ) -> list[types.Annotation]:
-        height: int = image_embedding.original_height
-        width: int = image_embedding.original_width
         inputs: dict[str, types.Feature] = {
             "image_embeddings": image_embedding.extra_features[3],
             "high_res_features1": image_embedding.extra_features[4],
             "high_res_features2": image_embedding.extra_features[5],
             "point_coords": types.scale_points(
-                points=points, scale=self.input_size / np.array([width, height])
+                points=points,
+                scale=self.input_size
+                / np.array(
+                    [image_embedding.original_width, image_embedding.original_height]
+                ),
             )[None],
             "point_labels": point_labels.astype(np.float32)[None],
             "mask_input": np.zeros((1, 1, 288, 288), dtype=np.float32),
@@ -536,15 +514,9 @@ class Sam3(types.Model):
             np.float32(10),
             logits,
         )
-        mask: NDArray[np.bool_] = (
-            np.asarray(
-                PIL.Image.fromarray(logits).resize(
-                    (width, height), resample=PIL.Image.Resampling.BILINEAR
-                )
-            )
-            > 0
-        )
         score = float(iou_predictions[0, best])
         if score < score_threshold or max_annotations == 0:
             return []
-        return types.annotations_from_mask(mask=mask, score=score)
+        return types.annotations_from_logits(
+            logits=logits, height=height, width=width, score=score
+        )

@@ -39,13 +39,13 @@ class EfficientSam(SamBase):
         )
 
     @override
-    def _generate_mask_from_image_embedding(
+    def _generate_logits_from_image_embedding(
         self,
         *,
         image_embedding: types.ImageEmbedding,
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
-    ) -> npt.NDArray[np.bool_]:
+    ) -> npt.NDArray[np.float32]:
         # The decoder scales the points by 1024 / size itself.
         scale = self.input_size / np.array(
             [image_embedding.original_width, image_embedding.original_height],
@@ -69,11 +69,7 @@ class EfficientSam(SamBase):
 
         masks, _, _ = self._inference_sessions["decoder"].run(None, decoder_inputs)
         masks = cast(npt.NDArray[np.float32], masks)
-        mask: npt.NDArray[np.bool_] = (
-            masks[0, 0, 0, :, :] > 0
-        )  # (1, 1, 3, H, W) -> (H, W)
-
-        return mask
+        return masks[0, 0, 0]
 
 
 class EfficientSam10m(EfficientSam):

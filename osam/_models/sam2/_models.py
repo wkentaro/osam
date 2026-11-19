@@ -49,13 +49,13 @@ class Sam2(SamBase):
         )
 
     @override
-    def _generate_mask_from_image_embedding(
+    def _generate_logits_from_image_embedding(
         self,
         *,
         image_embedding: types.ImageEmbedding,
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
-    ) -> npt.NDArray[np.bool_]:
+    ) -> npt.NDArray[np.float32]:
         input_size: int = self.input_size
 
         input_point: npt.NDArray[np.float32] = types.scale_points(
@@ -91,10 +91,7 @@ class Sam2(SamBase):
         masks = cast(npt.NDArray[np.float32], masks)
         scores = cast(npt.NDArray[np.float32], scores)
 
-        mask: npt.NDArray[np.bool_] = (
-            masks[0, np.argmax(scores)] > 0.0
-        )  # (1, N, H, W) -> (H, W)
-        return mask
+        return masks[0, np.argmax(scores)]
 
 
 class Sam2Tiny(Sam2):

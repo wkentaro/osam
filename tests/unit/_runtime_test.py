@@ -283,3 +283,19 @@ def test_unavailable_device_raises_when_created(
         _runtime.Runtime(device="cuda", model_types=[])
     with pytest.raises(ValueError, match="unknown device"):
         _runtime.Runtime(device="gpu", model_types=[])  # type: ignore[arg-type]
+
+
+def test_segment_decodes_at_the_original_size(
+    monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
+) -> None:
+    sizes: list[tuple[int, int]] = []
+    monkeypatch.setattr(
+        runtime.model_type(name="a"),
+        "_decode",
+        lambda self, *, height, width, **_: sizes.append((width, height)) or [],
+    )
+
+    _segment(runtime=runtime, model="a", original_size=(40, 30))
+    _segment(runtime=runtime, model="a")
+
+    assert sizes == [(40, 30), (1, 1)]

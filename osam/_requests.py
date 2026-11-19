@@ -97,6 +97,13 @@ class SegmentRequest(types.Prompt):
         description="A base64-encoded image file, such as PNG or JPEG, or the "
         "reference a response gave for one sent before; 412 asks for the file",
     )
+    original_size: tuple[pydantic.PositiveInt, pydantic.PositiveInt] | None = (
+        pydantic.Field(
+            default=None,
+            description="width, height of the image that image was resized from, "
+            "whose pixels the prompt and annotations are in; image's own if unset",
+        )
+    )
     include_masks: bool = pydantic.Field(
         default=True,
         description="false leaves out each annotation's mask, for a client that "

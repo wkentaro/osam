@@ -4,10 +4,13 @@ from ..types import __all__ as _public
 from ._image_embedding import Feature
 from ._image_embedding import ImageEmbedding
 from ._model import Model
+from ._model import annotations_from_logits
 from ._model import annotations_from_mask
+from ._model import mask_from_logits
 from ._prompt import Prompt
 from ._prompt import point_inputs
 from ._prompt import scale_points
+from ._prompt import scale_prompt
 from ._track import Action
 from ._track import AddAction
 from ._track import PromptAction
@@ -25,7 +28,10 @@ __all__ = [
     "PromptAction",
     "RefineAction",
     "RemoveAction",
+    "annotations_from_logits",
+    "mask_from_logits",
     "annotations_from_mask",
     "point_inputs",
     "scale_points",
+    "scale_prompt",
 ]

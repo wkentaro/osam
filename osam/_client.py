@@ -183,6 +183,7 @@ class Client:
         iou_threshold: float | None = None,
         score_threshold: float | None = None,
         max_annotations: int | None = None,
+        original_size: tuple[int, int] | None = None,
         include_masks: bool | None = None,
         keep_alive: float | str | None = None,
     ) -> builtins.list[types.Annotation]:
@@ -202,6 +203,9 @@ class Client:
         model uses its default one. The thresholds apply to models that find
         every match. Prompts on an image the server saw recently reuse its
         embedding.
+        original_size: width, height of the image that image was resized
+        from. The prompt and annotations are then in its pixels, and masks
+        are enlarged from the model's scores, not from a mask at image's size.
         include_masks: False leaves out each annotation's mask, for boxes and
         scores only.
         keep_alive: as in load.
@@ -216,6 +220,7 @@ class Client:
             "iou_threshold": iou_threshold,
             "score_threshold": score_threshold,
             "max_annotations": max_annotations,
+            "original_size": original_size,
             "include_masks": include_masks,
             "keep_alive": keep_alive,
         }

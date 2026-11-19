@@ -286,7 +286,9 @@ class Runtime:
             embedding = model.encode_image(image=request.image)
         self._cache_embedding(key=key, embedding=embedding)
         annotations: list[types.Annotation] = model.decode(
-            embedding=embedding, prompt=request
+            embedding=embedding,
+            prompt=request,
+            original_size=request.original_size,
         )
         if not request.include_masks:
             annotations = [a.model_copy(update={"mask": None}) for a in annotations]

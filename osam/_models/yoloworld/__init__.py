@@ -44,7 +44,12 @@ class _YoloWorld(types.Model):
 
     @override
     def _decode(
-        self, *, embedding: types.ImageEmbedding, prompt: types.Prompt
+        self,
+        *,
+        embedding: types.ImageEmbedding,
+        prompt: types.Prompt,
+        height: int,
+        width: int,
     ) -> list[types.Annotation]:
         texts: list[str] | None = prompt.texts
         assert texts is not None  # decode checks prompt_kinds
@@ -85,6 +90,7 @@ class _YoloWorld(types.Model):
             bboxes=bboxes,
             input_size=self.input_size,
             original_image_hw=(embedding.original_height, embedding.original_width),
+            output_hw=(height, width),
         )
         return [
             types.Annotation(
@@ -154,6 +160,7 @@ def _untransform_bboxes(
     bboxes: np.ndarray,
     input_size: int,
     original_image_hw: tuple[int, int],
+    output_hw: tuple[int, int],
 ) -> np.ndarray:
     pad_height, pad_width = _padding_hw(
         original_image_hw=original_image_hw, input_size=input_size
@@ -161,12 +168,12 @@ def _untransform_bboxes(
     bboxes -= np.array([pad_width // 2, pad_height // 2] * 2)
     bboxes *= np.array(
         [
-            original_image_hw[1] / (input_size - pad_width),
-            original_image_hw[0] / (input_size - pad_height),
+            output_hw[1] / (input_size - pad_width),
+            output_hw[0] / (input_size - pad_height),
         ]
         * 2
     )
-    bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, original_image_hw[1] - 1)
-    bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, original_image_hw[0] - 1)
+    bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, output_hw[1] - 1)
+    bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, output_hw[0] - 1)
     bboxes = bboxes.round().astype(int)
     return bboxes

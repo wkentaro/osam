@@ -85,3 +85,27 @@ def scale_points(
     # Scale pixel centers, not pixel corners: pixel x spans x - 0.5..x + 0.5,
     # which must cover the same area of the resized image.
     return ((points + 0.5) * np.asarray(scale) - 0.5).astype(np.float32)
+
+
+def scale_prompt(*, prompt: Prompt, scale: tuple[float, float]) -> Prompt:
+    if scale == (1.0, 1.0):
+        return prompt
+    update: dict[str, list | tuple] = {}
+    if prompt.points is not None:
+        update["points"] = [
+            tuple(point)
+            for point in scale_points(
+                points=np.reshape(prompt.points, (-1, 2)), scale=scale
+            ).tolist()
+        ]
+    if prompt.box is not None:
+        corners = scale_points(points=np.reshape(prompt.box, (2, 2)), scale=scale)
+        update["box"] = tuple(corners.ravel().tolist())
+    if prompt.example_boxes is not None:
+        update["example_boxes"] = [
+            tuple(box)
+            for box in (
+                np.reshape(prompt.example_boxes, (-1, 4)) * (scale * 2)
+            ).tolist()
+        ]
+    return prompt.model_copy(update=update)

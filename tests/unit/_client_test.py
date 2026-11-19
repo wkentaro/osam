@@ -673,6 +673,29 @@ def test_client_rejects_a_tracked_mask_outside_the_frames_it_sent(
                 client.track("efficientsam:10m", [image], [prompt])
 
 
+def test_client_takes_a_mask_inside_the_original_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    annotation = osam.types.Annotation(
+        bounding_box=osam.types.BoundingBox(xmin=4, ymin=4, xmax=7, ymax=7),
+        mask=np.ones((4, 4), dtype=bool),
+    )
+    segmented = {
+        "annotations": [annotation.model_dump(mode="json")],
+        "image": f"sha256:{0:064d}",
+    }
+    with _serving() as host:
+        client = osam.Client(host=host)
+        monkeypatch.setattr(_backend(client), "_request", lambda **_: segmented)
+        image = np.zeros((4, 4, 3), np.uint8)
+        [segmented_annotation] = client.segment(
+            "efficientsam:10m", image, original_size=(8, 8)
+        )
+        assert segmented_annotation.bounding_box == annotation.bounding_box
+        with pytest.raises(pydantic.ValidationError, match="outside"):
+            client.segment("efficientsam:10m", image)
+
+
 def test_track_sends_frames_the_server_lacks(monkeypatch: pytest.MonkeyPatch) -> None:
     from tests.unit._server_test import _patch_tracking
 

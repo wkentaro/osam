@@ -14,6 +14,7 @@ def test_untransform_bboxes_keeps_boxes_inside_the_image() -> None:
         bboxes=np.array([[-64.0, 0.0, 700.0, 700.0]]),
         input_size=640,
         original_image_hw=(10, 20),
+        output_hw=(10, 20),
     )
     assert bboxes.tolist() == [[0, 0, 19, 9]]
 
@@ -29,6 +30,7 @@ def test_untransform_bboxes_scales_a_thin_image_per_axis() -> None:
         bboxes=np.array([[0.0, 319.0, 320.0, 319.5]]),
         input_size=640,
         original_image_hw=(10, 20000),
+        output_hw=(10, 20000),
     )
     assert bboxes.tolist() == [[0, 0, 10000, 5]]
 

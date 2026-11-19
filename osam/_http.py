@@ -168,6 +168,7 @@ class HttpBackend:
     ) -> _requests.SegmentResponse:
         assert not isinstance(request.image, str)
         image: np.ndarray = request.image
+        canvas_size = request.original_size or (image.shape[1], image.shape[0])
         body: dict[str, Any] = request.model_dump(
             mode="json", exclude={"image"}, exclude_none=True
         )
@@ -179,7 +180,7 @@ class HttpBackend:
                     path="/api/segment",
                     body=body | {"image": image_field},
                 ),
-                context={"canvas_size": (image.shape[1], image.shape[0])},
+                context={"canvas_size": canvas_size},
             )
             self._image = (ref, encoded, True)
             return response

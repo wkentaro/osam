@@ -2,7 +2,6 @@ import types as pytypes
 import typing
 
 import numpy as np
-import PIL.Image
 import pytest
 
 from osam import _types as types
@@ -18,6 +17,7 @@ from osam._models.sam3._models import Sam3
         ([0.2, 0.3, 0.4, 0.5], (20, 30, 39, 49)),
         ([0.206, 0.306, 0.214, 0.314], (21, 31, 21, 31)),
         ([0.375, 0.125, 0.625, 0.875], (37, 12, 62, 87)),
+        ([0.105, 0.105, 0.895, 0.895], (10, 10, 89, 89)),
     ],
 )
 def test_decode_boxes_the_pixels_inside_the_predicted_edges(
@@ -202,8 +202,6 @@ def test_file_runs_fastest_on_the_device(
     ort_version: tuple[int, int],
     expected: str,
 ) -> None:
-    from osam._models.sam3 import _models
-
     monkeypatch.setattr(_models, "_ORT_VERSION", ort_version)
     assert _models._file(name="image_encoder", device=device) == expected
     assert _models._file(name="decoder", device="cpu") == "decoder"
@@ -228,29 +226,6 @@ def test_remove_deletes_the_files_an_upgrade_leaves(
         "sha256:5934b587489f52cce77fa445c48ebdf1c09ee79c57d5d7342e0a727f27323449",
         "sha256:80fe0ef83dd53d64b9918fa23c97ab0473502c0c9f2369ac81c4017220c92bc7",
     } <= set(removed)
-
-
-def test_crop_mask_matches_the_mask_resized_to_the_image() -> None:
-    # As sam3-onnx resizes the whole mask, on boxes that end on odd native
-    # pixels and on the image's edges.
-    mask = np.random.default_rng(0).random((36, 36)).astype(np.float32)
-    height, width = 100, 160
-    full = (
-        np.asarray(
-            PIL.Image.fromarray(mask).resize(
-                (width, height), resample=PIL.Image.Resampling.BILINEAR
-            )
-        )
-        > 0.5
-    )
-    for xmin, ymin, xmax, ymax in [(7, 3, 61, 50), (0, 0, 159, 99), (150, 90, 159, 99)]:
-        bounding_box = types.BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
-        np.testing.assert_array_equal(
-            _models._crop_mask(
-                mask=mask, bounding_box=bounding_box, height=height, width=width
-            ),
-            full[ymin : ymax + 1, xmin : xmax + 1],
-        )
 
 
 @pytest.mark.parametrize(

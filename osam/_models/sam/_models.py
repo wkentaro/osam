@@ -21,13 +21,13 @@ class SamBase(types.Model):
     prompt_kinds = frozenset({"points", "box"})
 
     @abc.abstractmethod
-    def _generate_mask_from_image_embedding(
+    def _generate_logits_from_image_embedding(
         self,
         *,
         image_embedding: types.ImageEmbedding,
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
-    ) -> npt.NDArray[np.bool_]:
+    ) -> npt.NDArray[np.float32]:
         # point_labels: 0 for background, 1 for foreground, and 2 and 3 for a
         # box's left-top and right-bottom corners.
         pass
@@ -39,13 +39,20 @@ class SamBase(types.Model):
 
     @override
     def _decode(
-        self, *, embedding: types.ImageEmbedding, prompt: types.Prompt
+        self,
+        *,
+        embedding: types.ImageEmbedding,
+        prompt: types.Prompt,
+        height: int,
+        width: int,
     ) -> list[types.Annotation]:
         points, point_labels = types.point_inputs(prompt=prompt)
-        return types.annotations_from_mask(
-            mask=self._generate_mask_from_image_embedding(
+        return types.annotations_from_logits(
+            logits=self._generate_logits_from_image_embedding(
                 image_embedding=embedding, points=points, point_labels=point_labels
-            )
+            ),
+            height=height,
+            width=width,
         )
 
 
@@ -93,13 +100,13 @@ class Sam(SamBase):
         )
 
     @override
-    def _generate_mask_from_image_embedding(
+    def _generate_logits_from_image_embedding(
         self,
         *,
         image_embedding: types.ImageEmbedding,
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
-    ) -> npt.NDArray[np.bool_]:
+    ) -> npt.NDArray[np.float32]:
         new_height, new_width = fit_hw(
             height=image_embedding.original_height,
             width=image_embedding.original_width,
@@ -137,15 +144,7 @@ class Sam(SamBase):
         }
 
         masks, _, _ = self._inference_sessions["decoder"].run(None, decoder_inputs)
-        logits = cast(npt.NDArray[np.float32], masks)[0, 0]
-        if logits.shape != original_hw:
-            logits = np.asarray(
-                PIL.Image.fromarray(logits).resize(
-                    (original_hw[1], original_hw[0]),
-                    resample=PIL.Image.Resampling.BILINEAR,
-                )
-            )
-        return logits > 0.0
+        return cast(npt.NDArray[np.float32], masks)[0, 0]
 
 
 class Sam100m(Sam):
