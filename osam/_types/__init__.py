@@ -1,4 +1,5 @@
 # osam.types with the types that osam uses inside, which aren't public.
+from .._logits import mask_from_logits
 from ..types import *  # noqa: F403
 from ..types import __all__ as _public
 from ._image_embedding import Feature
@@ -6,7 +7,6 @@ from ._image_embedding import ImageEmbedding
 from ._model import Model
 from ._model import annotations_from_logits
 from ._model import annotations_from_mask
-from ._model import mask_from_logits
 from ._prompt import Prompt
 from ._prompt import point_inputs
 from ._prompt import scale_points

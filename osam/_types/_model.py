@@ -10,11 +10,12 @@ from collections.abc import Callable
 import numpy as np
 import numpy.typing as npt
 import onnxruntime
-import PIL.Image
 from loguru import logger
 
 from .. import _onnx
 from .._errors import NotPulledError
+from .._logits import mask_from_logits
+from .._logits import shrink_logits
 from ..types import Annotation
 from ..types import Blob
 from ..types import BoundingBox
@@ -334,7 +335,7 @@ def annotations_from_logits(
     width: int,
     score: float | None = None,
 ) -> list[Annotation]:
-    logits = _shrink_logits(logits=logits, height=height, width=width)
+    logits = shrink_logits(logits=logits, height=height, width=width)
     positive = logits > 0
     if logits.shape == (height, width):
         return annotations_from_mask(mask=positive, score=score)
@@ -365,49 +366,6 @@ def annotations_from_logits(
         for annotation in annotations_from_mask(mask=mask, score=score)
         if annotation.bounding_box is not None
     ]
-
-
-def _shrink_logits(
-    *, logits: npt.NDArray[np.float32], height: int, width: int
-) -> npt.NDArray[np.float32]:
-    if logits.shape[0] <= height and logits.shape[1] <= width:
-        return logits
-    return np.asarray(
-        PIL.Image.fromarray(logits).resize(
-            (min(logits.shape[1], width), min(logits.shape[0], height)),
-            resample=PIL.Image.Resampling.BILINEAR,
-        )
-    )
-
-
-def mask_from_logits(
-    *,
-    logits: npt.NDArray[np.float32],
-    box: tuple[int, int, int, int],
-    height: int,
-    width: int,
-    threshold: float,
-) -> npt.NDArray[np.bool_]:
-    logits = _shrink_logits(logits=logits, height=height, width=width)
-    x0, y0, x1, y1 = box
-    scale_x, scale_y = logits.shape[1] / width, logits.shape[0] / height
-    image = PIL.Image.fromarray(logits)
-    mask = np.empty((y1 - y0, x1 - x0), dtype=bool)
-    STRIP_PIXELS: typing.Final = 1 << 22
-    rows = max(1, STRIP_PIXELS // (x1 - x0))
-    for top in range(y0, y1, rows):
-        bottom = min(top + rows, y1)
-        mask[top - y0 : bottom - y0] = (
-            np.asarray(
-                image.resize(
-                    (x1 - x0, bottom - top),
-                    resample=PIL.Image.Resampling.BILINEAR,
-                    box=(x0 * scale_x, top * scale_y, x1 * scale_x, bottom * scale_y),
-                )
-            )
-            > threshold
-        )
-    return mask
 
 
 def annotations_from_mask(
