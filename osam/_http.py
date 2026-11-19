@@ -178,7 +178,8 @@ class HttpBackend:
                     method="POST",
                     path="/api/segment",
                     body=body | {"image": image_field},
-                )
+                ),
+                context={"canvas_size": (image.shape[1], image.shape[0])},
             )
             self._image = (ref, encoded, True)
             return response
@@ -213,6 +214,7 @@ class HttpBackend:
             mode="json", exclude={"frames"}, exclude_none=True
         )
         callback_failed = False
+        canvas_size = (frames[0].shape[1], frames[0].shape[0])
 
         def post(sent: list[str]) -> types.TrackResponse:
             nonlocal callback_failed
@@ -244,7 +246,11 @@ class HttpBackend:
                             frames=frames, done=types.TrackDone.model_validate(line)
                         )
                     else:
-                        frames.append(types.TrackFrame.model_validate(line))
+                        frames.append(
+                            types.TrackFrame.model_validate(
+                                line, context={"canvas_size": canvas_size}
+                            )
+                        )
             raise RuntimeError("tracking stream ended without a done record")
 
         # The ones a 412 lists inline, then, if the server lost more, such as

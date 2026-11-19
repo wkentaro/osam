@@ -19,6 +19,7 @@ from typing import Final
 import numpy as np
 import onnxruntime
 import PIL.Image
+import pydantic
 import pytest
 import uvicorn
 
@@ -622,6 +623,34 @@ def test_timeout_on_a_silent_host() -> None:
         with pytest.raises(TimeoutError):
             osam.Client(host=f"127.0.0.1:{port}", timeout=0.5)
         assert time.monotonic() - start < 5
+
+
+def test_client_rejects_a_mask_outside_the_image_it_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    annotation = osam.types.Annotation(
+        bounding_box=osam.types.BoundingBox(xmin=0, ymin=0, xmax=3, ymax=3),
+        mask=np.ones((4, 4), dtype=bool),
+    )
+    segmented = {
+        "annotations": [annotation.model_dump(mode="json")],
+        "image": f"sha256:{0:064d}",
+    }
+    tracked = {"frame": 0, "annotations": [annotation.model_dump(mode="json")]}
+    with _serving() as host:
+        client = osam.Client(host=host)
+        backend = _backend(client)
+        monkeypatch.setattr(backend, "_request", lambda **_: segmented)
+        monkeypatch.setattr(
+            backend, "_stream", lambda **_: (line for line in [tracked])
+        )
+        prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+        assert client.segment("efficientsam:10m", np.zeros((4, 4, 3), np.uint8))
+        for image in [np.zeros((4, 3, 3), np.uint8), np.zeros((3, 4, 3), np.uint8)]:
+            with pytest.raises(pydantic.ValidationError, match="outside"):
+                client.segment("efficientsam:10m", image)
+            with pytest.raises(pydantic.ValidationError, match="outside"):
+                client.track("efficientsam:10m", [image], [prompt])
 
 
 def test_track_sends_frames_the_server_lacks(monkeypatch: pytest.MonkeyPatch) -> None:

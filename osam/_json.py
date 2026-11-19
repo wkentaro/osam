@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import io
+import struct
 
 import numpy as np
 import PIL.Image
@@ -29,6 +30,39 @@ def image_b64data_to_ndarray(*, b64data, mode: str | None = None):
         image = PIL.Image.open(io.BytesIO(data))
         return np.asarray(image if mode is None else image.convert(mode))
     # OSError covers a file PIL can't identify and a truncated one.
+    except (OSError, PIL.Image.DecompressionBombError) as e:
+        raise ValueError(f"not an image file: {e}") from e
+
+
+def _static_png_size(*, png: bytes) -> tuple[int, int]:
+    if not png.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("not a PNG file")
+    sizes: list[tuple[int, int]] = []
+    offset = 8
+    try:
+        while True:
+            length, kind = struct.unpack_from(">I4s", png, offset)
+            if kind == b"IDAT":
+                break
+            if kind == b"acTL":
+                raise ValueError("an animated PNG is not a mask")
+            if kind == b"IHDR":
+                sizes.append(struct.unpack_from(">II", png, offset + 8))
+            offset += 12 + length
+    except struct.error as e:
+        raise ValueError(f"not a PNG file: {e}") from e
+    if len(sizes) != 1:
+        raise ValueError(f"a PNG has one IHDR, not {len(sizes)}")
+    return sizes[0]
+
+
+def mask_b64data_to_ndarray(*, b64data: str, size: tuple[int, int]) -> np.ndarray:
+    png = base64.b64decode(b64data)
+    png_size = _static_png_size(png=png)
+    if png_size != size:
+        raise ValueError(f"mask size {png_size} != bounding box size {size}")
+    try:
+        return np.asarray(PIL.Image.open(io.BytesIO(png))) > 0
     except (OSError, PIL.Image.DecompressionBombError) as e:
         raise ValueError(f"not an image file: {e}") from e
 
