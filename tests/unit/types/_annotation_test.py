@@ -73,8 +73,15 @@ def _png_chunk(*, kind: bytes, data: bytes) -> bytes:
             "one IHDR, not 2",
         ),
         (_png_chunk(kind=b"acTL", data=struct.pack(">II", 1, 0)), "animated"),
+        (
+            _png_chunk(
+                kind=b"fcTL",
+                data=struct.pack(">IIIIIHHBB", 0, 2, 2, 2, 2, 0, 0, 0, 0),
+            ),
+            "animated",
+        ),
     ],
-    ids=["second-ihdr", "animated"],
+    ids=["second-ihdr", "animated", "frame-control"],
 )
 def test_json_rejects_a_mask_png_pillow_would_read_otherwise_before_decoding_it(
     monkeypatch: pytest.MonkeyPatch, extra_chunk: bytes, message: str
@@ -93,3 +100,16 @@ def test_json_rejects_a_mask_png_pillow_would_read_otherwise_before_decoding_it(
 
     with pytest.raises(pydantic.ValidationError, match=message):
         Annotation.model_validate(data)
+
+
+def test_json_takes_a_mask_with_a_context_of_another_type() -> None:
+    annotation = Annotation(
+        bounding_box=BoundingBox(xmin=0, ymin=0, xmax=3, ymax=3),
+        mask=np.ones((4, 4), dtype=bool),
+    )
+
+    restored = Annotation.model_validate_json(
+        annotation.model_dump_json(), context=object()
+    )
+
+    assert restored.mask is not None and restored.mask.all()

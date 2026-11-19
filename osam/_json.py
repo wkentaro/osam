@@ -44,7 +44,7 @@ def _static_png_size(*, png: bytes) -> tuple[int, int]:
             length, kind = struct.unpack_from(">I4s", png, offset)
             if kind == b"IDAT":
                 break
-            if kind == b"acTL":
+            if kind in (b"acTL", b"fcTL", b"fdAT"):
                 raise ValueError("an animated PNG is not a mask")
             if kind == b"IHDR":
                 sizes.append(struct.unpack_from(">II", png, offset + 8))

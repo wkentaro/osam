@@ -625,30 +625,50 @@ def test_timeout_on_a_silent_host() -> None:
         assert time.monotonic() - start < 5
 
 
-def test_client_rejects_a_mask_outside_the_image_it_sent(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    annotation = osam.types.Annotation(
+def _outside_mask_annotation() -> dict[str, Any]:
+    return osam.types.Annotation(
         bounding_box=osam.types.BoundingBox(xmin=0, ymin=0, xmax=3, ymax=3),
         mask=np.ones((4, 4), dtype=bool),
-    )
+    ).model_dump(mode="json")
+
+
+def test_client_rejects_a_segment_mask_outside_the_image_it_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     segmented = {
-        "annotations": [annotation.model_dump(mode="json")],
+        "annotations": [_outside_mask_annotation()],
         "image": f"sha256:{0:064d}",
     }
-    tracked = {"frame": 0, "annotations": [annotation.model_dump(mode="json")]}
     with _serving() as host:
         client = osam.Client(host=host)
-        backend = _backend(client)
-        monkeypatch.setattr(backend, "_request", lambda **_: segmented)
-        monkeypatch.setattr(
-            backend, "_stream", lambda **_: (line for line in [tracked])
-        )
-        prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+        monkeypatch.setattr(_backend(client), "_request", lambda **_: segmented)
         assert client.segment("efficientsam:10m", np.zeros((4, 4, 3), np.uint8))
         for image in [np.zeros((4, 3, 3), np.uint8), np.zeros((3, 4, 3), np.uint8)]:
             with pytest.raises(pydantic.ValidationError, match="outside"):
                 client.segment("efficientsam:10m", image)
+
+
+def test_client_rejects_a_tracked_mask_outside_the_frames_it_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def stream(*, body: dict[str, Any], **_: Any):
+        yield {"frame": 0, "annotations": [_outside_mask_annotation()]}
+        yield {
+            "done": True,
+            "objects": [],
+            "result": "sha256:0",
+            "cache": "miss",
+            "images": body["frames"],
+        }
+
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    with _serving() as host:
+        client = osam.Client(host=host)
+        monkeypatch.setattr(_backend(client), "_stream", stream)
+        assert client.track(
+            "efficientsam:10m", [np.zeros((4, 4, 3), np.uint8)], [prompt]
+        )
+        for image in [np.zeros((4, 3, 3), np.uint8), np.zeros((3, 4, 3), np.uint8)]:
             with pytest.raises(pydantic.ValidationError, match="outside"):
                 client.track("efficientsam:10m", [image], [prompt])
 

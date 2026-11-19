@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import Annotated
 
 import numpy as np
@@ -35,7 +36,11 @@ class Annotation(pydantic.BaseModel):
         bb = info.data.get("bounding_box")
         if bb is None:
             raise ValueError("bounding_box is required when mask is provided")
-        canvas = (info.context or {}).get("canvas_size")
+        canvas = (
+            info.context.get("canvas_size")
+            if isinstance(info.context, Mapping)
+            else None
+        )
         if canvas is not None and not (
             0 <= bb.xmin
             and 0 <= bb.ymin
