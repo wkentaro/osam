@@ -32,7 +32,7 @@ from ._client import ResponseError
 _PROMPT_KEYS: Final = frozenset(
     name
     for name in inspect.signature(Client.segment).parameters
-    if name not in ("self", "model", "image", "keep_alive")
+    if name not in ("self", "model", "image", "keep_alive", "original_size")
 )
 
 

@@ -213,6 +213,19 @@ def test_an_object_keeps_its_color_when_an_earlier_one_leaves() -> None:
     assert both[4, 5].tolist() == alone[4, 5].tolist() != [0, 0, 0]
 
 
+def test_run_prompt_takes_no_original_size(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "image.png"
+    PIL.Image.fromarray(np.zeros((4, 4, 3), np.uint8)).save(path)
+    prompt = '{"points": [[0, 0]], "point_labels": [1], "original_size": [8, 8]}'
+
+    result = CliRunner().invoke(
+        __main__.run, ["efficientsam:10m", "--image", str(path), "--prompt", prompt]
+    )
+
+    assert result.exit_code == 2
+    assert "keys among" in result.output
+
+
 def test_run_video_passes_include_masks_to_the_request(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
