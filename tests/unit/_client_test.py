@@ -696,6 +696,26 @@ def test_client_takes_a_mask_inside_the_original_size(
             client.segment("efficientsam:10m", image)
 
 
+def test_segment_sends_include_mask_scores_only_when_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bodies: list[dict[str, Any]] = []
+    with _serving() as host:
+        client = osam.Client(host=host)
+        monkeypatch.setattr(
+            _backend(client),
+            "_request",
+            lambda *, body, **_: (
+                bodies.append(body) or {"annotations": [], "image": f"sha256:{0:064d}"}
+            ),
+        )
+        image = np.zeros((4, 4, 3), np.uint8)
+        client.segment("efficientsam:10m", image)
+        client.segment("efficientsam:10m", image, include_mask_scores=True)
+    assert "include_mask_scores" not in bodies[0]
+    assert bodies[1]["include_mask_scores"] is True
+
+
 def test_track_sends_frames_the_server_lacks(monkeypatch: pytest.MonkeyPatch) -> None:
     from tests.unit._server_test import _patch_tracking
 

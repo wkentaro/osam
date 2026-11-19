@@ -170,7 +170,10 @@ class HttpBackend:
         image: np.ndarray = request.image
         canvas_size = request.original_size or (image.shape[1], image.shape[0])
         body: dict[str, Any] = request.model_dump(
-            mode="json", exclude={"image"}, exclude_none=True
+            mode="json",
+            exclude={"image"}
+            | (set() if request.include_mask_scores else {"include_mask_scores"}),
+            exclude_none=True,
         )
 
         def post(image_field: str) -> _requests.SegmentResponse:
