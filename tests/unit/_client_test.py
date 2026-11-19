@@ -741,6 +741,11 @@ def test_client_takes_score_only_boxes_inside_the_original_size_alone(
         ).all()
         with pytest.raises(pydantic.ValidationError, match="outside"):
             client.segment("efficientsam:10m", image, include_mask_scores=True)
+        segmented["annotations"][0]["bounding_box"] = dict(
+            xmin=3, ymin=0, xmax=1, ymax=3
+        )
+        with pytest.raises(pydantic.ValidationError, match="inverted"):
+            client.segment("efficientsam:10m", image, include_mask_scores=True)
 
 
 def test_track_sends_frames_the_server_lacks(monkeypatch: pytest.MonkeyPatch) -> None:
