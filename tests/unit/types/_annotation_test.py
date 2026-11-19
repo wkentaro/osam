@@ -55,6 +55,16 @@ def test_json_rejects_mask_scores_other_than_a_grayscale_png(
         )
 
 
+def test_json_warns_of_mask_scores_past_pillow_s_warning_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(PIL.Image, "MAX_IMAGE_PIXELS", 3)
+    data = Annotation(mask_scores=np.zeros((2, 2), np.uint8)).model_dump_json()
+
+    with pytest.warns(PIL.Image.DecompressionBombWarning):
+        Annotation.model_validate_json(data)
+
+
 def test_rejects_empty_mask_scores() -> None:
     with pytest.raises(pydantic.ValidationError, match="non-empty"):
         Annotation(mask_scores=np.zeros((0, 288), np.uint8))

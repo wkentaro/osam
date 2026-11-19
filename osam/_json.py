@@ -73,11 +73,17 @@ def scores_b64data_to_ndarray(*, b64data: str) -> np.ndarray:
     if width * height > (limit := max_mask_pixels_without_image()):
         raise ValueError(f"scores size {(width, height)} exceeds {limit} pixels")
     try:
-        image = PIL.PngImagePlugin.PngImageFile(io.BytesIO(png))
+        image = PIL.Image.open(io.BytesIO(png), formats=["PNG"])
         if image.mode != "L":
             raise ValueError(f"scores are an 8-bit grayscale PNG, not {image.mode}")
         return np.asarray(image)
-    except (OSError, OverflowError, SyntaxError, struct.error) as e:
+    except (
+        OSError,
+        OverflowError,
+        SyntaxError,
+        struct.error,
+        PIL.Image.DecompressionBombError,
+    ) as e:
         raise ValueError(f"not a PNG file: {e}") from e
 
 
