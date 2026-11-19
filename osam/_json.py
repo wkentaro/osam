@@ -67,17 +67,29 @@ def _static_png_size(*, png: bytes) -> tuple[int, int]:
     return sizes[0]
 
 
-def mask_b64data_to_ndarray(*, b64data: str, size: tuple[int, int]) -> np.ndarray:
+def mask_b64data_to_ndarray(
+    *, b64data: str, size: tuple[int, int], within_canvas: bool
+) -> np.ndarray:
     png = base64.b64decode(b64data)
     png_size = _static_png_size(png=png)
     if png_size != size:
         raise ValueError(f"mask size {png_size} != bounding box size {size}")
     try:
-        image = PIL.PngImagePlugin.PngImageFile(io.BytesIO(png))
+        image = (
+            PIL.PngImagePlugin.PngImageFile(io.BytesIO(png))
+            if within_canvas
+            else PIL.Image.open(io.BytesIO(png), formats=["PNG"])
+        )
         if (channels := len(image.getbands())) != 1:
             raise ValueError(f"a mask has one channel, not {channels}")
         return np.asarray(image) > 0
-    except (OSError, OverflowError, SyntaxError, struct.error) as e:
+    except (
+        OSError,
+        OverflowError,
+        SyntaxError,
+        struct.error,
+        PIL.Image.DecompressionBombError,
+    ) as e:
         raise ValueError(f"not a PNG file: {e}") from e
 
 

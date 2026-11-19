@@ -188,3 +188,16 @@ def test_json_rejects_a_truncated_mask() -> None:
 
     with pytest.raises(pydantic.ValidationError, match="not a PNG file"):
         Annotation.model_validate(data)
+
+
+def test_json_warns_of_a_mask_past_pillow_s_warning_limit_without_its_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(PIL.Image, "MAX_IMAGE_PIXELS", 10)
+    data = Annotation(
+        bounding_box=BoundingBox(xmin=0, ymin=0, xmax=3, ymax=3),
+        mask=np.ones((4, 4), dtype=bool),
+    ).model_dump_json()
+
+    with pytest.warns(PIL.Image.DecompressionBombWarning):
+        Annotation.model_validate_json(data)

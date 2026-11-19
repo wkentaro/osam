@@ -57,7 +57,9 @@ class Annotation(pydantic.BaseModel):
                 f"mask size {size} exceeds {limit} pixels "
                 "without the image's canvas_size in the validation context"
             )
-        return _json.mask_b64data_to_ndarray(b64data=mask, size=size)
+        return _json.mask_b64data_to_ndarray(
+            b64data=mask, size=size, within_canvas=canvas is not None
+        )
 
     @pydantic.field_validator("mask")
     def validate_mask(cls, mask: np.ndarray | None) -> np.ndarray | None:
