@@ -158,6 +158,8 @@ class Runtime:
                 if model_type.tracks()
                 else ["segment"],
                 prompt_kinds=sorted(model_type.prompt_kinds),
+                input_size=model_type.input_size,
+                input_resize=model_type.input_resize,
             )
             for model_type in self._model_types
         ]

@@ -1,11 +1,14 @@
+import contextlib
 import pathlib
 from collections.abc import Iterator
 
 import imgviz
 import numpy as np
+import PIL.Image
 import pytest
 
 from osam import _registry
+from osam import _runtime
 from osam import _types as types
 
 image_path = (
@@ -301,3 +304,38 @@ def test_segment_point_filtered_by_sam3(
     )
 
     assert annotations == []
+
+
+@pytest.mark.model_conformance
+@pytest.mark.parametrize(
+    "model",
+    [
+        "sam:100m",
+        "sam2:tiny",
+        "yoloworld:latest",
+        "sam3:latest",
+    ],
+)
+def test_encode_image_takes_an_image_resized_to_its_input_shape(model: str) -> None:
+    _loaded.clear()
+    loaded = _registry.get_model_type_by_name(name=model)(device="cpu")
+    _loaded.append(loaded)
+    with contextlib.closing(_runtime.Runtime(model_types=[type(loaded)])) as runtime:
+        (info,) = runtime.list()
+    image = imgviz.io.imread(image_path)[:1599]
+    height, width = info.input_shape(height=image.shape[0], width=image.shape[1])
+    resized = np.asarray(
+        PIL.Image.fromarray(image).resize(
+            (width, height), resample=PIL.Image.Resampling.BILINEAR
+        )
+    )
+
+    expected = loaded.encode_image(image=image)
+    actual = loaded.encode_image(image=resized)
+
+    for actual_feature, expected_feature in zip(
+        [actual.embedding, *actual.extra_features],
+        [expected.embedding, *expected.extra_features],
+        strict=True,
+    ):
+        np.testing.assert_array_equal(actual_feature, expected_feature)

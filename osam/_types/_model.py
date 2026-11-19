@@ -18,6 +18,7 @@ from ..types import Blob
 from ..types import BoundingBox
 from ..types import Device
 from ..types import ModelMetadata
+from ..types._model_info import InputResize
 from ._image_embedding import ImageEmbedding
 from ._prompt import THRESHOLDS
 from ._prompt import Prompt
@@ -33,6 +34,9 @@ class Model(abc.ABC):
 
     # The prompt kinds decode takes; others raise ValueError.
     prompt_kinds: frozenset[PromptKind]
+
+    input_size: int
+    input_resize: InputResize
 
     # The file of each session, by session name, which remove deletes; a model
     # with files for some devices lists them all, and _device_blobs picks.

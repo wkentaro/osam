@@ -41,6 +41,7 @@ def test_encode_image_normalizes_channels(
         graph, opset_imports=[onnx.helper.make_opsetid("", 13)], ir_version=8
     )
     model = Sam2Tiny.__new__(Sam2Tiny)
+    model.input_size = 8
     model._inference_sessions = {
         "encoder": onnxruntime.InferenceSession(
             encoder.SerializeToString(), providers=["CPUExecutionProvider"]

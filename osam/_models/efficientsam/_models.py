@@ -16,6 +16,9 @@ class EfficientSam(SamBase):
         license_spdx="Apache-2.0",
     )
 
+    input_size = 1024
+    input_resize = "stretch"
+
     @override
     def encode_image(self, *, image: npt.NDArray[np.uint8]) -> types.ImageEmbedding:
         batched_images: npt.NDArray[np.float32] = (
@@ -44,7 +47,7 @@ class EfficientSam(SamBase):
         point_labels: npt.NDArray[np.float32],
     ) -> npt.NDArray[np.bool_]:
         # The decoder scales the points by 1024 / size itself.
-        scale = 1024 / np.array(
+        scale = self.input_size / np.array(
             [image_embedding.original_width, image_embedding.original_height],
             dtype=np.float32,
         )
