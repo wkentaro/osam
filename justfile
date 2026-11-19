@@ -29,11 +29,11 @@ lint:
 
 # Run tests
 test *pytest_args="--numprocesses=auto":
-    uv run pytest -v --durations=20 --dist loadgroup tests/ "$@"
+    uv run pytest -v --durations=20 tests/ "$@"
 
 # Run tests with coverage
 coverage:
-    uv run pytest -v --dist loadgroup tests/ --numprocesses=auto --cov=osam --cov-report=term-missing
+    uv run pytest -v tests/ --numprocesses=auto --cov=osam --cov-report=term-missing
 
 # Prepare a release
 [script]
