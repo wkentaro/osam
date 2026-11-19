@@ -36,15 +36,28 @@ def test_json_roundtrip_decodes_mask_scores() -> None:
     np.testing.assert_array_equal(restored.mask_scores, mask_scores)
 
 
-def test_json_rejects_mask_scores_of_several_channels() -> None:
-    with pytest.raises(pydantic.ValidationError, match="2-D uint8"):
+@pytest.mark.parametrize(
+    ("image", "format"),
+    [
+        (PIL.Image.new("RGB", (2, 2)), "PNG"),
+        (PIL.Image.new("P", (2, 2)), "PNG"),
+        (PIL.Image.new("L", (2, 2)), "JPEG"),
+    ],
+)
+def test_json_rejects_mask_scores_other_than_a_grayscale_png(
+    image: PIL.Image.Image, format: str
+) -> None:
+    buffer = io.BytesIO()
+    image.save(buffer, format=format)
+    with pytest.raises(pydantic.ValidationError, match="PNG"):
         Annotation.model_validate(
-            {
-                "mask_scores": _json.image_ndarray_to_b64data(
-                    ndarray=np.zeros((2, 2, 3), np.uint8)
-                )
-            }
+            {"mask_scores": base64.b64encode(buffer.getvalue()).decode()}
         )
+
+
+def test_rejects_empty_mask_scores() -> None:
+    with pytest.raises(pydantic.ValidationError, match="non-empty"):
+        Annotation(mask_scores=np.zeros((0, 288), np.uint8))
 
 
 def test_json_rejects_a_mask_of_another_size_than_its_box_before_decoding_it(

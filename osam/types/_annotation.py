@@ -32,7 +32,8 @@ class Annotation(pydantic.BaseModel):
     mask_scores: Base64Image | None = pydantic.Field(
         default=None,
         description="A base64 PNG of the mask's probability, 0 to 255, on the "
-        "model's grid over the whole image; null unless the request asked for it",
+        "model's grid over the whole image; null unless the request asked for it. "
+        "Rounding to 8 bits can flip edge pixels of a mask built from it",
     )
 
     @pydantic.field_validator("mask", mode="before")
@@ -81,15 +82,17 @@ class Annotation(pydantic.BaseModel):
     def decode_mask_scores(cls, mask_scores: object) -> object:
         if not isinstance(mask_scores, str):
             return mask_scores
-        return _json.image_b64data_to_ndarray(b64data=mask_scores)
+        return _json.scores_b64data_to_ndarray(b64data=mask_scores)
 
     @pydantic.field_validator("mask_scores")
     @classmethod
     def validate_mask_scores(cls, mask_scores: np.ndarray | None) -> np.ndarray | None:
         if mask_scores is not None and (
-            mask_scores.dtype != np.uint8 or mask_scores.ndim != 2
+            mask_scores.dtype != np.uint8
+            or mask_scores.ndim != 2
+            or not mask_scores.size
         ):
-            raise ValueError("mask_scores must be a 2-D uint8 array")
+            raise ValueError("mask_scores must be a non-empty 2-D uint8 array")
         return mask_scores
 
     @pydantic.model_validator(mode="after")
