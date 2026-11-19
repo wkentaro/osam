@@ -289,9 +289,8 @@ class Runtime:
             embedding=embedding,
             prompt=request,
             original_size=request.original_size,
+            include_masks=request.include_masks,
         )
-        if not request.include_masks:
-            annotations = [a.model_copy(update={"mask": None}) for a in annotations]
         return SegmentResponse(annotations=annotations, image=image_ref)
 
     def _cache_embedding(

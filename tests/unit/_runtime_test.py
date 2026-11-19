@@ -285,6 +285,22 @@ def test_unavailable_device_raises_when_created(
         _runtime.Runtime(device="gpu", model_types=[])  # type: ignore[arg-type]
 
 
+def test_segment_tells_the_model_whether_to_build_masks(
+    monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
+) -> None:
+    calls: list[bool] = []
+    monkeypatch.setattr(
+        runtime.model_type(name="a"),
+        "_decode",
+        lambda self, *, include_masks, **_: calls.append(include_masks) or [],
+    )
+
+    _segment(runtime=runtime, model="a", include_masks=False)
+    _segment(runtime=runtime, model="a")
+
+    assert calls == [False, True]
+
+
 def test_segment_decodes_at_the_original_size(
     monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
 ) -> None:

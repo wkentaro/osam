@@ -45,6 +45,7 @@ class SamBase(types.Model):
         prompt: types.Prompt,
         height: int,
         width: int,
+        include_masks: bool,
     ) -> list[types.Annotation]:
         points, point_labels = types.point_inputs(prompt=prompt)
         return types.annotations_from_logits(

@@ -261,6 +261,7 @@ class Model(abc.ABC):
         embedding: ImageEmbedding,
         prompt: Prompt,
         original_size: tuple[int, int] | None = None,
+        include_masks: bool = True,
     ) -> list[Annotation]:
         width, height = original_size or (
             embedding.original_width,
@@ -285,13 +286,26 @@ class Model(abc.ABC):
                 f"{self.name} takes {', '.join(sorted(self.prompt_kinds))}, "
                 f"not {', '.join(sorted(unsupported))}"
             )
-        return self._decode(
-            embedding=embedding, prompt=prompt, height=height, width=width
+        annotations = self._decode(
+            embedding=embedding,
+            prompt=prompt,
+            height=height,
+            width=width,
+            include_masks=include_masks,
         )
+        if not include_masks:
+            annotations = [a.model_copy(update={"mask": None}) for a in annotations]
+        return annotations
 
     @abc.abstractmethod
     def _decode(
-        self, *, embedding: ImageEmbedding, prompt: Prompt, height: int, width: int
+        self,
+        *,
+        embedding: ImageEmbedding,
+        prompt: Prompt,
+        height: int,
+        width: int,
+        include_masks: bool,
     ) -> list[Annotation]:
         pass
 

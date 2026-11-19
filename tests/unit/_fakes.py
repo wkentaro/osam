@@ -37,6 +37,7 @@ class FakeModel(types.Model):
         prompt: types.Prompt,
         height: int,
         width: int,
+        include_masks: bool,
     ) -> list[types.Annotation]:
         return []
 

@@ -53,6 +53,7 @@ class _FakeModel(_model.Model):
         prompt: types.Prompt,
         height: int,
         width: int,
+        include_masks: bool,
     ) -> list[types.Annotation]:
         assert prompt.points is not None and prompt.point_labels is not None
         mask = np.zeros((embedding.original_height, embedding.original_width), bool)

@@ -338,6 +338,7 @@ class Sam3(types.Model):
         prompt: types.Prompt,
         height: int,
         width: int,
+        include_masks: bool,
     ) -> list[types.Annotation]:
 
         score_threshold: float = (
@@ -443,12 +444,16 @@ class Sam3(types.Model):
                 xmax=round(box[2]),
                 ymax=round(box[3]),
             )
-            cropped_mask: NDArray[np.bool_] = types.mask_from_logits(
-                logits=masks_native[i, 0],
-                box=(bb.xmin, bb.ymin, bb.xmax + 1, bb.ymax + 1),
-                height=height,
-                width=width,
-                threshold=0.5,
+            cropped_mask = (
+                types.mask_from_logits(
+                    logits=masks_native[i, 0],
+                    box=(bb.xmin, bb.ymin, bb.xmax + 1, bb.ymax + 1),
+                    height=height,
+                    width=width,
+                    threshold=0.5,
+                )
+                if include_masks
+                else None
             )
             annotations.append(
                 types.Annotation(
