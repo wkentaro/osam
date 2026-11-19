@@ -27,6 +27,26 @@ def test_json_roundtrip_decodes_mask() -> None:
     assert PIL.Image.open(io.BytesIO(png)).mode == "1"
 
 
+def test_json_roundtrip_decodes_mask_scores() -> None:
+    mask_scores = np.array([[0, 128, 255], [1, 2, 3]], np.uint8)
+    restored = Annotation.model_validate_json(
+        Annotation(mask_scores=mask_scores).model_dump_json()
+    )
+    assert restored.mask_scores is not None
+    np.testing.assert_array_equal(restored.mask_scores, mask_scores)
+
+
+def test_json_rejects_mask_scores_of_several_channels() -> None:
+    with pytest.raises(pydantic.ValidationError, match="2-D uint8"):
+        Annotation.model_validate(
+            {
+                "mask_scores": _json.image_ndarray_to_b64data(
+                    ndarray=np.zeros((2, 2, 3), np.uint8)
+                )
+            }
+        )
+
+
 def test_json_rejects_a_mask_of_another_size_than_its_box_before_decoding_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

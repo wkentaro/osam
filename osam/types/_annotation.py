@@ -2,9 +2,11 @@ from collections.abc import Mapping
 from typing import Annotated
 
 import numpy as np
+import numpy.typing as npt
 import pydantic
 
 from .. import _json
+from .. import _logits
 from ._bounding_box import BoundingBox
 
 # An image array that JSON carries as a base64-encoded image file.
@@ -27,6 +29,11 @@ class Annotation(pydantic.BaseModel):
     )
     # Serialized as a base64 PNG cropped to bounding_box.
     mask: Base64Image | None = pydantic.Field(default=None)
+    mask_scores: Base64Image | None = pydantic.Field(
+        default=None,
+        description="A base64 PNG of the mask's probability, 0 to 255, on the "
+        "model's grid over the whole image; null unless the request asked for it",
+    )
 
     @pydantic.field_validator("mask", mode="before")
     @classmethod
@@ -69,6 +76,22 @@ class Annotation(pydantic.BaseModel):
             raise ValueError("mask must be boolean arrays")
         return mask
 
+    @pydantic.field_validator("mask_scores", mode="before")
+    @classmethod
+    def decode_mask_scores(cls, mask_scores: object) -> object:
+        if not isinstance(mask_scores, str):
+            return mask_scores
+        return _json.image_b64data_to_ndarray(b64data=mask_scores)
+
+    @pydantic.field_validator("mask_scores")
+    @classmethod
+    def validate_mask_scores(cls, mask_scores: np.ndarray | None) -> np.ndarray | None:
+        if mask_scores is not None and (
+            mask_scores.dtype != np.uint8 or mask_scores.ndim != 2
+        ):
+            raise ValueError("mask_scores must be a 2-D uint8 array")
+        return mask_scores
+
     @pydantic.model_validator(mode="after")
     def validate_mask_bbox_consistency(self) -> "Annotation":
         if self.mask is not None:
@@ -82,8 +105,26 @@ class Annotation(pydantic.BaseModel):
                 )
         return self
 
-    @pydantic.field_serializer("mask")
-    def serialize_mask(self, mask: np.ndarray | None) -> str | None:
-        if mask is None:
+    @pydantic.field_serializer("mask", "mask_scores")
+    def serialize_image(self, image: np.ndarray | None) -> str | None:
+        if image is None:
             return None
-        return _json.image_ndarray_to_b64data(ndarray=mask)
+        return _json.image_ndarray_to_b64data(ndarray=image)
+
+    def mask_from_scores(
+        self, *, bounding_box: BoundingBox, height: int, width: int
+    ) -> npt.NDArray[np.bool_]:
+        if self.mask_scores is None:
+            raise ValueError("mask_scores is unset")
+        return _logits.mask_from_logits(
+            logits=self.mask_scores.astype(np.float32) / 255,
+            box=(
+                bounding_box.xmin,
+                bounding_box.ymin,
+                bounding_box.xmax + 1,
+                bounding_box.ymax + 1,
+            ),
+            height=height,
+            width=width,
+            threshold=0.5,
+        )

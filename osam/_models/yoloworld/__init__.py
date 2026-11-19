@@ -51,6 +51,7 @@ class _YoloWorld(types.Model):
         height: int,
         width: int,
         include_masks: bool,
+        include_mask_scores: bool,
     ) -> list[types.Annotation]:
         texts: list[str] | None = prompt.texts
         assert texts is not None  # decode checks prompt_kinds

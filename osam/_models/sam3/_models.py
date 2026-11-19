@@ -339,6 +339,7 @@ class Sam3(types.Model):
         height: int,
         width: int,
         include_masks: bool,
+        include_mask_scores: bool,
     ) -> list[types.Annotation]:
 
         score_threshold: float = (
@@ -461,6 +462,11 @@ class Sam3(types.Model):
                     bounding_box=bb,
                     text=row_texts[i],
                     score=float(scores[i]),
+                    mask_scores=(
+                        np.round(masks_native[i, 0] * 255).astype(np.uint8)
+                        if include_mask_scores
+                        else None
+                    ),
                 )
             )
 

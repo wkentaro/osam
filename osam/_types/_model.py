@@ -263,6 +263,7 @@ class Model(abc.ABC):
         prompt: Prompt,
         original_size: tuple[int, int] | None = None,
         include_masks: bool = True,
+        include_mask_scores: bool = False,
     ) -> list[Annotation]:
         width, height = original_size or (
             embedding.original_width,
@@ -293,6 +294,7 @@ class Model(abc.ABC):
             height=height,
             width=width,
             include_masks=include_masks,
+            include_mask_scores=include_mask_scores,
         )
         if not include_masks:
             annotations = [a.model_copy(update={"mask": None}) for a in annotations]
@@ -307,6 +309,7 @@ class Model(abc.ABC):
         height: int,
         width: int,
         include_masks: bool,
+        include_mask_scores: bool,
     ) -> list[Annotation]:
         pass
 

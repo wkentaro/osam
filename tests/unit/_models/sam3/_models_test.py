@@ -189,6 +189,51 @@ def test_decode_builds_no_text_match_mask_left_out(
     assert annotation.mask is None
 
 
+def test_decode_gives_text_match_scores_that_build_its_mask() -> None:
+    language_encoder = pytypes.SimpleNamespace(
+        run=lambda *_: [np.ones((1, 32), bool), np.zeros((32, 1, 8), np.float32)]
+    )
+    probabilities = (
+        np.random.default_rng(0).integers(0, 256, (1, 1, 8, 8)).astype(np.float32) / 255
+    )
+    decoder = pytypes.SimpleNamespace(
+        get_inputs=lambda: [pytypes.SimpleNamespace(name="box_coords", shape=[1])],
+        run=lambda *_: [
+            np.array([[0.2, 0.3, 0.7, 0.9]], np.float32),
+            np.array([0.9], np.float32),
+            probabilities,
+        ],
+    )
+    model = Sam3.__new__(Sam3)
+    model._inference_sessions = {
+        "language_encoder": language_encoder,
+        "decoder": decoder,
+    }
+    embedding = types.ImageEmbedding(
+        original_height=10,
+        original_width=10,
+        embedding=np.zeros((1, 1, 1), np.float32),
+        extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
+    )
+
+    [annotation] = model.decode(
+        embedding=embedding,
+        prompt=types.Prompt(texts=["car"]),
+        original_size=(100, 50),
+        include_mask_scores=True,
+    )
+
+    assert annotation.mask is not None and annotation.bounding_box is not None
+    np.testing.assert_array_equal(
+        annotation.mask_from_scores(
+            bounding_box=annotation.bounding_box, height=50, width=100
+        ),
+        annotation.mask,
+    )
+    [unasked] = model.decode(embedding=embedding, prompt=types.Prompt(texts=["car"]))
+    assert unasked.mask_scores is None
+
+
 def test_encode_image_fetches_only_the_outputs_decoders_read() -> None:
     requested: list[list[str]] = []
 

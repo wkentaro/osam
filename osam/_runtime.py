@@ -290,6 +290,7 @@ class Runtime:
             prompt=request,
             original_size=request.original_size,
             include_masks=request.include_masks,
+            include_mask_scores=request.include_mask_scores,
         )
         return SegmentResponse(annotations=annotations, image=image_ref)
 

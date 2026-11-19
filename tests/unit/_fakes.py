@@ -38,6 +38,7 @@ class FakeModel(types.Model):
         height: int,
         width: int,
         include_masks: bool,
+        include_mask_scores: bool,
     ) -> list[types.Annotation]:
         return []
 

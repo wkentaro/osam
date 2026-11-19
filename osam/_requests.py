@@ -109,6 +109,11 @@ class SegmentRequest(types.Prompt):
         description="false leaves out each annotation's mask, for a client that "
         "needs only boxes and scores",
     )
+    include_mask_scores: bool = pydantic.Field(
+        default=False,
+        description="true adds each annotation's mask_scores, for a client that "
+        "builds masks at sizes of its own; SAM3's text and example matches have them",
+    )
     keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
 
     @pydantic.field_validator("image", mode="before")

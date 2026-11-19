@@ -185,6 +185,7 @@ class Client:
         max_annotations: int | None = None,
         original_size: tuple[int, int] | None = None,
         include_masks: bool | None = None,
+        include_mask_scores: bool | None = None,
         keep_alive: float | str | None = None,
     ) -> builtins.list[types.Annotation]:
         """Segment image, an HxWx3 uint8 RGB array, with model; uint8 grayscale
@@ -208,6 +209,9 @@ class Client:
         are enlarged from the model's scores, not from a mask at image's size.
         include_masks: False leaves out each annotation's mask, for boxes and
         scores only.
+        include_mask_scores: True adds each annotation's mask_scores, from
+        which Annotation.mask_from_scores builds the mask at any size, for
+        SAM3's text and example matches.
         keep_alive: as in load.
         """
         prompt: dict[str, Any] = {
@@ -222,6 +226,7 @@ class Client:
             "max_annotations": max_annotations,
             "original_size": original_size,
             "include_masks": include_masks,
+            "include_mask_scores": include_mask_scores,
             "keep_alive": keep_alive,
         }
         request = _requests.SegmentRequest.model_validate(

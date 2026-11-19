@@ -301,6 +301,24 @@ def test_segment_tells_the_model_whether_to_build_masks(
     assert calls == [False, True]
 
 
+def test_segment_tells_the_model_whether_to_build_mask_scores(
+    monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
+) -> None:
+    calls: list[bool] = []
+    monkeypatch.setattr(
+        runtime.model_type(name="a"),
+        "_decode",
+        lambda self, *, include_mask_scores, **_: (
+            calls.append(include_mask_scores) or []
+        ),
+    )
+
+    _segment(runtime=runtime, model="a", include_mask_scores=True)
+    _segment(runtime=runtime, model="a")
+
+    assert calls == [True, False]
+
+
 def test_segment_decodes_at_the_original_size(
     monkeypatch: pytest.MonkeyPatch, runtime: _runtime.Runtime
 ) -> None:
