@@ -716,6 +716,33 @@ def test_segment_sends_include_mask_scores_only_when_asked(
     assert bodies[1]["include_mask_scores"] is True
 
 
+def test_client_takes_score_only_boxes_inside_the_original_size_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    annotation = osam.types.Annotation(
+        bounding_box=osam.types.BoundingBox(xmin=4, ymin=4, xmax=7, ymax=7),
+        mask_scores=np.full((2, 2), 255, np.uint8),
+    )
+    segmented = {
+        "annotations": [annotation.model_dump(mode="json")],
+        "image": f"sha256:{0:064d}",
+    }
+    with _serving() as host:
+        client = osam.Client(host=host)
+        monkeypatch.setattr(_backend(client), "_request", lambda **_: segmented)
+        image = np.zeros((4, 4, 3), np.uint8)
+        [scored] = client.segment(
+            "efficientsam:10m", image, original_size=(8, 8), include_mask_scores=True
+        )
+        assert scored.bounding_box == annotation.bounding_box
+        assert annotation.bounding_box is not None
+        assert scored.mask_from_scores(
+            bounding_box=annotation.bounding_box, height=8, width=8
+        ).all()
+        with pytest.raises(pydantic.ValidationError, match="outside"):
+            client.segment("efficientsam:10m", image, include_mask_scores=True)
+
+
 def test_track_sends_frames_the_server_lacks(monkeypatch: pytest.MonkeyPatch) -> None:
     from tests.unit._server_test import _patch_tracking
 

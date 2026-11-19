@@ -234,3 +234,27 @@ def test_json_warns_of_a_mask_past_pillow_s_warning_limit_without_its_image(
 
     with pytest.warns(PIL.Image.DecompressionBombWarning):
         Annotation.model_validate_json(data)
+
+
+@pytest.mark.parametrize(
+    ("box", "size", "message"),
+    [
+        ((0, 0, 3, 3), (0, 4), "not positive"),
+        ((0, 0, 4, 3), (4, 4), "outside"),
+        ((3, 0, 2, 3), (4, 4), "inverted"),
+    ],
+)
+def test_mask_from_scores_rejects_a_box_or_size_it_cannot_build(
+    box: tuple[int, int, int, int], size: tuple[int, int], message: str
+) -> None:
+    annotation = Annotation(mask_scores=np.full((2, 2), 255, np.uint8))
+    xmin, ymin, xmax, ymax = box
+
+    with pytest.raises(ValueError, match=message):
+        annotation.mask_from_scores(
+            bounding_box=BoundingBox.model_construct(
+                xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax
+            ),
+            height=size[1],
+            width=size[0],
+        )

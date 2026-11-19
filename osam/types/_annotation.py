@@ -44,20 +44,8 @@ class Annotation(pydantic.BaseModel):
         bb = info.data.get("bounding_box")
         if bb is None:
             raise ValueError("bounding_box is required when mask is provided")
-        canvas = (
-            info.context.get("canvas_size")
-            if isinstance(info.context, Mapping)
-            else None
-        )
-        if canvas is not None and not (
-            0 <= bb.xmin
-            and 0 <= bb.ymin
-            and bb.xmax < canvas[0]
-            and bb.ymax < canvas[1]
-        ):
-            raise ValueError(
-                f"bounding box {bb} is outside the {canvas[0]}x{canvas[1]} image"
-            )
+        canvas = _canvas_size(info=info)
+        _check_inside_canvas(bounding_box=bb, canvas=canvas)
         size = (bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1)
         limit = _json.max_mask_pixels_without_image()
         if canvas is None and size[0] * size[1] > limit:
@@ -79,9 +67,13 @@ class Annotation(pydantic.BaseModel):
 
     @pydantic.field_validator("mask_scores", mode="before")
     @classmethod
-    def decode_mask_scores(cls, mask_scores: object) -> object:
+    def decode_mask_scores(
+        cls, mask_scores: object, info: pydantic.ValidationInfo
+    ) -> object:
         if not isinstance(mask_scores, str):
             return mask_scores
+        if (bb := info.data.get("bounding_box")) is not None:
+            _check_inside_canvas(bounding_box=bb, canvas=_canvas_size(info=info))
         return _json.scores_b64data_to_ndarray(b64data=mask_scores)
 
     @pydantic.field_validator("mask_scores")
@@ -119,6 +111,14 @@ class Annotation(pydantic.BaseModel):
     ) -> npt.NDArray[np.bool_]:
         if self.mask_scores is None:
             raise ValueError("mask_scores is unset")
+        if height <= 0 or width <= 0:
+            raise ValueError(f"size {width}x{height} is not positive")
+        _check_inside_canvas(bounding_box=bounding_box, canvas=(width, height))
+        if (
+            bounding_box.xmin > bounding_box.xmax
+            or bounding_box.ymin > bounding_box.ymax
+        ):
+            raise ValueError(f"bounding box {bounding_box} is inverted")
         return _logits.mask_from_logits(
             logits=self.mask_scores.astype(np.float32) / 255,
             box=(
@@ -130,4 +130,22 @@ class Annotation(pydantic.BaseModel):
             height=height,
             width=width,
             threshold=0.5,
+        )
+
+
+def _canvas_size(*, info: pydantic.ValidationInfo) -> tuple[int, int] | None:
+    if not isinstance(info.context, Mapping):
+        return None
+    return info.context.get("canvas_size")
+
+
+def _check_inside_canvas(
+    *, bounding_box: BoundingBox, canvas: tuple[int, int] | None
+) -> None:
+    bb = bounding_box
+    if canvas is not None and not (
+        0 <= bb.xmin and 0 <= bb.ymin and bb.xmax < canvas[0] and bb.ymax < canvas[1]
+    ):
+        raise ValueError(
+            f"bounding box {bb} is outside the {canvas[0]}x{canvas[1]} image"
         )
