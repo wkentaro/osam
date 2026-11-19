@@ -1,11 +1,14 @@
 from collections.abc import Mapping
 from typing import Annotated
+from typing import Final
 
 import numpy as np
 import pydantic
 
 from .. import _json
 from ._bounding_box import BoundingBox
+
+MAX_MASK_PIXELS_WITHOUT_IMAGE: Final = 2 * 89_478_485
 
 # An image array that JSON carries as a base64-encoded image file.
 Base64Image = Annotated[
@@ -50,9 +53,13 @@ class Annotation(pydantic.BaseModel):
             raise ValueError(
                 f"bounding box {bb} is outside the {canvas[0]}x{canvas[1]} image"
             )
-        return _json.mask_b64data_to_ndarray(
-            b64data=mask, size=(bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1)
-        )
+        size = (bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1)
+        if canvas is None and size[0] * size[1] > MAX_MASK_PIXELS_WITHOUT_IMAGE:
+            raise ValueError(
+                f"mask size {size} exceeds {MAX_MASK_PIXELS_WITHOUT_IMAGE} pixels "
+                "without the image's canvas_size in the validation context"
+            )
+        return _json.mask_b64data_to_ndarray(b64data=mask, size=size)
 
     @pydantic.field_validator("mask")
     def validate_mask(cls, mask: np.ndarray | None) -> np.ndarray | None:
@@ -79,4 +86,4 @@ class Annotation(pydantic.BaseModel):
     def serialize_mask(self, mask: np.ndarray | None) -> str | None:
         if mask is None:
             return None
-        return _json.image_ndarray_to_b64data(ndarray=mask.view(np.uint8) * 255)
+        return _json.image_ndarray_to_b64data(ndarray=mask)

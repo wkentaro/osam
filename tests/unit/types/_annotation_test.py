@@ -1,15 +1,18 @@
 import base64
+import io
 import json
 import struct
 import zlib
 
 import numpy as np
 import PIL.Image
+import PIL.PngImagePlugin
 import pydantic
 import pytest
 
 from osam.types import Annotation
 from osam.types import BoundingBox
+from osam.types import _annotation
 
 
 def test_json_roundtrip_decodes_mask() -> None:
@@ -17,8 +20,11 @@ def test_json_roundtrip_decodes_mask() -> None:
     original = Annotation(
         bounding_box=BoundingBox(xmin=0, ymin=0, xmax=2, ymax=1), mask=mask
     )
-    restored = Annotation.model_validate_json(original.model_dump_json())
+    data = original.model_dump_json()
+    restored = Annotation.model_validate_json(data)
     np.testing.assert_array_equal(restored.mask, mask)
+    png = base64.b64decode(json.loads(data)["mask"])
+    assert PIL.Image.open(io.BytesIO(png)).mode == "1"
 
 
 def test_json_rejects_a_mask_of_another_size_than_its_box_before_decoding_it(
@@ -30,7 +36,7 @@ def test_json_rejects_a_mask_of_another_size_than_its_box_before_decoding_it(
     )
     data = json.loads(annotation.model_dump_json())
     data["bounding_box"]["xmax"] = 99
-    monkeypatch.setattr(PIL.Image, "open", None)
+    monkeypatch.setattr(PIL.PngImagePlugin, "PngImageFile", None)
 
     with pytest.raises(pydantic.ValidationError, match="bounding box size"):
         Annotation.model_validate(data)
@@ -96,7 +102,7 @@ def test_json_rejects_a_mask_png_pillow_would_read_otherwise_before_decoding_it(
     data["mask"] = base64.b64encode(
         png[:ihdr_end] + extra_chunk + png[ihdr_end:]
     ).decode()
-    monkeypatch.setattr(PIL.Image, "open", None)
+    monkeypatch.setattr(PIL.PngImagePlugin, "PngImageFile", None)
 
     with pytest.raises(pydantic.ValidationError, match=message):
         Annotation.model_validate(data)
@@ -113,3 +119,49 @@ def test_json_takes_a_mask_with_a_context_of_another_type() -> None:
     )
 
     assert restored.mask is not None and restored.mask.all()
+
+
+def test_json_decodes_a_mask_past_the_decompression_bomb_limit_in_its_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(PIL.Image, "MAX_IMAGE_PIXELS", 10)
+    mask = np.eye(8, 9, dtype=bool)
+    annotation = Annotation(
+        bounding_box=BoundingBox(xmin=1, ymin=2, xmax=9, ymax=9), mask=mask
+    )
+
+    decoded = Annotation.model_validate_json(
+        annotation.model_dump_json(), context={"canvas_size": (10, 10)}
+    )
+
+    assert decoded.mask is not None
+    np.testing.assert_array_equal(decoded.mask, mask)
+
+
+def test_json_rejects_a_large_mask_without_its_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(PIL.Image, "MAX_IMAGE_PIXELS", None)
+    monkeypatch.setattr(_annotation, "MAX_MASK_PIXELS_WITHOUT_IMAGE", 15)
+    annotation = Annotation(
+        bounding_box=BoundingBox(xmin=0, ymin=0, xmax=3, ymax=3),
+        mask=np.ones((4, 4), dtype=bool),
+    )
+    data = annotation.model_dump_json()
+
+    with pytest.raises(pydantic.ValidationError, match="exceeds 15 pixels"):
+        Annotation.model_validate_json(data)
+    assert Annotation.model_validate_json(data, context={"canvas_size": (4, 4)})
+
+
+def test_json_rejects_a_truncated_mask() -> None:
+    annotation = Annotation(
+        bounding_box=BoundingBox(xmin=0, ymin=0, xmax=63, ymax=63),
+        mask=np.random.default_rng(0).random((64, 64)) > 0.5,
+    )
+    data = json.loads(annotation.model_dump_json())
+    png = base64.b64decode(data["mask"])
+    data["mask"] = base64.b64encode(png[: len(png) // 2]).decode()
+
+    with pytest.raises(pydantic.ValidationError, match="not a PNG file"):
+        Annotation.model_validate(data)

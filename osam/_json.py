@@ -5,6 +5,7 @@ import struct
 
 import numpy as np
 import PIL.Image
+import PIL.PngImagePlugin
 
 
 def image_ndarray_to_png(*, ndarray: np.ndarray) -> bytes:
@@ -62,9 +63,9 @@ def mask_b64data_to_ndarray(*, b64data: str, size: tuple[int, int]) -> np.ndarra
     if png_size != size:
         raise ValueError(f"mask size {png_size} != bounding box size {size}")
     try:
-        return np.asarray(PIL.Image.open(io.BytesIO(png))) > 0
-    except (OSError, PIL.Image.DecompressionBombError) as e:
-        raise ValueError(f"not an image file: {e}") from e
+        return np.asarray(PIL.PngImagePlugin.PngImageFile(io.BytesIO(png))) > 0
+    except (OSError, OverflowError, SyntaxError, struct.error) as e:
+        raise ValueError(f"not a PNG file: {e}") from e
 
 
 def hash_image(*, image: np.ndarray) -> str:
