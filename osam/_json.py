@@ -67,15 +67,19 @@ def _static_png_size(*, png: bytes) -> tuple[int, int]:
     return sizes[0]
 
 
-def scores_b64data_to_ndarray(*, b64data: str) -> np.ndarray:
-    png = base64.b64decode(b64data)
-    width, height = _static_png_size(png=png)
-    if width * height > (limit := max_mask_pixels_without_image()):
-        raise ValueError(f"scores size {(width, height)} exceeds {limit} pixels")
+def _png_to_ndarray(
+    *, png: bytes, within_canvas: bool, mode: str | None = None
+) -> np.ndarray:
     try:
-        image = PIL.Image.open(io.BytesIO(png), formats=["PNG"])
-        if image.mode != "L":
-            raise ValueError(f"scores are an 8-bit grayscale PNG, not {image.mode}")
+        image = (
+            PIL.PngImagePlugin.PngImageFile(io.BytesIO(png))
+            if within_canvas
+            else PIL.Image.open(io.BytesIO(png), formats=["PNG"])
+        )
+        if mode is not None and image.mode != mode:
+            raise ValueError(f"not a PNG of mode {mode}: {image.mode}")
+        if (channels := len(image.getbands())) != 1:
+            raise ValueError(f"a mask has one channel, not {channels}")
         return np.asarray(image)
     except (
         OSError,
@@ -87,6 +91,14 @@ def scores_b64data_to_ndarray(*, b64data: str) -> np.ndarray:
         raise ValueError(f"not a PNG file: {e}") from e
 
 
+def scores_b64data_to_ndarray(*, b64data: str) -> np.ndarray:
+    png = base64.b64decode(b64data)
+    width, height = _static_png_size(png=png)
+    if width * height > (limit := max_mask_pixels_without_image()):
+        raise ValueError(f"scores size {(width, height)} exceeds {limit} pixels")
+    return _png_to_ndarray(png=png, within_canvas=False, mode="L")
+
+
 def mask_b64data_to_ndarray(
     *, b64data: str, size: tuple[int, int], within_canvas: bool
 ) -> np.ndarray:
@@ -94,23 +106,7 @@ def mask_b64data_to_ndarray(
     png_size = _static_png_size(png=png)
     if png_size != size:
         raise ValueError(f"mask size {png_size} != bounding box size {size}")
-    try:
-        image = (
-            PIL.PngImagePlugin.PngImageFile(io.BytesIO(png))
-            if within_canvas
-            else PIL.Image.open(io.BytesIO(png), formats=["PNG"])
-        )
-        if (channels := len(image.getbands())) != 1:
-            raise ValueError(f"a mask has one channel, not {channels}")
-        return np.asarray(image) > 0
-    except (
-        OSError,
-        OverflowError,
-        SyntaxError,
-        struct.error,
-        PIL.Image.DecompressionBombError,
-    ) as e:
-        raise ValueError(f"not a PNG file: {e}") from e
+    return _png_to_ndarray(png=png, within_canvas=within_canvas) > 0
 
 
 def hash_image(*, image: np.ndarray) -> str:
