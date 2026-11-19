@@ -157,6 +157,9 @@ type = [
   { directory = "security", name = "Security", showcontent = true },
 ]
 
+[tool.pytest.ini_options]
+addopts = "--dist loadgroup"
+
 [tool.ruff.lint]
 # Pyflakes (`F`), pycodestyle (`E`), isort (`I`), pyupgrade (`UP`).
 select = ["E", "F", "I", "UP"]
