@@ -2,6 +2,7 @@ import pathlib
 from collections.abc import Iterator
 
 import imgviz
+import numpy as np
 import pytest
 
 from osam import _registry
@@ -111,6 +112,22 @@ def test_segment_box_to_mask_sam() -> None:
     bb = annotation.bounding_box
     assert bb is not None
     assert box[0] <= bb.xmin and bb.xmax <= box[2]
+
+
+@pytest.mark.extra
+@pytest.mark.parametrize("height, width", [(1, 10000), (10000, 1), (3, 10000)])
+def test_segment_thin_image_sam(height: int, width: int) -> None:
+    loaded = _model(name="sam:100m")
+    image = np.zeros((height, width, 3), dtype=np.uint8)
+    image[: max(1, height // 2), : max(1, width // 2)] = 255
+
+    embedding = loaded.encode_image(image=image)
+    annotations = loaded.decode(embedding=embedding, prompt=types.Prompt())
+
+    for annotation in annotations:
+        bb = annotation.bounding_box
+        assert bb is not None
+        assert bb.xmax < width and bb.ymax < height
 
 
 def test_segment_negative_box_rejected_by_sam2() -> None:

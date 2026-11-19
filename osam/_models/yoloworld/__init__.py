@@ -120,8 +120,11 @@ def _padding_hw(
 ) -> tuple[int, int]:
     # The image scales so its longer side fits input_size; the rest is padding.
     height, width = original_image_hw
-    scale = input_size / max(height, width)
-    return input_size - int(height * scale), input_size - int(width * scale)
+    longer: int = max(height, width)
+    return (
+        input_size - max(1, round(height * input_size / longer)),
+        input_size - max(1, round(width * input_size / longer)),
+    )
 
 
 def _transform_image(*, image: np.ndarray, input_size: int) -> NDArray[np.float32]:
@@ -133,6 +136,7 @@ def _transform_image(*, image: np.ndarray, input_size: int) -> NDArray[np.float3
         height=input_size - pad_height,
         width=input_size - pad_width,
         interpolation="linear",
+        backend="pillow",
     )
     image_resized = np.pad(
         image_resized,
@@ -157,7 +161,13 @@ def _untransform_bboxes(
         original_image_hw=original_image_hw, input_size=input_size
     )
     bboxes -= np.array([pad_width // 2, pad_height // 2] * 2)
-    bboxes /= input_size / max(original_image_hw)
+    bboxes *= np.array(
+        [
+            original_image_hw[1] / (input_size - pad_width),
+            original_image_hw[0] / (input_size - pad_height),
+        ]
+        * 2
+    )
     bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, original_image_hw[1] - 1)
     bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, original_image_hw[0] - 1)
     bboxes = bboxes.round().astype(int)

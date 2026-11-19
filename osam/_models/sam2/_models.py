@@ -28,9 +28,9 @@ class Sam2(SamBase):
 
         input_: npt.NDArray[np.float32]
         input_ = (
-            imgviz.resize(image, width=input_width, height=input_height).astype(
-                np.float32
-            )
+            imgviz.resize(
+                image, width=input_width, height=input_height, backend="pillow"
+            ).astype(np.float32)
             / 255
         )
         input_ = (

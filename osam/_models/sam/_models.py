@@ -62,8 +62,8 @@ def _compute_resized_hw(
     *, height: int, width: int, target_size: int
 ) -> tuple[int, int]:
     if width > height:
-        return int(round(height * target_size / width)), target_size
-    return target_size, int(round(width * target_size / height))
+        return max(1, round(height * target_size / width)), target_size
+    return target_size, max(1, round(width * target_size / height))
 
 
 class Sam(SamBase):
@@ -135,6 +135,9 @@ class Sam(SamBase):
         if 2 not in point_labels:
             points = np.concatenate([points, np.array([[0.0, 0.0]])], axis=0)
             point_labels = np.concatenate([point_labels, np.array([-1])], axis=0)
+        original_hw = (image_embedding.original_height, image_embedding.original_width)
+        decoder_keeps_short_side = 2 * min(original_hw) * input_size >= max(original_hw)
+        decode_hw = original_hw if decoder_keeps_short_side else (new_height, new_width)
         onnx_coord: npt.NDArray[np.float32] = points[None, :, :].astype(np.float32)
         onnx_label: npt.NDArray[np.float32] = point_labels[None, :].astype(np.float32)
 
@@ -146,16 +149,19 @@ class Sam(SamBase):
             "point_labels": onnx_label,
             "mask_input": np.zeros((1, 1, 256, 256), dtype=np.float32),
             "has_mask_input": np.array([0], dtype=np.float32),  # no mask_input
-            "orig_im_size": np.array(
-                (image_embedding.original_height, image_embedding.original_width),
-                dtype=np.float32,
-            ),
+            "orig_im_size": np.array(decode_hw, dtype=np.float32),
         }
 
         masks, _, _ = self._inference_sessions["decoder"].run(None, decoder_inputs)
-        masks = cast(npt.NDArray[np.float32], masks)
-        mask: npt.NDArray[np.bool_] = masks[0, 0] > 0.0  # (1, 1, H, W) -> (H, W)
-        return mask
+        logits = cast(npt.NDArray[np.float32], masks)[0, 0]
+        if logits.shape != original_hw:
+            logits = np.asarray(
+                PIL.Image.fromarray(logits).resize(
+                    (original_hw[1], original_hw[0]),
+                    resample=PIL.Image.Resampling.BILINEAR,
+                )
+            )
+        return logits > 0.0
 
 
 class Sam100m(Sam):
