@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.12.0 - 2026-11-19
+
+### Added
+
+- **Breaking:** Each model in `/api/models` and `Client.list()` reports the required `input_size` and `input_resize`, so a client of this release rejects an older server's model list, and `ModelInfo.input_shape()` gives the size an image is resized to before encoding. An image resized to that size with Pillow's bilinear filter gives the same embedding as the full image, except with EfficientSAM. ([#301](https://github.com/wkentaro/osam/pull/301))
+
+### Fixed
+
+- SAM and YOLO-World segment images whose short side shrinks below half a pixel at the model's input size instead of raising, YOLO-World rounds its resized side and maps boxes back by each side's own scale, and SAM2 and YOLO-World resize with Pillow even when OpenCV is installed. ([#302](https://github.com/wkentaro/osam/pull/302))
+
 ## 0.11.9 - 2026-11-17
 
 ### Fixed
