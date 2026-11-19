@@ -355,6 +355,8 @@ def run(
     if video_dir is not None:
         if thresholds:
             raise click.UsageError("--video takes no thresholds")
+        if "include_mask_scores" in prompt_flags:
+            raise click.UsageError("--video takes no include_mask_scores")
         _track(
             model_name=model_name,
             video_dir=video_dir,

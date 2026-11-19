@@ -226,6 +226,21 @@ def test_run_prompt_takes_no_original_size(tmp_path: pathlib.Path) -> None:
     assert "keys among" in result.output
 
 
+def test_run_video_takes_no_include_mask_scores(tmp_path: pathlib.Path) -> None:
+    video = tmp_path / "video"
+    video.mkdir()
+    PIL.Image.fromarray(np.zeros((4, 4, 3), np.uint8)).save(video / "0.jpg")
+    prompt = '{"points": [[0, 0]], "point_labels": [1], "include_mask_scores": true}'
+
+    result = CliRunner().invoke(
+        __main__.run,
+        ["efficientsam:10m", "--video", str(video), "--prompt", prompt, "--json"],
+    )
+
+    assert result.exit_code == 2
+    assert "--video takes no include_mask_scores" in result.output
+
+
 def test_run_video_passes_include_masks_to_the_request(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
