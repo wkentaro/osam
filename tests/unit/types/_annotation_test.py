@@ -10,9 +10,9 @@ import PIL.PngImagePlugin
 import pydantic
 import pytest
 
+from osam import _json
 from osam.types import Annotation
 from osam.types import BoundingBox
-from osam.types import _annotation
 
 
 def test_json_roundtrip_decodes_mask() -> None:
@@ -142,7 +142,7 @@ def test_json_rejects_a_large_mask_without_its_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(PIL.Image, "MAX_IMAGE_PIXELS", None)
-    monkeypatch.setattr(_annotation, "MAX_MASK_PIXELS_WITHOUT_IMAGE", 15)
+    monkeypatch.setattr(_json, "MAX_MASK_PIXELS_WITHOUT_IMAGE", 15)
     annotation = Annotation(
         bounding_box=BoundingBox(xmin=0, ymin=0, xmax=3, ymax=3),
         mask=np.ones((4, 4), dtype=bool),
@@ -152,6 +152,29 @@ def test_json_rejects_a_large_mask_without_its_image(
     with pytest.raises(pydantic.ValidationError, match="exceeds 15 pixels"):
         Annotation.model_validate_json(data)
     assert Annotation.model_validate_json(data, context={"canvas_size": (4, 4)})
+
+    monkeypatch.setattr(PIL.Image, "MAX_IMAGE_PIXELS", 7)
+    monkeypatch.setattr(_json, "MAX_MASK_PIXELS_WITHOUT_IMAGE", 100)
+    with pytest.raises(pydantic.ValidationError, match="exceeds 14 pixels"):
+        Annotation.model_validate_json(data)
+
+
+def test_json_rejects_a_mask_of_several_channels_before_loading_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def load(self: PIL.Image.Image) -> None:
+        raise AssertionError("loaded the pixels")
+
+    png = io.BytesIO()
+    PIL.Image.new("RGB", (4, 4)).save(png, format="PNG")
+    data = {
+        "bounding_box": {"xmin": 0, "ymin": 0, "xmax": 3, "ymax": 3},
+        "mask": base64.b64encode(png.getvalue()).decode(),
+    }
+    monkeypatch.setattr(PIL.PngImagePlugin.PngImageFile, "load", load)
+
+    with pytest.raises(pydantic.ValidationError, match="one channel, not 3"):
+        Annotation.model_validate(data)
 
 
 def test_json_rejects_a_truncated_mask() -> None:

@@ -2,6 +2,7 @@ import base64
 import hashlib
 import io
 import struct
+from typing import Final
 
 import numpy as np
 import PIL.Image
@@ -35,6 +36,15 @@ def image_b64data_to_ndarray(*, b64data, mode: str | None = None):
         raise ValueError(f"not an image file: {e}") from e
 
 
+MAX_MASK_PIXELS_WITHOUT_IMAGE: Final = 2 * 89_478_485
+
+
+def max_mask_pixels_without_image() -> int:
+    if PIL.Image.MAX_IMAGE_PIXELS is None:
+        return MAX_MASK_PIXELS_WITHOUT_IMAGE
+    return min(MAX_MASK_PIXELS_WITHOUT_IMAGE, 2 * PIL.Image.MAX_IMAGE_PIXELS)
+
+
 def _static_png_size(*, png: bytes) -> tuple[int, int]:
     if not png.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ValueError("not a PNG file")
@@ -63,7 +73,10 @@ def mask_b64data_to_ndarray(*, b64data: str, size: tuple[int, int]) -> np.ndarra
     if png_size != size:
         raise ValueError(f"mask size {png_size} != bounding box size {size}")
     try:
-        return np.asarray(PIL.PngImagePlugin.PngImageFile(io.BytesIO(png))) > 0
+        image = PIL.PngImagePlugin.PngImageFile(io.BytesIO(png))
+        if (channels := len(image.getbands())) != 1:
+            raise ValueError(f"a mask has one channel, not {channels}")
+        return np.asarray(image) > 0
     except (OSError, OverflowError, SyntaxError, struct.error) as e:
         raise ValueError(f"not a PNG file: {e}") from e
 
