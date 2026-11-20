@@ -204,13 +204,6 @@ def _crop_mask(
     )
 
 
-def _logits_from_probabilities(
-    probabilities: NDArray[np.float32],
-) -> NDArray[np.float32]:
-    clipped = np.clip(probabilities, 1e-6, 1 - 1e-6)
-    return np.log(clipped) - np.log1p(-clipped)
-
-
 class Sam3(types.Model):
     name = "sam3:latest"
     metadata = types.ModelMetadata(
@@ -424,7 +417,7 @@ class Sam3(types.Model):
                 "language_encoder"
             ].run(["text_attention_mask", "text_memory"], {"tokens": tokens})
             outputs = self._inference_sessions["decoder"].run(
-                ["boxes", "scores", "masks"],
+                ["boxes", "scores", "mask_logits"],
                 {
                     "backbone_fpn_0": embedding.embedding,
                     "backbone_fpn_1": embedding.extra_features[0],
@@ -443,7 +436,7 @@ class Sam3(types.Model):
             np.concatenate([run[0] for run in runs]), 0, 1
         )
         scores: NDArray[np.float32] = np.concatenate([run[1] for run in runs])
-        masks_native: NDArray[np.float32] = np.concatenate([run[2] for run in runs])
+        mask_logits: NDArray[np.float32] = np.concatenate([run[2] for run in runs])
         row_texts: list[str] = [text for text, run in zip(texts, runs) for _ in run[1]]
 
         # Scale normalized box edges to the first and last pixels whose
@@ -477,7 +470,7 @@ class Sam3(types.Model):
                 xmax=round(box[2]),
                 ymax=round(box[3]),
             )
-            logits = _logits_from_probabilities(masks_native[i, 0])
+            logits = mask_logits[i, 0]
             annotations.append(
                 types.Annotation(
                     mask=_crop_mask(
