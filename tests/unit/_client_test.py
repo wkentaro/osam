@@ -57,6 +57,20 @@ def any_client(request: pytest.FixtureRequest, client: osam.Client):
         yield in_process
 
 
+def test_client_segments_mask_scores_only_when_asked(
+    any_client: osam.Client,
+) -> None:
+    kwargs: dict[str, Any] = dict(points=np.array([[1280, 800]]), point_labels=[1])
+    (plain,) = any_client.segment("efficientsam:10m", _IMAGE, **kwargs)
+    (scored,) = any_client.segment(
+        "efficientsam:10m", _IMAGE, include_mask_scores=True, **kwargs
+    )
+
+    assert plain.mask_scores is None
+    assert scored.mask_scores is not None
+    assert scored.bounding_box == plain.bounding_box
+
+
 def test_client_segments(any_client: osam.Client) -> None:
     client = any_client
     assert client.version() == osam.__version__

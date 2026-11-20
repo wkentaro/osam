@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import hashlib
+import math
 import threading
 import typing
 from collections.abc import Callable
@@ -9,6 +10,7 @@ from collections.abc import Callable
 import numpy as np
 import numpy.typing as npt
 import onnxruntime
+import PIL.Image
 from loguru import logger
 
 from .. import _onnx
@@ -290,7 +292,11 @@ class Model(abc.ABC):
 
 
 def annotations_from_mask(
-    *, mask: npt.NDArray[np.bool_], score: float | None = None
+    *,
+    mask: npt.NDArray[np.bool_],
+    score: float | None = None,
+    logits: npt.NDArray[np.float32] | None = None,
+    covered_size: tuple[float, float] | None = None,
 ) -> list[Annotation]:
     # The mask cropped to its bounding box, or none for an empty mask.
     # From the rows and columns with a pixel: 0.2 ms at 2560x1600, where
@@ -300,11 +306,58 @@ def annotations_from_mask(
         return []
     xs = np.flatnonzero(mask.any(axis=0))
     ymin, ymax, xmin, xmax = int(ys[0]), int(ys[-1]), int(xs[0]), int(xs[-1])
+    bounding_box = BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
     return [
         Annotation(
             # A copy, so a cached annotation doesn't keep the whole mask.
             mask=mask[ymin : ymax + 1, xmin : xmax + 1].copy(),
-            bounding_box=BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax),
+            bounding_box=bounding_box,
             score=score,
+            mask_scores=None
+            if logits is None or covered_size is None
+            else scores_in_box(
+                probabilities=0.5 * (1 + np.tanh(logits / 2)),
+                covered_size=covered_size,
+                bounding_box=bounding_box,
+            ),
         )
     ]
+
+
+def scores_in_box(
+    *,
+    probabilities: npt.NDArray[np.float32],
+    covered_size: tuple[float, float],
+    bounding_box: BoundingBox,
+) -> npt.NDArray[np.uint8]:
+    UPSAMPLE: typing.Final = 2
+    box = box_on_grid(
+        bounding_box=bounding_box,
+        grid_shape=probabilities.shape,
+        covered_size=covered_size,
+    )
+    size = (
+        max(1, math.ceil(UPSAMPLE * (box[2] - box[0]))),
+        max(1, math.ceil(UPSAMPLE * (box[3] - box[1]))),
+    )
+    resized = PIL.Image.fromarray(probabilities.astype(np.float32, copy=False)).resize(
+        size, resample=PIL.Image.Resampling.BILINEAR, box=box
+    )
+    return np.round(np.asarray(resized) * 255).astype(np.uint8)
+
+
+def box_on_grid(
+    *,
+    bounding_box: BoundingBox,
+    grid_shape: tuple[int, ...],
+    covered_size: tuple[float, float],
+) -> tuple[float, float, float, float]:
+    grid_height, grid_width = grid_shape
+    width, height = covered_size
+    bb = bounding_box
+    return (
+        bb.xmin * grid_width / width,
+        bb.ymin * grid_height / height,
+        (bb.xmax + 1) * grid_width / width,
+        (bb.ymax + 1) * grid_height / height,
+    )

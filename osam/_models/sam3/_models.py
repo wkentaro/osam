@@ -187,17 +187,15 @@ def _crop_mask(
     # The mask probabilities resized to height x width and thresholded, as
     # sam3-onnx does, over the bounding box's pixels only.
     bb = bounding_box
-    mask_h, mask_w = mask.shape
     return (
         np.asarray(
             PIL.Image.fromarray(mask).resize(
                 (bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1),
                 resample=PIL.Image.Resampling.BILINEAR,
-                box=(
-                    bb.xmin * mask_w / width,
-                    bb.ymin * mask_h / height,
-                    (bb.xmax + 1) * mask_w / width,
-                    (bb.ymax + 1) * mask_h / height,
+                box=types.box_on_grid(
+                    bounding_box=bb,
+                    grid_shape=mask.shape,
+                    covered_size=(width, height),
                 ),
             )
         )
@@ -479,6 +477,11 @@ class Sam3(types.Model):
             annotations.append(
                 types.Annotation(
                     mask=cropped_mask,
+                    mask_scores=types.scores_in_box(
+                        probabilities=masks_native[i, 0],
+                        covered_size=(original_width, original_height),
+                        bounding_box=bb,
+                    ),
                     bounding_box=bb,
                     text=row_texts[i],
                     score=float(scores[i]),
@@ -547,4 +550,9 @@ class Sam3(types.Model):
         score = float(iou_predictions[0, best])
         if score < score_threshold or max_annotations == 0:
             return []
-        return types.annotations_from_mask(mask=mask, score=score)
+        return types.annotations_from_mask(
+            mask=mask,
+            score=score,
+            logits=logits,
+            covered_size=(width, height),
+        )

@@ -149,6 +149,36 @@ def test_segment_box_rejected_by_yoloworld() -> None:
         _segment(model="yoloworld", prompt=types.Prompt(box=(450, 551, 1059, 1421)))
 
 
+def _assert_scores_redraw_mask(*, annotation: types.Annotation) -> None:
+    assert annotation.bounding_box is not None
+    assert annotation.mask is not None
+    assert annotation.mask_scores is not None
+    redrawn = (
+        np.asarray(
+            PIL.Image.fromarray(annotation.mask_scores.astype(np.float32)).resize(
+                annotation.mask.shape[::-1], resample=PIL.Image.Resampling.BILINEAR
+            )
+        )
+        >= 128
+    )
+    iou = (redrawn & annotation.mask).sum() / (redrawn | annotation.mask).sum()
+    assert iou >= 0.98
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "efficientsam:10m",
+        pytest.param("sam:100m", marks=pytest.mark.extra),
+        "sam2:tiny",
+    ],
+)
+def test_segment_point_scores_redraw_the_mask(model: str) -> None:
+    (annotation,) = _segment(model=model, prompt=types.Prompt())
+
+    _assert_scores_redraw_mask(annotation=annotation)
+
+
 # The tests below run SAM3, after the YOLO-World case of the first, so that it
 # loads once.
 @pytest.mark.parametrize(
@@ -339,3 +369,20 @@ def test_encode_image_takes_an_image_resized_to_its_input_shape(model: str) -> N
         strict=True,
     ):
         np.testing.assert_array_equal(actual_feature, expected_feature)
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        types.Prompt(texts=["dog"]),
+        types.Prompt(points=[(1440, 800)], point_labels=[1]),
+    ],
+)
+def test_segment_sam3_scores_redraw_the_mask(
+    prompt: types.Prompt, sam3_embedding: types.ImageEmbedding
+) -> None:
+    annotations = _sam3(embedding=sam3_embedding, prompt=prompt)
+
+    assert annotations
+    for annotation in annotations:
+        _assert_scores_redraw_mask(annotation=annotation)

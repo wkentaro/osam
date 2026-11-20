@@ -27,6 +27,31 @@ class Annotation(pydantic.BaseModel):
     )
     # Serialized as a base64 PNG cropped to bounding_box.
     mask: Base64Image | None = pydantic.Field(default=None)
+    mask_scores: Base64Image | None = pydantic.Field(
+        default=None,
+        description="The mask's probabilities x 255 as a uint8 grayscale image "
+        "whose pixels tile bounding_box, at the model's own resolution. Resized "
+        "bilinearly onto any image size, a pixel is in the mask at 128 or more",
+    )
+
+    @pydantic.field_validator("mask_scores", mode="before")
+    @classmethod
+    def decode_mask_scores(cls, mask_scores: object) -> object:
+        if not isinstance(mask_scores, str):
+            return mask_scores
+        return _json.image_b64data_to_ndarray(b64data=mask_scores, mode="L")
+
+    @pydantic.field_validator("mask_scores")
+    @classmethod
+    def validate_mask_scores(cls, mask_scores: np.ndarray | None) -> np.ndarray | None:
+        if mask_scores is None:
+            return None
+        if mask_scores.dtype != np.uint8 or mask_scores.ndim != 2:
+            raise ValueError(
+                f"mask_scores must be a 2D uint8 array: got {mask_scores.dtype} "
+                f"{mask_scores.shape}"
+            )
+        return mask_scores
 
     @pydantic.field_validator("mask", mode="before")
     @classmethod
@@ -64,6 +89,8 @@ class Annotation(pydantic.BaseModel):
 
     @pydantic.model_validator(mode="after")
     def validate_mask_bbox_consistency(self) -> "Annotation":
+        if self.mask_scores is not None and self.bounding_box is None:
+            raise ValueError("bounding_box is required when mask_scores is provided")
         if self.mask is not None:
             if self.bounding_box is None:
                 raise ValueError("bounding_box is required when mask is provided")
@@ -80,3 +107,9 @@ class Annotation(pydantic.BaseModel):
         if mask is None:
             return None
         return _json.image_ndarray_to_b64data(ndarray=mask.view(np.uint8) * 255)
+
+    @pydantic.field_serializer("mask_scores")
+    def serialize_mask_scores(self, mask_scores: np.ndarray | None) -> str | None:
+        if mask_scores is None:
+            return None
+        return _json.image_ndarray_to_b64data(ndarray=mask_scores)

@@ -113,3 +113,31 @@ def test_json_takes_a_mask_with_a_context_of_another_type() -> None:
     )
 
     assert restored.mask is not None and restored.mask.all()
+
+
+def test_json_roundtrip_decodes_mask_scores() -> None:
+    mask_scores = np.array([[0, 128, 255], [7, 200, 13]], dtype=np.uint8)
+    original = Annotation(
+        bounding_box=BoundingBox(xmin=0, ymin=0, xmax=9, ymax=9),
+        mask_scores=mask_scores,
+    )
+
+    restored = Annotation.model_validate_json(original.model_dump_json())
+
+    np.testing.assert_array_equal(restored.mask_scores, mask_scores)
+
+
+@pytest.mark.parametrize(
+    "mask_scores", [np.zeros((2, 2), np.float32), np.zeros((2, 2, 3), np.uint8)]
+)
+def test_rejects_mask_scores_that_are_not_a_uint8_grid(mask_scores) -> None:
+    with pytest.raises(pydantic.ValidationError, match="2D uint8"):
+        Annotation(
+            bounding_box=BoundingBox(xmin=0, ymin=0, xmax=1, ymax=1),
+            mask_scores=mask_scores,
+        )
+
+
+def test_rejects_mask_scores_without_a_box() -> None:
+    with pytest.raises(pydantic.ValidationError, match="bounding_box is required"):
+        Annotation(mask_scores=np.zeros((2, 2), np.uint8))
