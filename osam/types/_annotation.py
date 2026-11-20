@@ -14,6 +14,24 @@ Base64Image = Annotated[
 ]
 
 
+def _require_box_in_canvas(*, info: pydantic.ValidationInfo, field: str) -> BoundingBox:
+    bb = info.data.get("bounding_box")
+    if bb is None:
+        raise ValueError(f"bounding_box is required when {field} is provided")
+    if bb.xmin > bb.xmax or bb.ymin > bb.ymax:
+        raise ValueError(f"bounding box {bb} is inverted")
+    canvas = (
+        info.context.get("canvas_size") if isinstance(info.context, Mapping) else None
+    )
+    if canvas is not None and not (
+        0 <= bb.xmin and 0 <= bb.ymin and bb.xmax < canvas[0] and bb.ymax < canvas[1]
+    ):
+        raise ValueError(
+            f"bounding box {bb} is outside the {canvas[0]}x{canvas[1]} image"
+        )
+    return bb
+
+
 class Annotation(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
@@ -36,17 +54,24 @@ class Annotation(pydantic.BaseModel):
 
     @pydantic.field_validator("mask_scores", mode="before")
     @classmethod
-    def decode_mask_scores(cls, mask_scores: object) -> object:
+    def decode_mask_scores(
+        cls, mask_scores: object, info: pydantic.ValidationInfo
+    ) -> object:
         if not isinstance(mask_scores, str):
             return mask_scores
-        return _json.image_b64data_to_ndarray(b64data=mask_scores, mode="L")
+        _require_box_in_canvas(info=info, field="mask_scores")
+        return _json.scores_b64data_to_ndarray(b64data=mask_scores)
 
     @pydantic.field_validator("mask_scores")
     @classmethod
     def validate_mask_scores(cls, mask_scores: np.ndarray | None) -> np.ndarray | None:
         if mask_scores is None:
             return None
-        if mask_scores.dtype != np.uint8 or mask_scores.ndim != 2:
+        if (
+            mask_scores.dtype != np.uint8
+            or mask_scores.ndim != 2
+            or not mask_scores.size
+        ):
             raise ValueError(
                 f"mask_scores must be a 2D uint8 array: got {mask_scores.dtype} "
                 f"{mask_scores.shape}"
@@ -58,23 +83,7 @@ class Annotation(pydantic.BaseModel):
     def decode_mask(cls, mask: object, info: pydantic.ValidationInfo) -> object:
         if not isinstance(mask, str):
             return mask
-        bb = info.data.get("bounding_box")
-        if bb is None:
-            raise ValueError("bounding_box is required when mask is provided")
-        canvas = (
-            info.context.get("canvas_size")
-            if isinstance(info.context, Mapping)
-            else None
-        )
-        if canvas is not None and not (
-            0 <= bb.xmin
-            and 0 <= bb.ymin
-            and bb.xmax < canvas[0]
-            and bb.ymax < canvas[1]
-        ):
-            raise ValueError(
-                f"bounding box {bb} is outside the {canvas[0]}x{canvas[1]} image"
-            )
+        bb = _require_box_in_canvas(info=info, field="mask")
         return _json.mask_b64data_to_ndarray(
             b64data=mask, size=(bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1)
         )

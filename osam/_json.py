@@ -67,6 +67,20 @@ def mask_b64data_to_ndarray(*, b64data: str, size: tuple[int, int]) -> np.ndarra
         raise ValueError(f"not an image file: {e}") from e
 
 
+def scores_b64data_to_ndarray(*, b64data: str) -> np.ndarray:
+    png = base64.b64decode(b64data)
+    _static_png_size(png=png)
+    try:
+        image = PIL.Image.open(io.BytesIO(png))
+        if image.mode != "L":
+            raise ValueError(
+                f"mask scores must be an 8-bit grayscale PNG: got {image.mode}"
+            )
+        return np.asarray(image)
+    except (OSError, PIL.Image.DecompressionBombError) as e:
+        raise ValueError(f"not an image file: {e}") from e
+
+
 def hash_image(*, image: np.ndarray) -> str:
     digest = hashlib.sha256(np.ascontiguousarray(image).data)
     digest.update(repr((image.shape, image.dtype.str)).encode())
