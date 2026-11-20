@@ -14,24 +14,6 @@ Base64Image = Annotated[
 ]
 
 
-def _require_box_in_canvas(*, info: pydantic.ValidationInfo, field: str) -> BoundingBox:
-    bb = info.data.get("bounding_box")
-    if bb is None:
-        raise ValueError(f"bounding_box is required when {field} is provided")
-    if bb.xmin > bb.xmax or bb.ymin > bb.ymax:
-        raise ValueError(f"bounding box {bb} is inverted")
-    canvas = (
-        info.context.get("canvas_size") if isinstance(info.context, Mapping) else None
-    )
-    if canvas is not None and not (
-        0 <= bb.xmin and 0 <= bb.ymin and bb.xmax < canvas[0] and bb.ymax < canvas[1]
-    ):
-        raise ValueError(
-            f"bounding box {bb} is outside the {canvas[0]}x{canvas[1]} image"
-        )
-    return bb
-
-
 class Annotation(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
@@ -47,20 +29,22 @@ class Annotation(pydantic.BaseModel):
     mask: Base64Image | None = pydantic.Field(default=None)
     mask_logits: Base64Image | None = pydantic.Field(
         default=None,
-        description="The mask's logits as a uint8 grayscale image of "
-        "128 + 16 x logit, clipped to 0..255, whose pixels tile bounding_box at "
-        "the model's own resolution. Resized bilinearly onto any image size, a "
-        "pixel is in the mask at 128 or more",
+        description="The model's own logit cells around bounding_box, as a "
+        "16-bit grayscale image of 32768 + 256 x logit clipped to 0..65535. "
+        "Resized bilinearly so that the cells tile mask_logits_box, a pixel is "
+        "in the mask at 32768 or more",
+    )
+    mask_logits_box: tuple[float, float, float, float] | None = pydantic.Field(
+        default=None,
+        description="xmin, ymin, xmax, ymax in pixels of mask_logits' outer "
+        "cell edges, which can reach past the image",
     )
 
     @pydantic.field_validator("mask_logits", mode="before")
     @classmethod
-    def decode_mask_logits(
-        cls, mask_logits: object, info: pydantic.ValidationInfo
-    ) -> object:
+    def decode_mask_logits(cls, mask_logits: object) -> object:
         if not isinstance(mask_logits, str):
             return mask_logits
-        _require_box_in_canvas(info=info, field="mask_logits")
         return _json.logits_b64data_to_ndarray(b64data=mask_logits)
 
     @pydantic.field_validator("mask_logits")
@@ -69,12 +53,12 @@ class Annotation(pydantic.BaseModel):
         if mask_logits is None:
             return None
         if (
-            mask_logits.dtype != np.uint8
+            mask_logits.dtype != np.uint16
             or mask_logits.ndim != 2
             or not mask_logits.size
         ):
             raise ValueError(
-                f"mask_logits must be a 2D uint8 array: got {mask_logits.dtype} "
+                f"mask_logits must be a 2D uint16 array: got {mask_logits.dtype} "
                 f"{mask_logits.shape}"
             )
         return mask_logits
@@ -84,7 +68,23 @@ class Annotation(pydantic.BaseModel):
     def decode_mask(cls, mask: object, info: pydantic.ValidationInfo) -> object:
         if not isinstance(mask, str):
             return mask
-        bb = _require_box_in_canvas(info=info, field="mask")
+        bb = info.data.get("bounding_box")
+        if bb is None:
+            raise ValueError("bounding_box is required when mask is provided")
+        canvas = (
+            info.context.get("canvas_size")
+            if isinstance(info.context, Mapping)
+            else None
+        )
+        if canvas is not None and not (
+            0 <= bb.xmin
+            and 0 <= bb.ymin
+            and bb.xmax < canvas[0]
+            and bb.ymax < canvas[1]
+        ):
+            raise ValueError(
+                f"bounding box {bb} is outside the {canvas[0]}x{canvas[1]} image"
+            )
         return _json.mask_b64data_to_ndarray(
             b64data=mask, size=(bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1)
         )
@@ -99,14 +99,14 @@ class Annotation(pydantic.BaseModel):
 
     @pydantic.model_validator(mode="after")
     def validate_mask_bbox_consistency(self) -> "Annotation":
-        if self.mask_logits is not None:
-            bb = self.bounding_box
-            if bb is None:
-                raise ValueError(
-                    "bounding_box is required when mask_logits is provided"
-                )
-            if bb.xmin > bb.xmax or bb.ymin > bb.ymax:
-                raise ValueError(f"bounding box {bb} is inverted")
+        if (self.mask_logits is None) != (self.mask_logits_box is None):
+            raise ValueError("mask_logits and mask_logits_box come together")
+        if self.mask_logits_box is not None:
+            xmin, ymin, xmax, ymax = self.mask_logits_box
+            if not (
+                np.isfinite(self.mask_logits_box).all() and xmin < xmax and ymin < ymax
+            ):
+                raise ValueError(f"mask_logits_box {self.mask_logits_box} is empty")
         if self.mask is not None:
             if self.bounding_box is None:
                 raise ValueError("bounding_box is required when mask is provided")

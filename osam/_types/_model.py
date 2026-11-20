@@ -10,7 +10,6 @@ from collections.abc import Callable
 import numpy as np
 import numpy.typing as npt
 import onnxruntime
-import PIL.Image
 from loguru import logger
 
 from .. import _onnx
@@ -294,7 +293,8 @@ class Model(abc.ABC):
         raise NotImplementedError(f"{self.name} doesn't track")
 
 
-LOGIT_SCALE: typing.Final = 16
+LOGIT_ZERO: typing.Final = 32768
+LOGIT_SCALE: typing.Final = 256
 
 
 def annotations_from_mask(
@@ -313,57 +313,54 @@ def annotations_from_mask(
     xs = np.flatnonzero(mask.any(axis=0))
     ymin, ymax, xmin, xmax = int(ys[0]), int(ys[-1]), int(xs[0]), int(xs[-1])
     bounding_box = BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
+    mask_logits = (
+        {}
+        if logits is None or covered_size is None
+        else logits_around_box(
+            logits=logits, covered_size=covered_size, bounding_box=bounding_box
+        )
+    )
     return [
         Annotation(
             # A copy, so a cached annotation doesn't keep the whole mask.
             mask=mask[ymin : ymax + 1, xmin : xmax + 1].copy(),
             bounding_box=bounding_box,
             score=score,
-            mask_logits=None
-            if logits is None or covered_size is None
-            else logits_in_box(
-                logits=logits,
-                covered_size=covered_size,
-                bounding_box=bounding_box,
-            ),
+            **mask_logits,
         )
     ]
 
 
-def logits_in_box(
+def logits_around_box(
     *,
     logits: npt.NDArray[np.float32],
     covered_size: tuple[float, float],
     bounding_box: BoundingBox,
-) -> npt.NDArray[np.uint8]:
-    UPSAMPLE: typing.Final = 2
-    box = box_on_grid(
-        bounding_box=bounding_box,
-        grid_shape=logits.shape,
-        covered_size=covered_size,
-    )
+) -> dict[str, typing.Any]:
     grid_height, grid_width = logits.shape
+    cell_width = covered_size[0] / grid_width
+    cell_height = covered_size[1] / grid_height
     bb = bounding_box
-    size = (
-        max(
-            1,
-            math.ceil(
-                UPSAMPLE * (bb.xmax + 1 - bb.xmin) * grid_width / covered_size[0]
-            ),
+
+    def cells(start: int, stop: int, cell: float, count: int) -> tuple[int, int]:
+        first = math.floor(start / cell - 0.5)
+        last = math.ceil(stop / cell - 0.5)
+        return max(0, first), min(count - 1, last) + 1
+
+    col_start, col_stop = cells(bb.xmin, bb.xmax + 1, cell_width, grid_width)
+    row_start, row_stop = cells(bb.ymin, bb.ymax + 1, cell_height, grid_height)
+    crop = logits[row_start:row_stop, col_start:col_stop]
+    return {
+        "mask_logits": np.clip(
+            np.round(LOGIT_ZERO + LOGIT_SCALE * crop), 0, 65535
+        ).astype(np.uint16),
+        "mask_logits_box": (
+            col_start * cell_width,
+            row_start * cell_height,
+            col_stop * cell_width,
+            row_stop * cell_height,
         ),
-        max(
-            1,
-            math.ceil(
-                UPSAMPLE * (bb.ymax + 1 - bb.ymin) * grid_height / covered_size[1]
-            ),
-        ),
-    )
-    resized = PIL.Image.fromarray(logits.astype(np.float32, copy=False)).resize(
-        size, resample=PIL.Image.Resampling.BILINEAR, box=box
-    )
-    return np.clip(np.round(128 + LOGIT_SCALE * np.asarray(resized)), 0, 255).astype(
-        np.uint8
-    )
+    }
 
 
 def box_on_grid(

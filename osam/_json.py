@@ -77,9 +77,9 @@ def logits_b64data_to_ndarray(*, b64data: str) -> np.ndarray:
         raise ValueError(f"mask logits are larger than {MAX_LOGITS_SIDE} pixels a side")
     try:
         image = PIL.Image.open(io.BytesIO(png))
-        if image.mode != "L":
+        if image.mode != "I;16":
             raise ValueError(
-                f"mask logits must be an 8-bit grayscale PNG: got {image.mode}"
+                f"mask logits must be a 16-bit grayscale PNG: got {image.mode}"
             )
         return np.asarray(image)
     except (OSError, PIL.Image.DecompressionBombError) as e:

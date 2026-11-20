@@ -680,6 +680,30 @@ def test_client_leaves_mask_logits_out_of_a_request_that_skips_them(
     assert [body.get("include_mask_logits") for body in bodies] == [None, True]
 
 
+
+def test_client_track_sends_actions_without_mask_logits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actions: list[dict[str, Any]] = []
+
+    def stream(*, body: dict[str, Any], **_: Any):
+        actions.extend(body["actions"])
+        yield {
+            "done": True,
+            "objects": [],
+            "result": "sha256:0",
+            "cache": "miss",
+            "images": body["frames"],
+        }
+
+    prompt = {"type": "prompt", "frame": 0, "points": [[0, 0]], "point_labels": [1]}
+    with _serving() as host:
+        client = osam.Client(host=host)
+        monkeypatch.setattr(_backend(client), "_stream", stream)
+        client.track("efficientsam:10m", [np.zeros((4, 4, 3), np.uint8)], [prompt])
+    assert [action.keys() for action in actions] == [prompt.keys()]
+
+
 def test_client_rejects_a_tracked_mask_outside_the_frames_it_sent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

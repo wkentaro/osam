@@ -179,27 +179,28 @@ def _file(*, name: str, device: str) -> str:
 
 def _crop_mask(
     *,
-    mask: NDArray[np.float32],
+    logits: NDArray[np.float32],
     bounding_box: types.BoundingBox,
     height: int,
     width: int,
 ) -> NDArray[np.bool_]:
-    # The mask probabilities resized to height x width and thresholded, as
-    # sam3-onnx does, over the bounding box's pixels only.
+    # The mask logits resized to height x width and thresholded, over the
+    # bounding box's pixels only. Logits, not sam3-onnx's probabilities, so
+    # mask_logits redraw the same mask.
     bb = bounding_box
     return (
         np.asarray(
-            PIL.Image.fromarray(mask).resize(
+            PIL.Image.fromarray(logits).resize(
                 (bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1),
                 resample=PIL.Image.Resampling.BILINEAR,
                 box=types.box_on_grid(
                     bounding_box=bb,
-                    grid_shape=mask.shape,
+                    grid_shape=logits.shape,
                     covered_size=(width, height),
                 ),
             )
         )
-        > 0.5
+        > 0
     )
 
 
@@ -476,25 +477,27 @@ class Sam3(types.Model):
                 xmax=round(box[2]),
                 ymax=round(box[3]),
             )
-            cropped_mask: NDArray[np.bool_] = _crop_mask(
-                mask=masks_native[i, 0],
-                bounding_box=bb,
-                height=original_height,
-                width=original_width,
-            )
+            logits = _logits_from_probabilities(masks_native[i, 0])
             annotations.append(
                 types.Annotation(
-                    mask=cropped_mask,
-                    mask_logits=types.logits_in_box(
-                        logits=_logits_from_probabilities(masks_native[i, 0]),
-                        covered_size=(original_width, original_height),
+                    mask=_crop_mask(
+                        logits=logits,
                         bounding_box=bb,
-                    )
-                    if prompt.include_mask_logits
-                    else None,
+                        height=original_height,
+                        width=original_width,
+                    ),
                     bounding_box=bb,
                     text=row_texts[i],
                     score=float(scores[i]),
+                    **(
+                        types.logits_around_box(
+                            logits=logits,
+                            covered_size=(original_width, original_height),
+                            bounding_box=bb,
+                        )
+                        if prompt.include_mask_logits
+                        else {}
+                    ),
                 )
             )
 

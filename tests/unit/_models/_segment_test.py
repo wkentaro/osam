@@ -153,13 +153,25 @@ def _assert_logits_redraw_mask(*, annotation: types.Annotation) -> None:
     assert annotation.bounding_box is not None
     assert annotation.mask is not None
     assert annotation.mask_logits is not None
+    assert annotation.mask_logits_box is not None
+    bb = annotation.bounding_box
+    xmin, ymin, xmax, ymax = annotation.mask_logits_box
+    rows, cols = annotation.mask_logits.shape
+    cell_width, cell_height = (xmax - xmin) / cols, (ymax - ymin) / rows
     redrawn = (
         np.asarray(
             PIL.Image.fromarray(annotation.mask_logits.astype(np.float32)).resize(
-                annotation.mask.shape[::-1], resample=PIL.Image.Resampling.BILINEAR
+                annotation.mask.shape[::-1],
+                resample=PIL.Image.Resampling.BILINEAR,
+                box=(
+                    (bb.xmin - xmin) / cell_width,
+                    (bb.ymin - ymin) / cell_height,
+                    (bb.xmax + 1 - xmin) / cell_width,
+                    (bb.ymax + 1 - ymin) / cell_height,
+                ),
             )
         )
-        >= 128
+        >= 32768
     )
     iou = (redrawn & annotation.mask).sum() / (redrawn | annotation.mask).sum()
     assert iou >= 0.98
