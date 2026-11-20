@@ -57,17 +57,17 @@ def any_client(request: pytest.FixtureRequest, client: osam.Client):
         yield in_process
 
 
-def test_client_segments_mask_scores_only_when_asked(
+def test_client_segments_mask_logits_only_when_asked(
     any_client: osam.Client,
 ) -> None:
     kwargs: dict[str, Any] = dict(points=np.array([[1280, 800]]), point_labels=[1])
     (plain,) = any_client.segment("efficientsam:10m", _IMAGE, **kwargs)
     (scored,) = any_client.segment(
-        "efficientsam:10m", _IMAGE, include_mask_scores=True, **kwargs
+        "efficientsam:10m", _IMAGE, include_mask_logits=True, **kwargs
     )
 
-    assert plain.mask_scores is None
-    assert scored.mask_scores is not None
+    assert plain.mask_logits is None
+    assert scored.mask_logits is not None
     assert scored.bounding_box == plain.bounding_box
 
 
@@ -662,7 +662,7 @@ def test_client_rejects_a_segment_mask_outside_the_image_it_sent(
                 client.segment("efficientsam:10m", image)
 
 
-def test_client_leaves_mask_scores_out_of_a_request_that_skips_them(
+def test_client_leaves_mask_logits_out_of_a_request_that_skips_them(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bodies: list[dict[str, Any]] = []
@@ -676,8 +676,8 @@ def test_client_leaves_mask_scores_out_of_a_request_that_skips_them(
         monkeypatch.setattr(_backend(client), "_request", recording)
         image = np.zeros((4, 4, 3), np.uint8)
         client.segment("efficientsam:10m", image)
-        client.segment("efficientsam:10m", image, include_mask_scores=True)
-    assert [body.get("include_mask_scores") for body in bodies] == [None, True]
+        client.segment("efficientsam:10m", image, include_mask_logits=True)
+    assert [body.get("include_mask_logits") for body in bodies] == [None, True]
 
 
 def test_client_rejects_a_tracked_mask_outside_the_frames_it_sent(

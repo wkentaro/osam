@@ -6,7 +6,7 @@ from ._image_embedding import ImageEmbedding
 from ._model import Model
 from ._model import annotations_from_mask
 from ._model import box_on_grid
-from ._model import scores_in_box
+from ._model import logits_in_box
 from ._prompt import Prompt
 from ._prompt import point_inputs
 from ._prompt import scale_points
@@ -29,7 +29,7 @@ __all__ = [
     "RemoveAction",
     "annotations_from_mask",
     "box_on_grid",
-    "scores_in_box",
+    "logits_in_box",
     "point_inputs",
     "scale_points",
 ]

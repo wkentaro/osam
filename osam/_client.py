@@ -184,7 +184,7 @@ class Client:
         score_threshold: float | None = None,
         max_annotations: int | None = None,
         include_masks: bool | None = None,
-        include_mask_scores: bool | None = None,
+        include_mask_logits: bool | None = None,
         keep_alive: float | str | None = None,
     ) -> builtins.list[types.Annotation]:
         """Segment image, an HxWx3 uint8 RGB array, with model; uint8 grayscale
@@ -205,7 +205,7 @@ class Client:
         embedding.
         include_masks: False leaves out each annotation's mask, for boxes and
         scores only.
-        include_mask_scores: True adds each annotation's mask_scores, to draw
+        include_mask_logits: True adds each annotation's mask_logits, to draw
         the mask at another size, such as an image's own before it was shrunk
         to send.
         keep_alive: as in load.
@@ -221,7 +221,7 @@ class Client:
             "score_threshold": score_threshold,
             "max_annotations": max_annotations,
             "include_masks": include_masks,
-            "include_mask_scores": include_mask_scores,
+            "include_mask_logits": include_mask_logits,
             "keep_alive": keep_alive,
         }
         request = _requests.SegmentRequest.model_validate(

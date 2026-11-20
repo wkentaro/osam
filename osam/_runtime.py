@@ -288,15 +288,8 @@ class Runtime:
         annotations: list[types.Annotation] = model.decode(
             embedding=embedding, prompt=request
         )
-        left_out = {
-            name: None
-            for name, included in (
-                ("mask", request.include_masks),
-                ("mask_scores", request.include_mask_scores),
-            )
-            if not included
-        }
-        annotations = [a.model_copy(update=left_out) for a in annotations]
+        if not request.include_masks:
+            annotations = [a.model_copy(update={"mask": None}) for a in annotations]
         return SegmentResponse(annotations=annotations, image=image_ref)
 
     def _cache_embedding(

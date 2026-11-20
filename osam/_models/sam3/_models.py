@@ -203,6 +203,13 @@ def _crop_mask(
     )
 
 
+def _logits_from_probabilities(
+    probabilities: NDArray[np.float32],
+) -> NDArray[np.float32]:
+    clipped = np.clip(probabilities, 1e-6, 1 - 1e-6)
+    return np.log(clipped) - np.log1p(-clipped)
+
+
 class Sam3(types.Model):
     name = "sam3:latest"
     metadata = types.ModelMetadata(
@@ -379,6 +386,7 @@ class Sam3(types.Model):
                 point_labels=point_labels,
                 score_threshold=score_threshold,
                 max_annotations=max_annotations,
+                include_mask_logits=prompt.include_mask_logits,
             )
 
         # The decoder takes a fixed number of boxes, and masks out the unused ones.
@@ -477,11 +485,13 @@ class Sam3(types.Model):
             annotations.append(
                 types.Annotation(
                     mask=cropped_mask,
-                    mask_scores=types.scores_in_box(
-                        probabilities=masks_native[i, 0],
+                    mask_logits=types.logits_in_box(
+                        logits=_logits_from_probabilities(masks_native[i, 0]),
                         covered_size=(original_width, original_height),
                         bounding_box=bb,
-                    ),
+                    )
+                    if prompt.include_mask_logits
+                    else None,
                     bounding_box=bb,
                     text=row_texts[i],
                     score=float(scores[i]),
@@ -498,6 +508,7 @@ class Sam3(types.Model):
         point_labels: NDArray[np.float32],
         score_threshold: float,
         max_annotations: int,
+        include_mask_logits: bool,
     ) -> list[types.Annotation]:
         height: int = image_embedding.original_height
         width: int = image_embedding.original_width
@@ -553,6 +564,6 @@ class Sam3(types.Model):
         return types.annotations_from_mask(
             mask=mask,
             score=score,
-            logits=logits,
+            logits=logits if include_mask_logits else None,
             covered_size=(width, height),
         )

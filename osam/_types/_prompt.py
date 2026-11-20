@@ -39,6 +39,11 @@ class Prompt(pydantic.BaseModel):
     iou_threshold: float | None = None
     score_threshold: float | None = None
     max_annotations: int | None = pydantic.Field(default=None, ge=0)
+    include_mask_logits: bool = pydantic.Field(
+        default=False,
+        description="true adds each annotation's mask_logits, for a client that "
+        "draws the mask at another size",
+    )
 
     @property
     def kinds(self) -> frozenset[PromptKind]:

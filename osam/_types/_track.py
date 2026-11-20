@@ -15,6 +15,13 @@ class PromptAction(Prompt):
     type: typing.Literal["prompt"]
     frame: int = pydantic.Field(ge=0)
 
+    @pydantic.field_validator("include_mask_logits")
+    @classmethod
+    def _check_no_mask_logits(cls, include_mask_logits: bool) -> bool:
+        if include_mask_logits:
+            raise ValueError("track gives no mask_logits")
+        return include_mask_logits
+
 
 class _Edit(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="forbid")

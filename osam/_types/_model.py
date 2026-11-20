@@ -259,7 +259,10 @@ class Model(abc.ABC):
             prompt = self.default_prompt(
                 height=embedding.original_height, width=embedding.original_width
             ).model_copy(
-                update=prompt.model_dump(include=set(THRESHOLDS), exclude_none=True)
+                update=prompt.model_dump(
+                    include=set(THRESHOLDS) | {"include_mask_logits"},
+                    exclude_none=True,
+                )
             )
             logger.debug("Using the default prompt: {prompt!r}", prompt=prompt)
         if unsupported := prompt.kinds - self.prompt_kinds:
@@ -291,6 +294,9 @@ class Model(abc.ABC):
         raise NotImplementedError(f"{self.name} doesn't track")
 
 
+LOGIT_SCALE: typing.Final = 16
+
+
 def annotations_from_mask(
     *,
     mask: npt.NDArray[np.bool_],
@@ -313,10 +319,10 @@ def annotations_from_mask(
             mask=mask[ymin : ymax + 1, xmin : xmax + 1].copy(),
             bounding_box=bounding_box,
             score=score,
-            mask_scores=None
+            mask_logits=None
             if logits is None or covered_size is None
-            else scores_in_box(
-                probabilities=0.5 * (1 + np.tanh(logits / 2)),
+            else logits_in_box(
+                logits=logits,
                 covered_size=covered_size,
                 bounding_box=bounding_box,
             ),
@@ -324,19 +330,19 @@ def annotations_from_mask(
     ]
 
 
-def scores_in_box(
+def logits_in_box(
     *,
-    probabilities: npt.NDArray[np.float32],
+    logits: npt.NDArray[np.float32],
     covered_size: tuple[float, float],
     bounding_box: BoundingBox,
 ) -> npt.NDArray[np.uint8]:
     UPSAMPLE: typing.Final = 2
     box = box_on_grid(
         bounding_box=bounding_box,
-        grid_shape=probabilities.shape,
+        grid_shape=logits.shape,
         covered_size=covered_size,
     )
-    grid_height, grid_width = probabilities.shape
+    grid_height, grid_width = logits.shape
     bb = bounding_box
     size = (
         max(
@@ -352,10 +358,12 @@ def scores_in_box(
             ),
         ),
     )
-    resized = PIL.Image.fromarray(probabilities.astype(np.float32, copy=False)).resize(
+    resized = PIL.Image.fromarray(logits.astype(np.float32, copy=False)).resize(
         size, resample=PIL.Image.Resampling.BILINEAR, box=box
     )
-    return np.round(np.asarray(resized) * 255).astype(np.uint8)
+    return np.clip(np.round(128 + LOGIT_SCALE * np.asarray(resized)), 0, 255).astype(
+        np.uint8
+    )
 
 
 def box_on_grid(

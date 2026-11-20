@@ -116,40 +116,40 @@ def test_json_takes_a_mask_with_a_context_of_another_type() -> None:
     assert restored.mask is not None and restored.mask.all()
 
 
-def test_json_roundtrip_decodes_mask_scores() -> None:
-    mask_scores = np.array([[0, 128, 255], [7, 200, 13]], dtype=np.uint8)
+def test_json_roundtrip_decodes_mask_logits() -> None:
+    mask_logits = np.array([[0, 128, 255], [7, 200, 13]], dtype=np.uint8)
     original = Annotation(
         bounding_box=BoundingBox(xmin=0, ymin=0, xmax=9, ymax=9),
-        mask_scores=mask_scores,
+        mask_logits=mask_logits,
     )
 
     restored = Annotation.model_validate_json(original.model_dump_json())
 
-    np.testing.assert_array_equal(restored.mask_scores, mask_scores)
+    np.testing.assert_array_equal(restored.mask_logits, mask_logits)
 
 
 @pytest.mark.parametrize(
-    "mask_scores", [np.zeros((2, 2), np.float32), np.zeros((2, 2, 3), np.uint8)]
+    "mask_logits", [np.zeros((2, 2), np.float32), np.zeros((2, 2, 3), np.uint8)]
 )
-def test_rejects_mask_scores_that_are_not_a_uint8_grid(mask_scores) -> None:
+def test_rejects_mask_logits_that_are_not_a_uint8_grid(mask_logits) -> None:
     with pytest.raises(pydantic.ValidationError, match="2D uint8"):
         Annotation(
             bounding_box=BoundingBox(xmin=0, ymin=0, xmax=1, ymax=1),
-            mask_scores=mask_scores,
+            mask_logits=mask_logits,
         )
 
 
-def test_rejects_mask_scores_without_a_box() -> None:
+def test_rejects_mask_logits_without_a_box() -> None:
     with pytest.raises(pydantic.ValidationError, match="bounding_box is required"):
-        Annotation(mask_scores=np.zeros((2, 2), np.uint8))
+        Annotation(mask_logits=np.zeros((2, 2), np.uint8))
 
 
-def _scores_json(*, image: PIL.Image.Image, format: str = "PNG") -> dict:
+def _logits_json(*, image: PIL.Image.Image, format: str = "PNG") -> dict:
     buffer = io.BytesIO()
     image.save(buffer, format=format)
     return {
         "bounding_box": {"xmin": 0, "ymin": 0, "xmax": 1, "ymax": 1},
-        "mask_scores": base64.b64encode(buffer.getvalue()).decode(),
+        "mask_logits": base64.b64encode(buffer.getvalue()).decode(),
     }
 
 
@@ -162,9 +162,9 @@ def _scores_json(*, image: PIL.Image.Image, format: str = "PNG") -> dict:
         (PIL.Image.new("L", (2, 2)), "JPEG"),
     ],
 )
-def test_json_rejects_mask_scores_other_than_a_grayscale_png(image, format) -> None:
+def test_json_rejects_mask_logits_other_than_a_grayscale_png(image, format) -> None:
     with pytest.raises(pydantic.ValidationError, match="PNG"):
-        Annotation.model_validate(_scores_json(image=image, format=format))
+        Annotation.model_validate(_logits_json(image=image, format=format))
 
 
 @pytest.mark.parametrize(
@@ -175,24 +175,34 @@ def test_json_rejects_mask_scores_other_than_a_grayscale_png(image, format) -> N
         ({"xmin": 0, "ymin": 0, "xmax": 2, "ymax": 1}, "outside the 2x2 image"),
     ],
 )
-def test_json_rejects_mask_scores_on_a_box_off_the_image(box, message) -> None:
-    data = _scores_json(image=PIL.Image.new("L", (2, 2))) | {"bounding_box": box}
+def test_json_rejects_mask_logits_on_a_box_off_the_image(box, message) -> None:
+    data = _logits_json(image=PIL.Image.new("L", (2, 2))) | {"bounding_box": box}
 
     with pytest.raises(pydantic.ValidationError, match=message):
         Annotation.model_validate(data, context={"canvas_size": (2, 2)})
 
 
-def test_rejects_empty_mask_scores() -> None:
+def test_rejects_empty_mask_logits() -> None:
     with pytest.raises(pydantic.ValidationError, match="2D uint8"):
         Annotation(
             bounding_box=BoundingBox(xmin=0, ymin=0, xmax=1, ymax=1),
-            mask_scores=np.zeros((0, 2), np.uint8),
+            mask_logits=np.zeros((0, 2), np.uint8),
         )
 
 
-def test_rejects_mask_scores_on_an_inverted_box() -> None:
+def test_rejects_mask_logits_on_an_inverted_box() -> None:
     with pytest.raises(pydantic.ValidationError, match="inverted"):
         Annotation(
             bounding_box=BoundingBox(xmin=1, ymin=0, xmax=0, ymax=1),
-            mask_scores=np.zeros((2, 2), np.uint8),
+            mask_logits=np.zeros((2, 2), np.uint8),
         )
+
+
+def test_json_rejects_mask_logits_larger_than_any_grid_before_decoding_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = _logits_json(image=PIL.Image.new("L", (4097, 1)))
+    monkeypatch.setattr(PIL.Image, "open", None)
+
+    with pytest.raises(pydantic.ValidationError, match="4096 pixels"):
+        Annotation.model_validate(data)

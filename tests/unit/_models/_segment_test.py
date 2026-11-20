@@ -149,13 +149,13 @@ def test_segment_box_rejected_by_yoloworld() -> None:
         _segment(model="yoloworld", prompt=types.Prompt(box=(450, 551, 1059, 1421)))
 
 
-def _assert_scores_redraw_mask(*, annotation: types.Annotation) -> None:
+def _assert_logits_redraw_mask(*, annotation: types.Annotation) -> None:
     assert annotation.bounding_box is not None
     assert annotation.mask is not None
-    assert annotation.mask_scores is not None
+    assert annotation.mask_logits is not None
     redrawn = (
         np.asarray(
-            PIL.Image.fromarray(annotation.mask_scores.astype(np.float32)).resize(
+            PIL.Image.fromarray(annotation.mask_logits.astype(np.float32)).resize(
                 annotation.mask.shape[::-1], resample=PIL.Image.Resampling.BILINEAR
             )
         )
@@ -173,10 +173,12 @@ def _assert_scores_redraw_mask(*, annotation: types.Annotation) -> None:
         "sam2:tiny",
     ],
 )
-def test_segment_point_scores_redraw_the_mask(model: str) -> None:
-    (annotation,) = _segment(model=model, prompt=types.Prompt())
+def test_segment_point_logits_redraw_the_mask(model: str) -> None:
+    (plain,) = _segment(model=model, prompt=types.Prompt())
+    (annotation,) = _segment(model=model, prompt=types.Prompt(include_mask_logits=True))
 
-    _assert_scores_redraw_mask(annotation=annotation)
+    assert plain.mask_logits is None
+    _assert_logits_redraw_mask(annotation=annotation)
 
 
 # The tests below run SAM3, after the YOLO-World case of the first, so that it
@@ -374,15 +376,20 @@ def test_encode_image_takes_an_image_resized_to_its_input_shape(model: str) -> N
 @pytest.mark.parametrize(
     "prompt",
     [
-        types.Prompt(texts=["dog"]),
-        types.Prompt(points=[(1440, 800)], point_labels=[1]),
+        types.Prompt(texts=["dog"], include_mask_logits=True),
+        types.Prompt(points=[(1440, 800)], point_labels=[1], include_mask_logits=True),
     ],
 )
-def test_segment_sam3_scores_redraw_the_mask(
+def test_segment_sam3_logits_redraw_the_mask(
     prompt: types.Prompt, sam3_embedding: types.ImageEmbedding
 ) -> None:
     annotations = _sam3(embedding=sam3_embedding, prompt=prompt)
+    plain = _sam3(
+        embedding=sam3_embedding,
+        prompt=prompt.model_copy(update={"include_mask_logits": False}),
+    )
 
     assert annotations
+    assert all(annotation.mask_logits is None for annotation in plain)
     for annotation in annotations:
-        _assert_scores_redraw_mask(annotation=annotation)
+        _assert_logits_redraw_mask(annotation=annotation)

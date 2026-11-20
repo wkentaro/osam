@@ -45,38 +45,39 @@ class Annotation(pydantic.BaseModel):
     )
     # Serialized as a base64 PNG cropped to bounding_box.
     mask: Base64Image | None = pydantic.Field(default=None)
-    mask_scores: Base64Image | None = pydantic.Field(
+    mask_logits: Base64Image | None = pydantic.Field(
         default=None,
-        description="The mask's probabilities x 255 as a uint8 grayscale image "
-        "whose pixels tile bounding_box, at the model's own resolution. Resized "
-        "bilinearly onto any image size, a pixel is in the mask at 128 or more",
+        description="The mask's logits as a uint8 grayscale image of "
+        "128 + 16 x logit, clipped to 0..255, whose pixels tile bounding_box at "
+        "the model's own resolution. Resized bilinearly onto any image size, a "
+        "pixel is in the mask at 128 or more",
     )
 
-    @pydantic.field_validator("mask_scores", mode="before")
+    @pydantic.field_validator("mask_logits", mode="before")
     @classmethod
-    def decode_mask_scores(
-        cls, mask_scores: object, info: pydantic.ValidationInfo
+    def decode_mask_logits(
+        cls, mask_logits: object, info: pydantic.ValidationInfo
     ) -> object:
-        if not isinstance(mask_scores, str):
-            return mask_scores
-        _require_box_in_canvas(info=info, field="mask_scores")
-        return _json.scores_b64data_to_ndarray(b64data=mask_scores)
+        if not isinstance(mask_logits, str):
+            return mask_logits
+        _require_box_in_canvas(info=info, field="mask_logits")
+        return _json.logits_b64data_to_ndarray(b64data=mask_logits)
 
-    @pydantic.field_validator("mask_scores")
+    @pydantic.field_validator("mask_logits")
     @classmethod
-    def validate_mask_scores(cls, mask_scores: np.ndarray | None) -> np.ndarray | None:
-        if mask_scores is None:
+    def validate_mask_logits(cls, mask_logits: np.ndarray | None) -> np.ndarray | None:
+        if mask_logits is None:
             return None
         if (
-            mask_scores.dtype != np.uint8
-            or mask_scores.ndim != 2
-            or not mask_scores.size
+            mask_logits.dtype != np.uint8
+            or mask_logits.ndim != 2
+            or not mask_logits.size
         ):
             raise ValueError(
-                f"mask_scores must be a 2D uint8 array: got {mask_scores.dtype} "
-                f"{mask_scores.shape}"
+                f"mask_logits must be a 2D uint8 array: got {mask_logits.dtype} "
+                f"{mask_logits.shape}"
             )
-        return mask_scores
+        return mask_logits
 
     @pydantic.field_validator("mask", mode="before")
     @classmethod
@@ -98,11 +99,11 @@ class Annotation(pydantic.BaseModel):
 
     @pydantic.model_validator(mode="after")
     def validate_mask_bbox_consistency(self) -> "Annotation":
-        if self.mask_scores is not None:
+        if self.mask_logits is not None:
             bb = self.bounding_box
             if bb is None:
                 raise ValueError(
-                    "bounding_box is required when mask_scores is provided"
+                    "bounding_box is required when mask_logits is provided"
                 )
             if bb.xmin > bb.xmax or bb.ymin > bb.ymax:
                 raise ValueError(f"bounding box {bb} is inverted")
@@ -123,8 +124,8 @@ class Annotation(pydantic.BaseModel):
             return None
         return _json.image_ndarray_to_b64data(ndarray=mask.view(np.uint8) * 255)
 
-    @pydantic.field_serializer("mask_scores")
-    def serialize_mask_scores(self, mask_scores: np.ndarray | None) -> str | None:
-        if mask_scores is None:
+    @pydantic.field_serializer("mask_logits")
+    def serialize_mask_logits(self, mask_logits: np.ndarray | None) -> str | None:
+        if mask_logits is None:
             return None
-        return _json.image_ndarray_to_b64data(ndarray=mask_scores)
+        return _json.image_ndarray_to_b64data(ndarray=mask_logits)

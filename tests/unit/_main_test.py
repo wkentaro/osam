@@ -356,7 +356,7 @@ def test_run_rejects_device_with_osam_host(
     assert "unset OSAM_HOST" in result.output
 
 
-def test_video_rejects_mask_scores_before_inference(
+def test_video_rejects_mask_logits_before_inference(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     video = tmp_path / "frames"
@@ -367,9 +367,9 @@ def test_video_rejects_mask_scores_before_inference(
         raise AssertionError("started inference with an unsupported prompt")
 
     monkeypatch.setattr(__main__, "_client", unexpected)
-    prompt = json.dumps({"texts": ["dog"], "include_mask_scores": True})
+    prompt = json.dumps({"texts": ["dog"], "include_mask_logits": True})
     result = CliRunner().invoke(
         __main__.run, ["sam3", "--video", str(video), "--prompt", prompt, "--json"]
     )
     assert result.exit_code == 2, result.output
-    assert "include_mask_scores" in result.output
+    assert "include_mask_logits" in result.output

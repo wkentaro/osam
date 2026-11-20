@@ -171,7 +171,7 @@ class HttpBackend:
         body: dict[str, Any] = request.model_dump(
             mode="json",
             exclude={"image"}
-            | (set() if request.include_mask_scores else {"include_mask_scores"}),
+            | (set() if request.include_mask_logits else {"include_mask_logits"}),
             exclude_none=True,
         )
 

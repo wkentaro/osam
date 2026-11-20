@@ -54,7 +54,7 @@ class SamBase(types.Model):
         )
         return types.annotations_from_mask(
             mask=output.mask,
-            logits=output.low_res_logits,
+            logits=output.low_res_logits if prompt.include_mask_logits else None,
             covered_size=output.covered_size,
         )
 
