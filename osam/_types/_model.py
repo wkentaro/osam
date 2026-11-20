@@ -336,9 +336,21 @@ def scores_in_box(
         grid_shape=probabilities.shape,
         covered_size=covered_size,
     )
+    grid_height, grid_width = probabilities.shape
+    bb = bounding_box
     size = (
-        max(1, math.ceil(UPSAMPLE * (box[2] - box[0]))),
-        max(1, math.ceil(UPSAMPLE * (box[3] - box[1]))),
+        max(
+            1,
+            math.ceil(
+                UPSAMPLE * (bb.xmax + 1 - bb.xmin) * grid_width / covered_size[0]
+            ),
+        ),
+        max(
+            1,
+            math.ceil(
+                UPSAMPLE * (bb.ymax + 1 - bb.ymin) * grid_height / covered_size[1]
+            ),
+        ),
     )
     resized = PIL.Image.fromarray(probabilities.astype(np.float32, copy=False)).resize(
         size, resample=PIL.Image.Resampling.BILINEAR, box=box

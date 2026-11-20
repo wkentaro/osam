@@ -112,3 +112,18 @@ def test_annotations_from_mask_leave_out_scores_without_probabilities() -> None:
     (annotation,) = types.annotations_from_mask(mask=np.eye(4, dtype=bool))
 
     assert annotation.mask_scores is None
+
+
+def test_scores_in_box_size_follows_the_box_not_its_position() -> None:
+    probabilities = np.zeros((288, 288), np.float32)
+
+    shapes = {
+        types.scores_in_box(
+            probabilities=probabilities,
+            covered_size=(1920, 1080),
+            bounding_box=types.BoundingBox(xmin=xmin, ymin=0, xmax=xmin + 99, ymax=19),
+        ).shape
+        for xmin in (21, 341)
+    }
+
+    assert len(shapes) == 1
