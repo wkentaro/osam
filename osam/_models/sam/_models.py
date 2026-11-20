@@ -1,4 +1,5 @@
 import abc
+from typing import NamedTuple
 from typing import cast
 
 import numpy as np
@@ -8,6 +9,12 @@ from typing_extensions import override
 
 from osam import _types as types
 from osam.types._model_info import fit_hw
+
+
+class MaskOutput(NamedTuple):
+    mask: npt.NDArray[np.bool_]
+    low_res_logits: npt.NDArray[np.float32]
+    covered_size: tuple[float, float]
 
 
 class SamBase(types.Model):
@@ -27,7 +34,7 @@ class SamBase(types.Model):
         image_embedding: types.ImageEmbedding,
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
-    ) -> npt.NDArray[np.bool_]:
+    ) -> MaskOutput:
         # point_labels: 0 for background, 1 for foreground, and 2 and 3 for a
         # box's left-top and right-bottom corners.
         pass
@@ -42,11 +49,24 @@ class SamBase(types.Model):
         self, *, embedding: types.ImageEmbedding, prompt: types.Prompt
     ) -> list[types.Annotation]:
         points, point_labels = types.point_inputs(prompt=prompt)
-        return types.annotations_from_mask(
-            mask=self._generate_mask_from_image_embedding(
-                image_embedding=embedding, points=points, point_labels=point_labels
-            )
+        output = self._generate_mask_from_image_embedding(
+            image_embedding=embedding, points=points, point_labels=point_labels
         )
+        return types.annotations_from_mask(
+            mask=output.mask,
+            logits=output.low_res_logits if prompt.include_mask_logits else None,
+            covered_size=output.covered_size,
+        )
+
+
+def decoder_crop_hw(*, decode_hw: tuple[int, int], size: int) -> tuple[int, int]:
+    # In float32 and in the order of the decoder's mask postprocessing, whose
+    # crop this is.
+    scale = (np.float32(1) / np.float32(max(decode_hw))) * np.float32(size)
+    height, width = (
+        int(np.floor(np.float32(side) * scale + np.float32(0.5))) for side in decode_hw
+    )
+    return height, width
 
 
 class Sam(SamBase):
@@ -99,7 +119,7 @@ class Sam(SamBase):
         image_embedding: types.ImageEmbedding,
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
-    ) -> npt.NDArray[np.bool_]:
+    ) -> MaskOutput:
         new_height, new_width = fit_hw(
             height=image_embedding.original_height,
             width=image_embedding.original_width,
@@ -136,7 +156,9 @@ class Sam(SamBase):
             "orig_im_size": np.array(decode_hw, dtype=np.float32),
         }
 
-        masks, _, _ = self._inference_sessions["decoder"].run(None, decoder_inputs)
+        masks, _, low_res_masks = self._inference_sessions["decoder"].run(
+            None, decoder_inputs
+        )
         logits = cast(npt.NDArray[np.float32], masks)[0, 0]
         if logits.shape != original_hw:
             logits = np.asarray(
@@ -145,7 +167,17 @@ class Sam(SamBase):
                     resample=PIL.Image.Resampling.BILINEAR,
                 )
             )
-        return logits > 0.0
+        crop_height, crop_width = decoder_crop_hw(
+            decode_hw=decode_hw, size=self.input_size
+        )
+        return MaskOutput(
+            mask=logits > 0.0,
+            low_res_logits=cast(npt.NDArray[np.float32], low_res_masks)[0, 0],
+            covered_size=(
+                original_hw[1] * self.input_size / crop_width,
+                original_hw[0] * self.input_size / crop_height,
+            ),
+        )
 
 
 class Sam100m(Sam):

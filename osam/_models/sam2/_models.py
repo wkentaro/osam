@@ -6,6 +6,7 @@ import numpy.typing as npt
 from typing_extensions import override
 
 from osam import _types as types
+from osam._models.sam import MaskOutput
 from osam._models.sam import SamBase
 
 
@@ -55,7 +56,7 @@ class Sam2(SamBase):
         image_embedding: types.ImageEmbedding,
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
-    ) -> npt.NDArray[np.bool_]:
+    ) -> MaskOutput:
         input_size: int = self.input_size
 
         input_point: npt.NDArray[np.float32] = types.scale_points(
@@ -85,16 +86,18 @@ class Sam2(SamBase):
                 dtype=np.int64,
             ),
         }
-        masks, scores, _low_res_mask = self._inference_sessions["decoder"].run(
+        masks, scores, low_res_masks = self._inference_sessions["decoder"].run(
             None, decoder_inputs
         )
-        masks = cast(npt.NDArray[np.float32], masks)
-        scores = cast(npt.NDArray[np.float32], scores)
-
-        mask: npt.NDArray[np.bool_] = (
-            masks[0, np.argmax(scores)] > 0.0
-        )  # (1, N, H, W) -> (H, W)
-        return mask
+        best = int(np.argmax(cast(npt.NDArray[np.float32], scores)))
+        return MaskOutput(
+            mask=cast(npt.NDArray[np.float32], masks)[0, best] > 0.0,
+            low_res_logits=cast(npt.NDArray[np.float32], low_res_masks)[0, best],
+            covered_size=(
+                image_embedding.original_width,
+                image_embedding.original_height,
+            ),
+        )
 
 
 class Sam2Tiny(Sam2):

@@ -545,6 +545,10 @@ def _track(
     track_keys: set[str] = set(inspect.signature(Client.track).parameters)
     options: dict = {k: v for k, v in prompt.items() if k in track_keys}
     action: dict = {k: v for k, v in prompt.items() if k not in track_keys}
+    if "include_mask_logits" in action:
+        raise click.BadParameter(
+            "include_mask_logits isn't available with --video", param_hint="--prompt"
+        )
 
     def progress(event: types.TrackProgress) -> None:
         message = "Preparing video"

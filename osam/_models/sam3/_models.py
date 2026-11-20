@@ -179,29 +179,28 @@ def _file(*, name: str, device: str) -> str:
 
 def _crop_mask(
     *,
-    mask: NDArray[np.float32],
+    logits: NDArray[np.float32],
     bounding_box: types.BoundingBox,
     height: int,
     width: int,
 ) -> NDArray[np.bool_]:
-    # The mask probabilities resized to height x width and thresholded, as
-    # sam3-onnx does, over the bounding box's pixels only.
+    # The mask logits resized to height x width and thresholded, over the
+    # bounding box's pixels only. Logits, not sam3-onnx's probabilities, so
+    # mask_logits redraw the same mask.
     bb = bounding_box
-    mask_h, mask_w = mask.shape
     return (
         np.asarray(
-            PIL.Image.fromarray(mask).resize(
+            PIL.Image.fromarray(logits).resize(
                 (bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1),
                 resample=PIL.Image.Resampling.BILINEAR,
-                box=(
-                    bb.xmin * mask_w / width,
-                    bb.ymin * mask_h / height,
-                    (bb.xmax + 1) * mask_w / width,
-                    (bb.ymax + 1) * mask_h / height,
+                box=types.box_on_grid(
+                    bounding_box=bb,
+                    grid_shape=logits.shape,
+                    covered_size=(width, height),
                 ),
             )
         )
-        > 0.5
+        > 0
     )
 
 
@@ -381,6 +380,7 @@ class Sam3(types.Model):
                 point_labels=point_labels,
                 score_threshold=score_threshold,
                 max_annotations=max_annotations,
+                include_mask_logits=prompt.include_mask_logits,
             )
 
         # The decoder takes a fixed number of boxes, and masks out the unused ones.
@@ -417,7 +417,7 @@ class Sam3(types.Model):
                 "language_encoder"
             ].run(["text_attention_mask", "text_memory"], {"tokens": tokens})
             outputs = self._inference_sessions["decoder"].run(
-                ["boxes", "scores", "masks"],
+                ["boxes", "scores", "mask_logits"],
                 {
                     "backbone_fpn_0": embedding.embedding,
                     "backbone_fpn_1": embedding.extra_features[0],
@@ -436,7 +436,7 @@ class Sam3(types.Model):
             np.concatenate([run[0] for run in runs]), 0, 1
         )
         scores: NDArray[np.float32] = np.concatenate([run[1] for run in runs])
-        masks_native: NDArray[np.float32] = np.concatenate([run[2] for run in runs])
+        mask_logits: NDArray[np.float32] = np.concatenate([run[2] for run in runs])
         row_texts: list[str] = [text for text, run in zip(texts, runs) for _ in run[1]]
 
         # Scale normalized box edges to the first and last pixels whose
@@ -470,18 +470,27 @@ class Sam3(types.Model):
                 xmax=round(box[2]),
                 ymax=round(box[3]),
             )
-            cropped_mask: NDArray[np.bool_] = _crop_mask(
-                mask=masks_native[i, 0],
-                bounding_box=bb,
-                height=original_height,
-                width=original_width,
-            )
+            logits = mask_logits[i, 0]
             annotations.append(
                 types.Annotation(
-                    mask=cropped_mask,
+                    mask=_crop_mask(
+                        logits=logits,
+                        bounding_box=bb,
+                        height=original_height,
+                        width=original_width,
+                    ),
                     bounding_box=bb,
                     text=row_texts[i],
                     score=float(scores[i]),
+                    **(
+                        types.logits_around_box(
+                            logits=logits,
+                            covered_size=(original_width, original_height),
+                            bounding_box=bb,
+                        )
+                        if prompt.include_mask_logits
+                        else {}
+                    ),
                 )
             )
 
@@ -495,6 +504,7 @@ class Sam3(types.Model):
         point_labels: NDArray[np.float32],
         score_threshold: float,
         max_annotations: int,
+        include_mask_logits: bool,
     ) -> list[types.Annotation]:
         height: int = image_embedding.original_height
         width: int = image_embedding.original_width
@@ -547,4 +557,9 @@ class Sam3(types.Model):
         score = float(iou_predictions[0, best])
         if score < score_threshold or max_annotations == 0:
             return []
-        return types.annotations_from_mask(mask=mask, score=score)
+        return types.annotations_from_mask(
+            mask=mask,
+            score=score,
+            logits=logits if include_mask_logits else None,
+            covered_size=(width, height),
+        )

@@ -149,6 +149,68 @@ def test_segment_box_rejected_by_yoloworld() -> None:
         _segment(model="yoloworld", prompt=types.Prompt(box=(450, 551, 1059, 1421)))
 
 
+def _assert_logits_redraw_mask(*, annotation: types.Annotation) -> None:
+    assert annotation.bounding_box is not None
+    assert annotation.mask is not None
+    assert annotation.mask_logits is not None
+    assert annotation.mask_logits_box is not None
+    bb = annotation.bounding_box
+    xmin, ymin, xmax, ymax = annotation.mask_logits_box
+    rows, cols = annotation.mask_logits.shape
+    cell_width, cell_height = (xmax - xmin) / cols, (ymax - ymin) / rows
+    redrawn = (
+        np.asarray(
+            PIL.Image.fromarray(annotation.mask_logits.astype(np.float32)).resize(
+                annotation.mask.shape[::-1],
+                resample=PIL.Image.Resampling.BILINEAR,
+                box=(
+                    (bb.xmin - xmin) / cell_width,
+                    (bb.ymin - ymin) / cell_height,
+                    (bb.xmax + 1 - xmin) / cell_width,
+                    (bb.ymax + 1 - ymin) / cell_height,
+                ),
+            )
+        )
+        > 32768
+    )
+    iou = (redrawn & annotation.mask).sum() / (redrawn | annotation.mask).sum()
+    assert iou >= 0.98
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "efficientsam:10m",
+        pytest.param("sam:100m", marks=pytest.mark.extra),
+        "sam2:tiny",
+    ],
+)
+def test_segment_point_logits_redraw_the_mask(model: str) -> None:
+    (plain,) = _segment(model=model, prompt=types.Prompt())
+    (annotation,) = _segment(model=model, prompt=types.Prompt(include_mask_logits=True))
+
+    assert plain.mask_logits is None
+    _assert_logits_redraw_mask(annotation=annotation)
+
+
+@pytest.mark.extra
+def test_sam_logits_redraw_the_mask_where_the_decoder_rounds_up() -> None:
+    # 1025 * 1024 / 2048 is 512.5: the encoder rounds it to 512, the decoder
+    # crops 513 rows.
+    image = np.asarray(PIL.Image.open(image_path).convert("RGB").resize((2048, 1025)))
+    loaded = _model(name="sam:100m")
+    (annotation,) = loaded.decode(
+        embedding=loaded.encode_image(image=image),
+        prompt=types.Prompt(
+            points=[(0.348 * 2048, 0.7 * 1025)],
+            point_labels=[1],
+            include_mask_logits=True,
+        ),
+    )
+
+    _assert_logits_redraw_mask(annotation=annotation)
+
+
 # The tests below run SAM3, after the YOLO-World case of the first, so that it
 # loads once.
 @pytest.mark.parametrize(
@@ -339,3 +401,25 @@ def test_encode_image_takes_an_image_resized_to_its_input_shape(model: str) -> N
         strict=True,
     ):
         np.testing.assert_array_equal(actual_feature, expected_feature)
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        types.Prompt(texts=["dog"], include_mask_logits=True),
+        types.Prompt(points=[(1440, 800)], point_labels=[1], include_mask_logits=True),
+    ],
+)
+def test_segment_sam3_logits_redraw_the_mask(
+    prompt: types.Prompt, sam3_embedding: types.ImageEmbedding
+) -> None:
+    annotations = _sam3(embedding=sam3_embedding, prompt=prompt)
+    plain = _sam3(
+        embedding=sam3_embedding,
+        prompt=prompt.model_copy(update={"include_mask_logits": False}),
+    )
+
+    assert annotations
+    assert all(annotation.mask_logits is None for annotation in plain)
+    for annotation in annotations:
+        _assert_logits_redraw_mask(annotation=annotation)

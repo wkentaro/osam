@@ -231,23 +231,23 @@ def test_remove_deletes_the_files_an_upgrade_leaves(
 
 
 def test_crop_mask_matches_the_mask_resized_to_the_image() -> None:
-    # As sam3-onnx resizes the whole mask, on boxes that end on odd native
+    # As if the whole mask were resized, on boxes that end on odd native
     # pixels and on the image's edges.
-    mask = np.random.default_rng(0).random((36, 36)).astype(np.float32)
+    logits = np.random.default_rng(0).normal(size=(36, 36)).astype(np.float32)
     height, width = 100, 160
     full = (
         np.asarray(
-            PIL.Image.fromarray(mask).resize(
+            PIL.Image.fromarray(logits).resize(
                 (width, height), resample=PIL.Image.Resampling.BILINEAR
             )
         )
-        > 0.5
+        > 0
     )
     for xmin, ymin, xmax, ymax in [(7, 3, 61, 50), (0, 0, 159, 99), (150, 90, 159, 99)]:
         bounding_box = types.BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
         np.testing.assert_array_equal(
             _models._crop_mask(
-                mask=mask, bounding_box=bounding_box, height=height, width=width
+                logits=logits, bounding_box=bounding_box, height=height, width=width
             ),
             full[ymin : ymax + 1, xmin : xmax + 1],
         )

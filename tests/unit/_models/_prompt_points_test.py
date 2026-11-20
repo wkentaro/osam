@@ -6,6 +6,7 @@ import pytest
 from osam import _types as types
 from osam._models.efficientsam._models import EfficientSam
 from osam._models.sam._models import Sam
+from osam._models.sam._models import decoder_crop_hw
 from osam._models.sam2._models import Sam2
 from osam._models.sam3._models import Sam3
 
@@ -87,3 +88,17 @@ def test_decode_sends_the_clicked_pixel_center_at_its_place_in_the_model(
     np.testing.assert_allclose(
         sent + 0.5, (np.array([(10, 20), (WIDTH - 1, 0)]) + 0.5) * scale, rtol=1e-6
     )
+
+
+@pytest.mark.parametrize(
+    "decode_hw, crop_hw",
+    [
+        ((1025, 2048), (513, 1024)),
+        ((287, 83968), (3, 1024)),
+        ((1024, 1024), (1024, 1024)),
+    ],
+)
+def test_decoder_crop_rounds_as_the_decoder_does(
+    decode_hw: tuple[int, int], crop_hw: tuple[int, int]
+) -> None:
+    assert decoder_crop_hw(decode_hw=decode_hw, size=1024) == crop_hw
