@@ -1,4 +1,5 @@
 import abc
+import math
 from typing import NamedTuple
 from typing import cast
 
@@ -157,12 +158,16 @@ class Sam(SamBase):
                     resample=PIL.Image.Resampling.BILINEAR,
                 )
             )
+        crop_height, crop_width = (
+            math.floor(side * self.input_size / max(decode_hw) + 0.5)
+            for side in decode_hw
+        )
         return MaskOutput(
             mask=logits > 0.0,
             low_res_logits=cast(npt.NDArray[np.float32], low_res_masks)[0, 0],
             covered_size=(
-                original_hw[1] * self.input_size / new_width,
-                original_hw[0] * self.input_size / new_height,
+                original_hw[1] * self.input_size / crop_width,
+                original_hw[0] * self.input_size / crop_height,
             ),
         )
 
