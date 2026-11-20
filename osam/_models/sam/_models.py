@@ -1,5 +1,4 @@
 import abc
-import math
 from typing import NamedTuple
 from typing import cast
 
@@ -58,6 +57,16 @@ class SamBase(types.Model):
             logits=output.low_res_logits if prompt.include_mask_logits else None,
             covered_size=output.covered_size,
         )
+
+
+def decoder_crop_hw(*, decode_hw: tuple[int, int], size: int) -> tuple[int, int]:
+    # In float32 and in the order of the decoder's mask postprocessing, whose
+    # crop this is.
+    scale = (np.float32(1) / np.float32(max(decode_hw))) * np.float32(size)
+    height, width = (
+        int(np.floor(np.float32(side) * scale + np.float32(0.5))) for side in decode_hw
+    )
+    return height, width
 
 
 class Sam(SamBase):
@@ -158,9 +167,8 @@ class Sam(SamBase):
                     resample=PIL.Image.Resampling.BILINEAR,
                 )
             )
-        crop_height, crop_width = (
-            math.floor(side * self.input_size / max(decode_hw) + 0.5)
-            for side in decode_hw
+        crop_height, crop_width = decoder_crop_hw(
+            decode_hw=decode_hw, size=self.input_size
         )
         return MaskOutput(
             mask=logits > 0.0,

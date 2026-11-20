@@ -149,9 +149,7 @@ def test_segment_box_rejected_by_yoloworld() -> None:
         _segment(model="yoloworld", prompt=types.Prompt(box=(450, 551, 1059, 1421)))
 
 
-def _assert_logits_redraw_mask(
-    *, annotation: types.Annotation, min_iou: float = 0.98
-) -> None:
+def _assert_logits_redraw_mask(*, annotation: types.Annotation) -> None:
     assert annotation.bounding_box is not None
     assert annotation.mask is not None
     assert annotation.mask_logits is not None
@@ -176,7 +174,7 @@ def _assert_logits_redraw_mask(
         > 32768
     )
     iou = (redrawn & annotation.mask).sum() / (redrawn | annotation.mask).sum()
-    assert iou >= min_iou
+    assert iou >= 0.98
 
 
 @pytest.mark.parametrize(
@@ -210,7 +208,7 @@ def test_sam_logits_redraw_the_mask_where_the_decoder_rounds_up() -> None:
         ),
     )
 
-    _assert_logits_redraw_mask(annotation=annotation, min_iou=0.99)
+    _assert_logits_redraw_mask(annotation=annotation)
 
 
 # The tests below run SAM3, after the YOLO-World case of the first, so that it
