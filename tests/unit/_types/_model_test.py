@@ -127,36 +127,26 @@ def _resized(*, logits: np.ndarray, size: tuple[int, int], box=None) -> np.ndarr
     )
 
 
-def _redraw(
-    *, annotation: types.Annotation, size: tuple[int, int], scale: int
-) -> np.ndarray:
+def _redraw(*, annotation: types.Annotation, scale: int) -> np.ndarray:
     assert annotation.mask_logits is not None
     assert annotation.mask_logits_box is not None
+    assert annotation.bounding_box is not None
+    bb = annotation.bounding_box
     xmin, ymin, xmax, ymax = annotation.mask_logits_box
     rows, cols = annotation.mask_logits.shape
     cell_width, cell_height = (xmax - xmin) / cols, (ymax - ymin) / rows
-    left, top = max(0, int(xmin)), max(0, int(ymin))
-    right, bottom = min(size[0], int(xmax)), min(size[1], int(ymax))
-    redrawn = np.zeros((size[1] * scale, size[0] * scale), bool)
-    redrawn[top * scale : bottom * scale, left * scale : right * scale] = (
-        _resized(
-            logits=annotation.mask_logits,
-            size=((right - left) * scale, (bottom - top) * scale),
-            box=(
-                (left - xmin) / cell_width,
-                (top - ymin) / cell_height,
-                (right - xmin) / cell_width,
-                (bottom - ymin) / cell_height,
-            ),
-        )
-        > 32768
+    box = (
+        (bb.xmin - xmin) / cell_width,
+        (bb.ymin - ymin) / cell_height,
+        (bb.xmax + 1 - xmin) / cell_width,
+        (bb.ymax + 1 - ymin) / cell_height,
     )
-    return redrawn
+    size = (scale * (bb.xmax + 1 - bb.xmin), scale * (bb.ymax + 1 - bb.ymin))
+    return _resized(logits=annotation.mask_logits, size=size, box=box) > 32768
 
 
 @pytest.mark.parametrize(
-    "value, background, width",
-    [(10, -1, 1), (-2, 10, 1), (0, 10, 3), (1, -9, 2)],
+    "value, background, width", [(10, -1, 1), (-2, 10, 1), (0, 10, 3), (1, -9, 2)]
 )
 @pytest.mark.parametrize("scale", [1, 4])
 def test_mask_logits_redraw_a_thin_column_as_the_model_draws_it(
@@ -170,7 +160,13 @@ def test_mask_logits_redraw_a_thin_column_as_the_model_draws_it(
         mask=mask, logits=logits, covered_size=(1024, 1024)
     )
 
+    assert annotation.bounding_box is not None
+    bb = annotation.bounding_box
+    direct = _resized(logits=logits, size=(1024 * scale, 1024 * scale)) > 0
     np.testing.assert_array_equal(
-        _redraw(annotation=annotation, size=(1024, 1024), scale=scale),
-        _resized(logits=logits, size=(1024 * scale, 1024 * scale)) > 0,
+        _redraw(annotation=annotation, scale=scale),
+        direct[
+            bb.ymin * scale : (bb.ymax + 1) * scale,
+            bb.xmin * scale : (bb.xmax + 1) * scale,
+        ],
     )

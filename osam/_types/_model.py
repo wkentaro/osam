@@ -343,8 +343,8 @@ def logits_around_box(
     bb = bounding_box
 
     def cells(start: int, stop: int, cell: float, count: int) -> tuple[int, int]:
-        first = math.floor((start - 0.5) / cell - 0.5)
-        last = math.ceil((stop + 0.5) / cell - 0.5)
+        first = math.floor(start / cell - 0.5)
+        last = math.ceil(stop / cell - 0.5)
         return max(0, first), min(count - 1, last) + 1
 
     col_start, col_stop = cells(bb.xmin, bb.xmax + 1, cell_width, grid_width)

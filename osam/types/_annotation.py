@@ -31,8 +31,8 @@ class Annotation(pydantic.BaseModel):
         default=None,
         description="The model's own logit cells around bounding_box, as a "
         "16-bit grayscale image of 32768 + 256 x logit clipped to 0..65535. "
-        "Resized bilinearly so that the cells tile mask_logits_box, a pixel is "
-        "in the mask above 32768, which can reach past bounding_box",
+        "Resized bilinearly so that the cells tile mask_logits_box, a pixel "
+        "within bounding_box is in the mask above 32768",
     )
     mask_logits_box: tuple[float, float, float, float] | None = pydantic.Field(
         default=None,
