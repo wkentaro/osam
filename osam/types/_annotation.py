@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import Annotated
 
 import numpy as np
@@ -29,11 +30,29 @@ class Annotation(pydantic.BaseModel):
 
     @pydantic.field_validator("mask", mode="before")
     @classmethod
-    def decode_mask(cls, mask: object) -> object:
-        # Reads the base64 PNG serialize_mask writes.
-        if isinstance(mask, str):
-            return _json.image_b64data_to_ndarray(b64data=mask) > 0
-        return mask
+    def decode_mask(cls, mask: object, info: pydantic.ValidationInfo) -> object:
+        if not isinstance(mask, str):
+            return mask
+        bb = info.data.get("bounding_box")
+        if bb is None:
+            raise ValueError("bounding_box is required when mask is provided")
+        canvas = (
+            info.context.get("canvas_size")
+            if isinstance(info.context, Mapping)
+            else None
+        )
+        if canvas is not None and not (
+            0 <= bb.xmin
+            and 0 <= bb.ymin
+            and bb.xmax < canvas[0]
+            and bb.ymax < canvas[1]
+        ):
+            raise ValueError(
+                f"bounding box {bb} is outside the {canvas[0]}x{canvas[1]} image"
+            )
+        return _json.mask_b64data_to_ndarray(
+            b64data=mask, size=(bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1)
+        )
 
     @pydantic.field_validator("mask")
     def validate_mask(cls, mask: np.ndarray | None) -> np.ndarray | None:
