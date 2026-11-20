@@ -188,3 +188,11 @@ def test_rejects_empty_mask_scores() -> None:
             bounding_box=BoundingBox(xmin=0, ymin=0, xmax=1, ymax=1),
             mask_scores=np.zeros((0, 2), np.uint8),
         )
+
+
+def test_rejects_mask_scores_on_an_inverted_box() -> None:
+    with pytest.raises(pydantic.ValidationError, match="inverted"):
+        Annotation(
+            bounding_box=BoundingBox(xmin=1, ymin=0, xmax=0, ymax=1),
+            mask_scores=np.zeros((2, 2), np.uint8),
+        )

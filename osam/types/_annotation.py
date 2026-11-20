@@ -98,8 +98,14 @@ class Annotation(pydantic.BaseModel):
 
     @pydantic.model_validator(mode="after")
     def validate_mask_bbox_consistency(self) -> "Annotation":
-        if self.mask_scores is not None and self.bounding_box is None:
-            raise ValueError("bounding_box is required when mask_scores is provided")
+        if self.mask_scores is not None:
+            bb = self.bounding_box
+            if bb is None:
+                raise ValueError(
+                    "bounding_box is required when mask_scores is provided"
+                )
+            if bb.xmin > bb.xmax or bb.ymin > bb.ymax:
+                raise ValueError(f"bounding box {bb} is inverted")
         if self.mask is not None:
             if self.bounding_box is None:
                 raise ValueError("bounding_box is required when mask is provided")
