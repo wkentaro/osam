@@ -214,9 +214,7 @@ class HttpBackend:
         frames: list[np.ndarray] = typing.cast(list[np.ndarray], request.frames)
         refs: list[str] = [_json.image_ref(image=frame) for frame in frames]
         body: dict[str, Any] = request.model_dump(
-            mode="json",
-            exclude={"frames": True, "actions": {"__all__": {"include_mask_logits"}}},
-            exclude_none=True,
+            mode="json", exclude={"frames"}, exclude_none=True
         )
         callback_failed = False
         canvas_size = (frames[0].shape[1], frames[0].shape[0])

@@ -4,23 +4,16 @@ import pydantic
 
 from ._prompt import Box
 from ._prompt import PointLabel
-from ._prompt import Prompt
+from ._prompt import PromptBase
 
 # The actions of /api/track, as ADR 0005 defines them. Coordinates are pixels.
 
 
-class PromptAction(Prompt):
+class PromptAction(PromptBase):
     # The first action, and only the first: points or box track one object,
     # texts find every match.
     type: typing.Literal["prompt"]
     frame: int = pydantic.Field(ge=0)
-
-    @pydantic.field_validator("include_mask_logits")
-    @classmethod
-    def _check_no_mask_logits(cls, include_mask_logits: bool) -> bool:
-        if include_mask_logits:
-            raise ValueError("track gives no mask_logits")
-        return include_mask_logits
 
 
 class _Edit(pydantic.BaseModel):
