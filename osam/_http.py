@@ -169,7 +169,10 @@ class HttpBackend:
         assert not isinstance(request.image, str)
         image: np.ndarray = request.image
         body: dict[str, Any] = request.model_dump(
-            mode="json", exclude={"image"}, exclude_none=True
+            mode="json",
+            exclude={"image"}
+            | (set() if request.include_mask_scores else {"include_mask_scores"}),
+            exclude_none=True,
         )
 
         def post(image_field: str) -> _requests.SegmentResponse:

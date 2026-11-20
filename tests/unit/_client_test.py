@@ -662,6 +662,24 @@ def test_client_rejects_a_segment_mask_outside_the_image_it_sent(
                 client.segment("efficientsam:10m", image)
 
 
+def test_client_leaves_mask_scores_out_of_a_request_that_skips_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bodies: list[dict[str, Any]] = []
+
+    def recording(*, body: dict[str, Any], **_: Any) -> dict[str, Any]:
+        bodies.append(body)
+        return {"annotations": [], "image": f"sha256:{0:064d}"}
+
+    with _serving() as host:
+        client = osam.Client(host=host)
+        monkeypatch.setattr(_backend(client), "_request", recording)
+        image = np.zeros((4, 4, 3), np.uint8)
+        client.segment("efficientsam:10m", image)
+        client.segment("efficientsam:10m", image, include_mask_scores=True)
+    assert [body.get("include_mask_scores") for body in bodies] == [None, True]
+
+
 def test_client_rejects_a_tracked_mask_outside_the_frames_it_sent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
