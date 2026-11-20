@@ -142,16 +142,18 @@ def _redraw(*, annotation: types.Annotation, scale: int) -> np.ndarray:
         (bb.ymax + 1 - ymin) / cell_height,
     )
     size = (scale * (bb.xmax + 1 - bb.xmin), scale * (bb.ymax + 1 - bb.ymin))
-    return _resized(logits=annotation.mask_logits, size=size, box=box) >= 32768
+    return _resized(logits=annotation.mask_logits, size=size, box=box) > 32768
 
 
-@pytest.mark.parametrize("value, background", [(10, -1), (-2, 10)])
+@pytest.mark.parametrize(
+    "value, background, width", [(10, -1, 1), (-2, 10, 1), (0, 10, 3)]
+)
 @pytest.mark.parametrize("scale", [1, 4])
 def test_mask_logits_redraw_a_thin_column_as_the_model_draws_it(
-    value: float, background: float, scale: int
+    value: float, background: float, width: int, scale: int
 ) -> None:
     logits = np.full((256, 256), background, np.float32)
-    logits[:, 128] = value
+    logits[:, 128 : 128 + width] = value
     mask = _resized(logits=logits, size=(1024, 1024)) > 0
 
     (annotation,) = types.annotations_from_mask(

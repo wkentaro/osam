@@ -680,7 +680,6 @@ def test_client_leaves_mask_logits_out_of_a_request_that_skips_them(
     assert [body.get("include_mask_logits") for body in bodies] == [None, True]
 
 
-
 def test_client_track_sends_actions_without_mask_logits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

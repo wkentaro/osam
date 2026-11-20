@@ -75,13 +75,10 @@ def logits_b64data_to_ndarray(*, b64data: str) -> np.ndarray:
     png = base64.b64decode(b64data)
     if max(_static_png_size(png=png)) > MAX_LOGITS_SIDE:
         raise ValueError(f"mask logits are larger than {MAX_LOGITS_SIDE} pixels a side")
+    if png[12:16] != b"IHDR" or png[24:26] != bytes([16, 0]):
+        raise ValueError("mask logits must be a 16-bit grayscale PNG")
     try:
-        image = PIL.Image.open(io.BytesIO(png))
-        if image.mode != "I;16":
-            raise ValueError(
-                f"mask logits must be a 16-bit grayscale PNG: got {image.mode}"
-            )
-        return np.asarray(image)
+        return np.asarray(PIL.Image.open(io.BytesIO(png))).astype(np.uint16)
     except (OSError, PIL.Image.DecompressionBombError) as e:
         raise ValueError(f"not an image file: {e}") from e
 

@@ -171,7 +171,7 @@ def _assert_logits_redraw_mask(*, annotation: types.Annotation) -> None:
                 ),
             )
         )
-        >= 32768
+        > 32768
     )
     iou = (redrawn & annotation.mask).sum() / (redrawn | annotation.mask).sum()
     assert iou >= 0.98
