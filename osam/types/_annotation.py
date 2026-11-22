@@ -14,6 +14,17 @@ Base64Image = Annotated[
 ]
 
 
+def _require_inside_image(*, bounding_box: BoundingBox, context: object) -> None:
+    canvas = context.get("canvas_size") if isinstance(context, Mapping) else None
+    bb = bounding_box
+    if canvas is not None and not (
+        0 <= bb.xmin and 0 <= bb.ymin and bb.xmax < canvas[0] and bb.ymax < canvas[1]
+    ):
+        raise ValueError(
+            f"bounding box {bb} is outside the {canvas[0]}x{canvas[1]} image"
+        )
+
+
 class Annotation(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
@@ -73,20 +84,7 @@ class Annotation(pydantic.BaseModel):
         bb = info.data.get("bounding_box")
         if bb is None:
             raise ValueError("bounding_box is required when mask is provided")
-        canvas = (
-            info.context.get("canvas_size")
-            if isinstance(info.context, Mapping)
-            else None
-        )
-        if canvas is not None and not (
-            0 <= bb.xmin
-            and 0 <= bb.ymin
-            and bb.xmax < canvas[0]
-            and bb.ymax < canvas[1]
-        ):
-            raise ValueError(
-                f"bounding box {bb} is outside the {canvas[0]}x{canvas[1]} image"
-            )
+        _require_inside_image(bounding_box=bb, context=info.context)
         return _json.mask_b64data_to_ndarray(
             b64data=mask, size=(bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1)
         )
@@ -100,7 +98,9 @@ class Annotation(pydantic.BaseModel):
         return mask
 
     @pydantic.model_validator(mode="after")
-    def validate_mask_bbox_consistency(self) -> "Annotation":
+    def validate_mask_bbox_consistency(
+        self, info: pydantic.ValidationInfo
+    ) -> "Annotation":
         if (self.mask_logits is None) != (self.mask_logits_box is None):
             raise ValueError("mask_logits and mask_logits_box come together")
         if self.mask_logits_box is not None:
@@ -112,6 +112,18 @@ class Annotation(pydantic.BaseModel):
             if self.bounding_box is None:
                 raise ValueError(
                     "bounding_box is required when mask_logits is provided"
+                )
+            bb = self.bounding_box
+            _require_inside_image(bounding_box=bb, context=info.context)
+            if not (
+                xmin <= bb.xmin + 0.5
+                and ymin <= bb.ymin + 0.5
+                and bb.xmax + 0.5 <= xmax
+                and bb.ymax + 0.5 <= ymax
+            ):
+                raise ValueError(
+                    f"mask_logits_box {self.mask_logits_box} misses a pixel center "
+                    f"of bounding box {bb}"
                 )
         if self.mask is not None:
             if self.bounding_box is None:

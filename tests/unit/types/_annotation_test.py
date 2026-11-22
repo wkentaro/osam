@@ -151,6 +151,46 @@ def test_rejects_mask_logits_without_a_bounding_box_to_draw_in() -> None:
         )
 
 
+@pytest.mark.parametrize("box", [(1, 0, 4, 3), (0, 2, 3, 5), (-1, 0, 2, 3)])
+def test_json_rejects_mask_logits_outside_the_image_they_were_predicted_on(
+    box: tuple[int, int, int, int],
+) -> None:
+    xmin, ymin, xmax, ymax = box
+    annotation = Annotation(
+        bounding_box=BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax),
+        mask_logits=np.zeros((2, 2), np.uint16),
+        mask_logits_box=(xmin, ymin, xmax + 1, ymax + 1),
+    )
+    data = annotation.model_dump_json()
+
+    with pytest.raises(pydantic.ValidationError, match="outside the 4x5 image"):
+        Annotation.model_validate_json(data, context={"canvas_size": (4, 5)})
+
+
+@pytest.mark.parametrize(
+    "box", [(20, 0, 30, 10), (1, 0, 10, 10), (0, 1, 10, 10), (0, 0, 9, 10)]
+)
+def test_json_rejects_a_mask_logits_box_that_misses_a_pixel_of_the_bounding_box(
+    box: tuple[float, float, float, float],
+) -> None:
+    annotation = Annotation(
+        bounding_box=BoundingBox(xmin=0, ymin=0, xmax=9, ymax=9),
+        mask_logits=np.zeros((2, 2), np.uint16),
+        mask_logits_box=(0, 0, 10, 10),
+    )
+    data = json.loads(annotation.model_dump_json()) | {"mask_logits_box": box}
+
+    with pytest.raises(pydantic.ValidationError, match="misses a pixel center"):
+        Annotation.model_validate(data)
+
+
+@pytest.mark.parametrize("box", [(3, 0, 2, 1), (0, 3, 1, 2)])
+def test_rejects_an_inverted_bounding_box(box: tuple[int, int, int, int]) -> None:
+    xmin, ymin, xmax, ymax = box
+    with pytest.raises(pydantic.ValidationError, match="is inverted"):
+        BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
+
+
 def test_accepts_mask_logits_without_a_mask() -> None:
     annotation = Annotation(
         bounding_box=BoundingBox(xmin=0, ymin=0, xmax=0, ymax=0),

@@ -214,3 +214,23 @@ def test_mask_logits_sample_each_pixel_in_the_box_as_the_whole_grid_does(
         whole,
         atol=1e-6,
     )
+
+
+def test_logits_around_box_hold_every_box_on_every_image_size() -> None:
+    rng = np.random.default_rng(0)
+    logits = np.zeros((288, 288), np.float32)
+    for _ in range(2000):
+        width, height = (int(side) for side in rng.integers(1, 5000, size=2))
+        xmin, xmax = sorted(int(x) for x in rng.integers(0, width, size=2))
+        ymin, ymax = sorted(int(y) for y in rng.integers(0, height, size=2))
+        if rng.random() < 0.5:
+            xmax, ymax = width - 1, height - 1
+        bounding_box = types.BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
+
+        types.Annotation.model_validate(
+            {"bounding_box": bounding_box}
+            | types.logits_around_box(
+                logits=logits, covered_size=(width, height), bounding_box=bounding_box
+            ),
+            context={"canvas_size": (width, height)},
+        )
