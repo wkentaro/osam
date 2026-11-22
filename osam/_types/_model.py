@@ -364,9 +364,17 @@ def mask_in_box(
     i0x, i1x, w1x = _lerp_weights(
         start=bb.xmin, stop=bb.xmax + 1, size=grid_width, covered=covered_size[0]
     )
-    first = i0x[0]
-    rows = _lerp(x=logits[:, first : i1x[-1] + 1], i0=i0y, i1=i1y, w1=w1y[:, None])
-    return _lerp(x=rows.T, i0=i0x - first, i1=i1x - first, w1=w1x[:, None]).T > 0
+    columns = np.union1d(i0x, i1x)
+    rows = _lerp(x=logits[:, columns], i0=i0y, i1=i1y, w1=w1y[:, None])
+    return (
+        _lerp(
+            x=rows.T,
+            i0=np.searchsorted(columns, i0x),
+            i1=np.searchsorted(columns, i1x),
+            w1=w1x[:, None],
+        ).T
+        > 0
+    )
 
 
 def _lerp_weights(

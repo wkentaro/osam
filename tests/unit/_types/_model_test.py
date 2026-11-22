@@ -1,3 +1,5 @@
+import tracemalloc
+
 import numpy as np
 import pytest
 
@@ -232,3 +234,22 @@ def test_mask_in_any_box_matches_the_whole_draw() -> None:
                 ),
             )
             np.testing.assert_array_equal(mask, whole[ymin : ymax + 1, xmin : xmax + 1])
+
+
+def test_mask_in_a_tall_box_narrower_than_the_grid_stays_small() -> None:
+    logits = np.random.default_rng(0).normal(size=(288, 288)).astype(np.float32)
+    covered_size = (16, 20000)
+
+    tracemalloc.start()
+    mask = types.mask_in_box(
+        logits=logits,
+        covered_size=covered_size,
+        bounding_box=types.BoundingBox(xmin=0, ymin=0, xmax=15, ymax=19999),
+    )
+    peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+
+    np.testing.assert_array_equal(
+        mask, _tracker._resize(logits[None, None], 20000, 16)[0, 0] > 0
+    )
+    assert peak < 64 * mask.size
