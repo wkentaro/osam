@@ -1,4 +1,5 @@
 import abc
+from typing import Final
 from typing import NamedTuple
 from typing import cast
 
@@ -9,6 +10,8 @@ from typing_extensions import override
 
 from osam import _types as types
 from osam.types._model_info import fit_hw
+
+SKIPPED_MASKS_HW: Final = (1, 1)
 
 
 class MaskOutput(NamedTuple):
@@ -151,7 +154,7 @@ class Sam(SamBase):
             "point_labels": onnx_label,
             "mask_input": np.zeros((1, 1, 256, 256), dtype=np.float32),
             "has_mask_input": np.array([0], dtype=np.float32),  # no mask_input
-            "orig_im_size": np.array(decode_hw, dtype=np.float32),
+            "orig_im_size": np.array(SKIPPED_MASKS_HW, dtype=np.float32),
         }
 
         _, _, low_res_masks = self._inference_sessions["decoder"].run(

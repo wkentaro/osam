@@ -8,6 +8,7 @@ from typing_extensions import override
 from osam import _types as types
 from osam._models.sam import MaskOutput
 from osam._models.sam import SamBase
+from osam._models.sam._models import SKIPPED_MASKS_HW
 
 
 class Sam2(SamBase):
@@ -81,10 +82,7 @@ class Sam2(SamBase):
             "point_labels": point_labels[None],
             "mask_input": np.zeros((1, 1, 256, 256), dtype=np.float32),
             "has_mask_input": np.array([0], dtype=np.float32),
-            "orig_im_size": np.array(
-                (image_embedding.original_height, image_embedding.original_width),
-                dtype=np.int64,
-            ),
+            "orig_im_size": np.array(SKIPPED_MASKS_HW, dtype=np.int64),
         }
         _, scores, low_res_masks = self._inference_sessions["decoder"].run(
             None, decoder_inputs

@@ -4,6 +4,7 @@ from collections.abc import Iterator
 
 import imgviz
 import numpy as np
+import onnx
 import PIL.Image
 import pytest
 
@@ -131,6 +132,20 @@ def test_segment_thin_image_sam(height: int, width: int) -> None:
         bb = annotation.bounding_box
         assert bb is not None
         assert bb.xmax < width and bb.ymax < height
+
+
+@pytest.mark.parametrize(
+    "model", [pytest.param("sam:100m", marks=pytest.mark.extra), "sam2:tiny"]
+)
+def test_decoder_orig_im_size_reaches_only_the_full_size_masks(model: str) -> None:
+    decoder = _registry.get_model_type_by_name(name=model)._blobs["decoder"]
+    graph = onnx.load(str(decoder.path), load_external_data=False).graph
+    reached = {"orig_im_size"}
+    for node in graph.node:
+        if reached.intersection(node.input):
+            reached.update(node.output)
+
+    assert [o.name for o in graph.output if o.name in reached] == ["masks"]
 
 
 def test_segment_negative_box_rejected_by_sam2() -> None:
