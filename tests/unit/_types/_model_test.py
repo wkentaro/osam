@@ -236,6 +236,16 @@ def test_mask_in_any_box_matches_the_whole_draw() -> None:
             np.testing.assert_array_equal(mask, whole[ymin : ymax + 1, xmin : xmax + 1])
 
 
+def test_mask_in_box_is_row_major() -> None:
+    mask = types.mask_in_box(
+        logits=np.ones((288, 288), np.float32),
+        covered_size=(60, 40),
+        bounding_box=types.BoundingBox(xmin=0, ymin=0, xmax=59, ymax=39),
+    )
+
+    assert mask.flags.c_contiguous
+
+
 def test_mask_in_a_tall_box_narrower_than_the_grid_stays_small() -> None:
     logits = np.random.default_rng(0).normal(size=(288, 288)).astype(np.float32)
     covered_size = (16, 20000)
