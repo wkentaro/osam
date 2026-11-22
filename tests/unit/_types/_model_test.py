@@ -170,3 +170,47 @@ def test_mask_logits_redraw_a_thin_column_as_the_model_draws_it(
             bb.xmin * scale : (bb.xmax + 1) * scale,
         ],
     )
+
+
+def _sampled(*, grid: np.ndarray, xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
+    x = np.clip(xs - 0.5, 0, grid.shape[1] - 1)
+    y = np.clip(ys - 0.5, 0, grid.shape[0] - 1)
+    x0 = np.minimum(np.floor(x).astype(int), grid.shape[1] - 2)
+    y0 = np.minimum(np.floor(y).astype(int), grid.shape[0] - 2)
+    fx, fy = (x - x0)[None, :], (y - y0)[:, None]
+    g = grid.astype(np.float64)
+    top = g[y0][:, x0] * (1 - fx) + g[y0][:, x0 + 1] * fx
+    bottom = g[y0 + 1][:, x0] * (1 - fx) + g[y0 + 1][:, x0 + 1] * fx
+    return top * (1 - fy) + bottom * fy
+
+
+@pytest.mark.parametrize("size", [16, 100, 1024])
+def test_mask_logits_sample_each_pixel_in_the_box_as_the_whole_grid_does(
+    size: int,
+) -> None:
+    logits = np.random.default_rng(0).normal(size=(288, 288)).astype(np.float32)
+    bounding_box = types.BoundingBox(xmin=3, ymin=5, xmax=size - 4, ymax=size - 2)
+
+    around = types.logits_around_box(
+        logits=logits, covered_size=(size, size), bounding_box=bounding_box
+    )
+
+    xmin, ymin, xmax, ymax = around["mask_logits_box"]
+    rows, cols = around["mask_logits"].shape
+    cell_width, cell_height = (xmax - xmin) / cols, (ymax - ymin) / rows
+    centers_x = np.arange(bounding_box.xmin, bounding_box.xmax + 1) + 0.5
+    centers_y = np.arange(bounding_box.ymin, bounding_box.ymax + 1) + 0.5
+    whole = _sampled(
+        grid=np.round(_model.LOGIT_ZERO + _model.LOGIT_SCALE * logits),
+        xs=centers_x * 288 / size,
+        ys=centers_y * 288 / size,
+    )
+    np.testing.assert_allclose(
+        _sampled(
+            grid=around["mask_logits"],
+            xs=(centers_x - xmin) / cell_width,
+            ys=(centers_y - ymin) / cell_height,
+        ),
+        whole,
+        atol=1e-6,
+    )

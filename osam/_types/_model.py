@@ -361,20 +361,3 @@ def logits_around_box(
             row_stop * cell_height,
         ),
     }
-
-
-def box_on_grid(
-    *,
-    bounding_box: BoundingBox,
-    grid_shape: tuple[int, ...],
-    covered_size: tuple[float, float],
-) -> tuple[float, float, float, float]:
-    grid_height, grid_width = grid_shape
-    width, height = covered_size
-    bb = bounding_box
-    return (
-        bb.xmin * grid_width / width,
-        bb.ymin * grid_height / height,
-        (bb.xmax + 1) * grid_width / width,
-        (bb.ymax + 1) * grid_height / height,
-    )

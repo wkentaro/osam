@@ -144,6 +144,23 @@ def test_rejects_mask_logits_that_are_not_a_uint16_grid(mask_logits) -> None:
         Annotation(mask_logits=mask_logits, mask_logits_box=(0, 0, 1, 1))
 
 
+def test_rejects_mask_logits_without_a_bounding_box_to_draw_in() -> None:
+    with pytest.raises(pydantic.ValidationError, match="bounding_box is required"):
+        Annotation(
+            mask_logits=np.zeros((2, 2), np.uint16), mask_logits_box=(0, 0, 1, 1)
+        )
+
+
+def test_accepts_mask_logits_without_a_mask() -> None:
+    annotation = Annotation(
+        bounding_box=BoundingBox(xmin=0, ymin=0, xmax=0, ymax=0),
+        mask_logits=np.zeros((2, 2), np.uint16),
+        mask_logits_box=(0, 0, 1, 1),
+    )
+
+    assert annotation.mask is None
+
+
 def test_rejects_mask_logits_without_their_box() -> None:
     with pytest.raises(pydantic.ValidationError, match="come together"):
         Annotation(mask_logits=np.zeros((2, 2), np.uint16))

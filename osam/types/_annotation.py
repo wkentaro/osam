@@ -31,8 +31,10 @@ class Annotation(pydantic.BaseModel):
         default=None,
         description="The model's own logit cells around bounding_box, as a "
         "16-bit grayscale image of 32768 + 256 x logit clipped to 0..65535. "
-        "Resized bilinearly so that the cells tile mask_logits_box, a pixel "
-        "within bounding_box is in the mask above 32768",
+        "Sampled bilinearly at each pixel center within bounding_box, with the "
+        "cells tiling mask_logits_box, a pixel is in the mask above 32768. On "
+        "an image smaller than the grid, mask is resized with a wider filter "
+        "and can differ",
     )
     mask_logits_box: tuple[float, float, float, float] | None = pydantic.Field(
         default=None,
@@ -107,6 +109,10 @@ class Annotation(pydantic.BaseModel):
                 np.isfinite(self.mask_logits_box).all() and xmin < xmax and ymin < ymax
             ):
                 raise ValueError(f"mask_logits_box {self.mask_logits_box} is empty")
+            if self.bounding_box is None:
+                raise ValueError(
+                    "bounding_box is required when mask_logits is provided"
+                )
         if self.mask is not None:
             if self.bounding_box is None:
                 raise ValueError("bounding_box is required when mask is provided")

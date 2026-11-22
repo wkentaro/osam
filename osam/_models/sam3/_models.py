@@ -188,15 +188,17 @@ def _crop_mask(
     # bounding box's pixels only. Logits, not sam3-onnx's probabilities, so
     # mask_logits redraw the same mask.
     bb = bounding_box
+    grid_height, grid_width = logits.shape
     return (
         np.asarray(
             PIL.Image.fromarray(logits).resize(
                 (bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1),
                 resample=PIL.Image.Resampling.BILINEAR,
-                box=types.box_on_grid(
-                    bounding_box=bb,
-                    grid_shape=logits.shape,
-                    covered_size=(width, height),
+                box=(
+                    bb.xmin * grid_width / width,
+                    bb.ymin * grid_height / height,
+                    (bb.xmax + 1) * grid_width / width,
+                    (bb.ymax + 1) * grid_height / height,
                 ),
             )
         )
