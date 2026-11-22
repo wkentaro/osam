@@ -44,7 +44,7 @@ class Annotation(pydantic.BaseModel):
     mask: Base64Image | None = pydantic.Field(default=None)
     mask_logits: Base64Image | None = pydantic.Field(
         default=None,
-        description="The model's own logit cells around bounding_box, as a "
+        description="The logit cells mask was drawn from, around bounding_box, as a "
         "16-bit grayscale image of 32768 + 256 x logit clipped to 0..65535. "
         "Sampled bilinearly at each pixel center within bounding_box, with the "
         "cells tiling mask_logits_box and the edge cells clamped, a pixel is in "
