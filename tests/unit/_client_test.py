@@ -676,8 +676,10 @@ def test_client_leaves_mask_logits_out_of_a_request_that_skips_them(
         monkeypatch.setattr(_backend(client), "_request", recording)
         image = np.zeros((4, 4, 3), np.uint8)
         client.segment("efficientsam:10m", image)
+        client.segment("efficientsam:10m", image, include_mask_logits=False)
         client.segment("efficientsam:10m", image, include_mask_logits=True)
-    assert [body.get("include_mask_logits") for body in bodies] == [None, True]
+    assert ["include_mask_logits" in body for body in bodies] == [False, False, True]
+    assert bodies[2]["include_mask_logits"] is True
 
 
 def test_client_track_sends_actions_without_mask_logits(
