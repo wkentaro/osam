@@ -10,7 +10,6 @@ from collections.abc import Callable
 import numpy as np
 import numpy.typing as npt
 import onnxruntime
-import PIL.Image
 from loguru import logger
 
 from .. import _onnx
@@ -358,40 +357,32 @@ def mask_in_box(
     bounding_box: BoundingBox,
 ) -> npt.NDArray[np.bool_]:
     grid_height, grid_width = logits.shape
-    scale_x = grid_width / covered_size[0]
-    scale_y = grid_height / covered_size[1]
     bb = bounding_box
-    if scale_x <= 1 and scale_y <= 1:
-        values = np.asarray(
-            PIL.Image.fromarray(logits).resize(
-                (bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1),
-                resample=PIL.Image.Resampling.BILINEAR,
-                box=(
-                    bb.xmin * scale_x,
-                    bb.ymin * scale_y,
-                    (bb.xmax + 1) * scale_x,
-                    (bb.ymax + 1) * scale_y,
-                ),
-            )
-        )
-    else:
-        axes = [(0, bb.ymin, bb.ymax + 1, scale_y), (1, bb.xmin, bb.xmax + 1, scale_x)]
-        if (bb.ymax - bb.ymin + 1) * grid_width > grid_height * (bb.xmax - bb.xmin + 1):
-            axes.reverse()
-        values = logits
-        for axis, start, stop, scale in axes:
-            values = _lerp(x=values, axis=axis, start=start, stop=stop, scale=scale)
-    return values > 0
+    i0y, i1y, w1y = _lerp_weights(
+        start=bb.ymin, stop=bb.ymax + 1, size=grid_height, covered=covered_size[1]
+    )
+    i0x, i1x, w1x = _lerp_weights(
+        start=bb.xmin, stop=bb.xmax + 1, size=grid_width, covered=covered_size[0]
+    )
+    first = i0x[0]
+    rows = _lerp(x=logits[:, first : i1x[-1] + 1], i0=i0y, i1=i1y, w1=w1y[:, None])
+    return _lerp(x=rows.T, i0=i0x - first, i1=i1x - first, w1=w1x[:, None]).T > 0
+
+
+def _lerp_weights(
+    *, start: int, stop: int, size: int, covered: float
+) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int64], npt.NDArray[np.float32]]:
+    t = np.clip((np.arange(start, stop) + 0.5) * (size / covered) - 0.5, 0, size - 1)
+    i0 = np.floor(t).astype(np.int64)
+    i1 = np.minimum(i0 + 1, size - 1)
+    return i0, i1, (t - i0).astype(np.float32)
 
 
 def _lerp(
-    *, x: npt.NDArray[np.float32], axis: int, start: int, stop: int, scale: float
+    *,
+    x: npt.NDArray[np.float32],
+    i0: npt.NDArray[np.int64],
+    i1: npt.NDArray[np.int64],
+    w1: npt.NDArray[np.float32],
 ) -> npt.NDArray[np.float32]:
-    size = x.shape[axis]
-    t = np.clip((np.arange(start, stop) + 0.5) * scale - 0.5, 0, size - 1)
-    i0 = np.floor(t).astype(np.int64)
-    i1 = np.minimum(i0 + 1, size - 1)
-    shape = [1, 1]
-    shape[axis] = stop - start
-    w1 = (t - i0).astype(np.float32).reshape(shape)
-    return np.take(x, i0, axis=axis) * (1 - w1) + np.take(x, i1, axis=axis) * w1
+    return x[i0] * (1 - w1) + x[i1] * w1

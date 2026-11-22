@@ -165,3 +165,70 @@ def test_mask_is_empty_without_a_positive_cell_over_the_image() -> None:
         )
         == []
     )
+
+
+def _whole_mask(*, logits: np.ndarray, covered_size: tuple[int, int]) -> np.ndarray:
+    return types.mask_in_box(
+        logits=logits,
+        covered_size=covered_size,
+        bounding_box=types.BoundingBox(
+            xmin=0, ymin=0, xmax=covered_size[0] - 1, ymax=covered_size[1] - 1
+        ),
+    )
+
+
+def test_mask_around_its_cells_matches_the_whole_draw_when_shrunk() -> None:
+    logits = np.full((288, 288), -0.55859375, np.float32)
+    logits[:, 259] = 1.3359375
+    covered_size = (2559, 1600)
+
+    annotations = types.annotations_from_logits(
+        logits=logits, covered_size=covered_size, height=1600, width=2559
+    )
+
+    np.testing.assert_array_equal(
+        _full_mask(annotations=annotations, height=1600, width=2559),
+        _whole_mask(logits=logits, covered_size=covered_size),
+    )
+
+
+def test_mask_in_a_thin_box_matches_the_whole_draw() -> None:
+    logits = np.full((288, 288), -1, np.float32)
+    logits[100, 258:260] = [-127.11328125, 22.265625]
+    logits[101, 258:260] = [-23.9296875, 124.8671875]
+    covered_size = (2557, 287)
+
+    mask = types.mask_in_box(
+        logits=logits,
+        covered_size=covered_size,
+        bounding_box=types.BoundingBox(xmin=2300, ymin=100, xmax=2300, ymax=101),
+    )
+
+    np.testing.assert_array_equal(
+        mask, _whole_mask(logits=logits, covered_size=covered_size)[100:102, 2300:2301]
+    )
+
+
+def test_mask_in_any_box_matches_the_whole_draw() -> None:
+    rng = np.random.default_rng(0)
+    for _ in range(40):
+        side = int(rng.choice([256, 288]))
+        logits = rng.normal(scale=0.1, size=(side, side)).astype(np.float32)
+        covered_size = (int(rng.integers(64, 1200)), int(rng.integers(64, 1200)))
+        whole = _whole_mask(logits=logits, covered_size=covered_size)
+        for _ in range(10):
+            xmin, xmax = np.sort(rng.integers(0, covered_size[0], size=2))
+            ymin, ymax = np.sort(rng.integers(0, covered_size[1], size=2))
+            match rng.integers(3):
+                case 0:
+                    xmax = xmin
+                case 1:
+                    ymax = ymin
+            mask = types.mask_in_box(
+                logits=logits,
+                covered_size=covered_size,
+                bounding_box=types.BoundingBox(
+                    xmin=int(xmin), ymin=int(ymin), xmax=int(xmax), ymax=int(ymax)
+                ),
+            )
+            np.testing.assert_array_equal(mask, whole[ymin : ymax + 1, xmin : xmax + 1])
