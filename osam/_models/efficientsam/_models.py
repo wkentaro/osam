@@ -48,7 +48,6 @@ class EfficientSam(SamBase):
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
     ) -> MaskOutput:
-        # The decoder scales the points by 1024 / orig_im_size itself.
         size = np.array(
             [image_embedding.original_width, image_embedding.original_height],
             dtype=np.float32,
