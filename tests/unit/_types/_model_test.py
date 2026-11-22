@@ -435,3 +435,23 @@ def test_mask_logits_redraw_a_thin_column_as_the_model_draws_it(
             bb.xmin * scale : (bb.xmax + 1) * scale,
         ],
     )
+
+
+def test_mask_logits_redraw_a_grid_finer_than_the_image_at_a_larger_size() -> None:
+    logits = np.array([[10, -1, 10, -20]], np.float32)
+
+    (annotation,) = types.annotations_from_logits(
+        logits=logits, covered_size=(1, 1), height=1, width=1, include_mask_logits=True
+    )
+
+    assert annotation.mask_logits is not None
+    assert annotation.mask_logits_box is not None
+    at_4x = types.Annotation.model_construct(
+        bounding_box=types.BoundingBox(xmin=0, ymin=0, xmax=3, ymax=3),
+        mask_logits=annotation.mask_logits,
+        mask_logits_box=tuple(4 * edge for edge in annotation.mask_logits_box),
+    )
+    np.testing.assert_array_equal(
+        _redraw.redrawn(annotation=at_4x) > 32768,
+        np.tile([True, False, True, False], (4, 1)),
+    )
