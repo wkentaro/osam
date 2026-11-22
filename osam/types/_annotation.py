@@ -43,9 +43,9 @@ class Annotation(pydantic.BaseModel):
         description="The model's own logit cells around bounding_box, as a "
         "16-bit grayscale image of 32768 + 256 x logit clipped to 0..65535. "
         "Sampled bilinearly at each pixel center within bounding_box, with the "
-        "cells tiling mask_logits_box, a pixel is in the mask above 32768. On "
-        "an image smaller than the grid, mask is resized with a wider filter "
-        "and can differ",
+        "cells tiling mask_logits_box, a pixel is in the mask above 32768. That "
+        "redraws mask on an image of the model's input size. At other sizes the "
+        "model resizes in its own steps, and mask can differ along its edge",
     )
     mask_logits_box: tuple[float, float, float, float] | None = pydantic.Field(
         default=None,
