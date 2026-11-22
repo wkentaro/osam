@@ -2,6 +2,7 @@ import base64
 import hashlib
 import io
 import struct
+from typing import Final
 
 import numpy as np
 import PIL.Image
@@ -63,6 +64,21 @@ def mask_b64data_to_ndarray(*, b64data: str, size: tuple[int, int]) -> np.ndarra
         raise ValueError(f"mask size {png_size} != bounding box size {size}")
     try:
         return np.asarray(PIL.Image.open(io.BytesIO(png))) > 0
+    except (OSError, PIL.Image.DecompressionBombError) as e:
+        raise ValueError(f"not an image file: {e}") from e
+
+
+MAX_LOGITS_SIDE: Final = 4096
+
+
+def logits_b64data_to_ndarray(*, b64data: str) -> np.ndarray:
+    png = base64.b64decode(b64data)
+    if max(_static_png_size(png=png)) > MAX_LOGITS_SIDE:
+        raise ValueError(f"mask logits are larger than {MAX_LOGITS_SIDE} pixels a side")
+    if png[12:16] != b"IHDR" or png[24:26] != bytes([16, 0]):
+        raise ValueError("mask logits must be a 16-bit grayscale PNG")
+    try:
+        return np.asarray(PIL.Image.open(io.BytesIO(png))).astype(np.uint16)
     except (OSError, PIL.Image.DecompressionBombError) as e:
         raise ValueError(f"not an image file: {e}") from e
 
