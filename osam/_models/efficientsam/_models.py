@@ -5,6 +5,7 @@ import numpy.typing as npt
 from typing_extensions import override
 
 from osam import _types as types
+from osam._models.sam import MaskOutput
 from osam._models.sam import SamBase
 
 
@@ -45,7 +46,7 @@ class EfficientSam(SamBase):
         image_embedding: types.ImageEmbedding,
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
-    ) -> npt.NDArray[np.bool_]:
+    ) -> MaskOutput:
         # The decoder scales the points by 1024 / size itself.
         scale = self.input_size / np.array(
             [image_embedding.original_width, image_embedding.original_height],
@@ -67,13 +68,16 @@ class EfficientSam(SamBase):
             ),
         }
 
-        masks, _, _ = self._inference_sessions["decoder"].run(None, decoder_inputs)
-        masks = cast(npt.NDArray[np.float32], masks)
-        mask: npt.NDArray[np.bool_] = (
-            masks[0, 0, 0, :, :] > 0
-        )  # (1, 1, 3, H, W) -> (H, W)
-
-        return mask
+        _, _, low_res_masks = self._inference_sessions["decoder"].run(
+            None, decoder_inputs
+        )
+        return MaskOutput(
+            low_res_logits=cast(npt.NDArray[np.float32], low_res_masks)[0, 0],
+            covered_size=(
+                image_embedding.original_width,
+                image_embedding.original_height,
+            ),
+        )
 
 
 class EfficientSam10m(EfficientSam):

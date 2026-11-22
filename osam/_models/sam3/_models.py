@@ -536,15 +536,13 @@ class Sam3(types.Model):
             np.float32(10),
             logits,
         )
-        mask: NDArray[np.bool_] = (
-            np.asarray(
-                PIL.Image.fromarray(logits).resize(
-                    (width, height), resample=PIL.Image.Resampling.BILINEAR
-                )
-            )
-            > 0
-        )
         score = float(iou_predictions[0, best])
         if score < score_threshold or max_annotations == 0:
             return []
-        return types.annotations_from_mask(mask=mask, score=score)
+        return types.annotations_from_logits(
+            logits=logits,
+            covered_size=(width, height),
+            height=height,
+            width=width,
+            score=score,
+        )
