@@ -1,11 +1,14 @@
 import tracemalloc
 
 import numpy as np
+import PIL.Image
 import pytest
 
 from osam import _types as types
 from osam._models.sam3 import _tracker
 from osam._types import _model
+
+from .. import _redraw
 
 
 class _VanishingBlob:
@@ -273,3 +276,151 @@ def test_mask_draw_stays_small(width: int, height: int, bytes_per_pixel: int) ->
         mask, _tracker._resize(logits[None, None], height, width)[0, 0] > 0
     )
     assert peak < bytes_per_pixel * mask.size
+
+
+def test_logits_around_box_keep_the_cells_whose_centers_bracket_the_box() -> None:
+    logits = np.tile(np.arange(8, dtype=np.float32) - 4, (8, 1))
+
+    around = types.logits_around_box(
+        logits=logits,
+        covered_size=(32, 32),
+        bounding_box=types.BoundingBox(xmin=9, ymin=0, xmax=14, ymax=31),
+    )
+
+    assert around["mask_logits_box"] == (4, 0, 20, 32)
+    np.testing.assert_array_equal(
+        around["mask_logits"][0], [32000, 32256, 32512, 32768]
+    )
+
+
+def test_logits_around_box_keep_a_cell_for_a_box_thinner_than_one() -> None:
+    around = types.logits_around_box(
+        logits=np.full((4, 4), 20, np.float32),
+        covered_size=(1024, 1024),
+        bounding_box=types.BoundingBox(xmin=10, ymin=10, xmax=10, ymax=10),
+    )
+
+    np.testing.assert_array_equal(around["mask_logits"], [[32768 + 20 * 256]])
+    assert around["mask_logits_box"] == (0, 0, 256, 256)
+
+
+def test_logits_around_box_hold_every_box_on_every_image_size() -> None:
+    rng = np.random.default_rng(0)
+    logits = np.zeros((288, 288), np.float32)
+    for _ in range(2000):
+        width, height = (int(side) for side in rng.integers(1, 5000, size=2))
+        xmin, xmax = sorted(int(x) for x in rng.integers(0, width, size=2))
+        ymin, ymax = sorted(int(y) for y in rng.integers(0, height, size=2))
+        if rng.random() < 0.5:
+            xmax, ymax = width - 1, height - 1
+        bounding_box = types.BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
+
+        types.Annotation.model_validate(
+            {"bounding_box": bounding_box}
+            | types.logits_around_box(
+                logits=logits, covered_size=(width, height), bounding_box=bounding_box
+            ),
+            context={"canvas_size": (width, height)},
+        )
+
+
+def test_annotations_from_logits_leave_out_logits_unless_asked() -> None:
+    (annotation,) = types.annotations_from_logits(
+        logits=np.eye(4, dtype=np.float32), covered_size=(4, 4), height=4, width=4
+    )
+
+    assert annotation.mask_logits is None
+    assert annotation.mask_logits_box is None
+
+
+@pytest.mark.parametrize("seed", range(20))
+def test_mask_logits_redraw_the_mask_on_any_image(seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    side = int(rng.choice([256, 288]))
+    logits = rng.normal(scale=8, size=(side, side)).astype(np.float32) - 6
+    width, height = (int(n) for n in rng.integers(1, 3000, size=2))
+    longest = max(width, height)
+    covered_size = (width, height) if rng.random() < 0.5 else (longest, longest)
+
+    annotations = types.annotations_from_logits(
+        logits=logits,
+        covered_size=covered_size,
+        height=height,
+        width=width,
+        include_mask_logits=True,
+    )
+    for _ in range(20):
+        xmin, xmax = sorted(int(x) for x in rng.integers(0, width, size=2))
+        ymin, ymax = sorted(int(y) for y in rng.integers(0, height, size=2))
+        bounding_box = types.BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
+        annotations.append(
+            types.Annotation(
+                mask=types.mask_in_box(
+                    logits=logits, covered_size=covered_size, bounding_box=bounding_box
+                ),
+                bounding_box=bounding_box,
+                **types.logits_around_box(
+                    logits=logits, covered_size=covered_size, bounding_box=bounding_box
+                ),
+            )
+        )
+
+    assert len(annotations) == 21
+    for annotation in annotations:
+        assert _redraw.distance_where_redraw_differs(annotation=annotation) < 1
+
+
+def _resized(*, logits: np.ndarray, size: tuple[int, int], box=None) -> np.ndarray:
+    return np.asarray(
+        PIL.Image.fromarray(logits.astype(np.float32)).resize(
+            size, resample=PIL.Image.Resampling.BILINEAR, box=box
+        )
+    )
+
+
+def _redraw_at(*, annotation: types.Annotation, scale: int) -> np.ndarray:
+    assert annotation.mask_logits is not None
+    assert annotation.mask_logits_box is not None
+    assert annotation.bounding_box is not None
+    bb = annotation.bounding_box
+    xmin, ymin, xmax, ymax = annotation.mask_logits_box
+    rows, cols = annotation.mask_logits.shape
+    cell_width, cell_height = (xmax - xmin) / cols, (ymax - ymin) / rows
+    box = (
+        (bb.xmin - xmin) / cell_width,
+        (bb.ymin - ymin) / cell_height,
+        (bb.xmax + 1 - xmin) / cell_width,
+        (bb.ymax + 1 - ymin) / cell_height,
+    )
+    size = (scale * (bb.xmax + 1 - bb.xmin), scale * (bb.ymax + 1 - bb.ymin))
+    return _resized(logits=annotation.mask_logits, size=size, box=box) > 32768
+
+
+@pytest.mark.parametrize(
+    "value, background, width", [(10, -1, 1), (-2, 10, 1), (0, 10, 3), (1, -9, 2)]
+)
+@pytest.mark.parametrize("scale", [1, 4])
+def test_mask_logits_redraw_a_thin_column_as_the_model_draws_it(
+    value: float, background: float, width: int, scale: int
+) -> None:
+    logits = np.full((256, 256), background, np.float32)
+    logits[:, 128 : 128 + width] = value
+
+    (annotation,) = types.annotations_from_logits(
+        logits=logits,
+        covered_size=(1024, 1024),
+        height=1024,
+        width=1024,
+        include_mask_logits=True,
+    )
+
+    assert annotation.bounding_box is not None
+    bb = annotation.bounding_box
+    direct = _resized(logits=logits, size=(1024 * scale, 1024 * scale)) > 0
+    np.testing.assert_array_equal(
+        _redraw_at(annotation=annotation, scale=scale),
+        direct[
+            bb.ymin * scale : (bb.ymax + 1) * scale,
+            bb.xmin * scale : (bb.xmax + 1) * scale,
+        ],
+    )

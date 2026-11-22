@@ -353,6 +353,7 @@ class Sam3(types.Model):
                 point_labels=point_labels,
                 score_threshold=score_threshold,
                 max_annotations=max_annotations,
+                include_mask_logits=prompt.include_mask_logits,
             )
 
         # The decoder takes a fixed number of boxes, and masks out the unused ones.
@@ -452,6 +453,15 @@ class Sam3(types.Model):
                     bounding_box=bb,
                     text=row_texts[i],
                     score=float(scores[i]),
+                    **(
+                        types.logits_around_box(
+                            logits=mask_logits[i, 0],
+                            covered_size=(original_width, original_height),
+                            bounding_box=bb,
+                        )
+                        if prompt.include_mask_logits
+                        else {}
+                    ),
                 )
             )
 
@@ -465,6 +475,7 @@ class Sam3(types.Model):
         point_labels: NDArray[np.float32],
         score_threshold: float,
         max_annotations: int,
+        include_mask_logits: bool,
     ) -> list[types.Annotation]:
         height: int = image_embedding.original_height
         width: int = image_embedding.original_width
@@ -515,4 +526,5 @@ class Sam3(types.Model):
             height=height,
             width=width,
             score=score,
+            include_mask_logits=include_mask_logits,
         )

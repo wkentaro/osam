@@ -2,6 +2,7 @@ import contextlib
 import pathlib
 from collections.abc import Iterator
 from collections.abc import Sequence
+from typing import Final
 
 import imgviz
 import numpy as np
@@ -16,6 +17,8 @@ from osam import _runtime
 from osam import _types as types
 from osam._models.sam import SKIPPED_MASKS_HW
 from osam._models.sam2._models import LOW_RES_HW
+
+from .. import _redraw
 
 image_path = (
     pathlib.Path(__file__).resolve().parents[3] / "examples" / "_images" / "dogs.jpg"
@@ -227,6 +230,38 @@ def test_sam2_decoder_masks_at_the_grid_size_are_the_unclipped_logits(
     np.testing.assert_array_equal(masks, logits.astype(np.float32))
 
 
+_IMAGE_SIZES: Final = ((2560, 1600), (1024, 640), (1200, 300), (300, 225))
+
+
+def _resized_image(*, size: tuple[int, int]) -> np.ndarray:
+    return np.asarray(PIL.Image.open(image_path).convert("RGB").resize(size))
+
+
+@pytest.mark.parametrize(
+    "size", _IMAGE_SIZES, ids=lambda size: "x".join(map(str, size))
+)
+@pytest.mark.parametrize(
+    "model",
+    [
+        "efficientsam:10m",
+        pytest.param("sam:100m", marks=pytest.mark.extra),
+        "sam2:tiny",
+    ],
+)
+def test_segment_point_logits_redraw_the_mask(
+    model: str, size: tuple[int, int]
+) -> None:
+    loaded = _model(name=model)
+    embedding = loaded.encode_image(image=_resized_image(size=size))
+    (plain,) = loaded.decode(embedding=embedding, prompt=types.Prompt())
+    (annotation,) = loaded.decode(
+        embedding=embedding, prompt=types.Prompt(include_mask_logits=True)
+    )
+
+    assert plain.mask_logits is None
+    assert _redraw.distance_where_redraw_differs(annotation=annotation) < 1
+
+
 def test_segment_negative_box_rejected_by_sam2() -> None:
     with pytest.raises(ValueError, match="takes box, points, not example_boxes"):
         _segment(
@@ -380,6 +415,49 @@ def test_segment_point_to_mask_sam3(
     bb = annotation.bounding_box
     assert bb.xmin < 1439 < bb.xmax
     assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        types.Prompt(texts=["dog"], include_mask_logits=True),
+        types.Prompt(points=[(1440, 800)], point_labels=[1], include_mask_logits=True),
+    ],
+    ids=["texts", "point"],
+)
+def test_segment_sam3_logits_redraw_the_mask(
+    prompt: types.Prompt, sam3_embedding: types.ImageEmbedding
+) -> None:
+    annotations = _sam3(embedding=sam3_embedding, prompt=prompt)
+    plain = _sam3(
+        embedding=sam3_embedding,
+        prompt=prompt.model_copy(update={"include_mask_logits": False}),
+    )
+
+    assert annotations
+    assert all(annotation.mask_logits is None for annotation in plain)
+    for annotation in annotations:
+        assert _redraw.distance_where_redraw_differs(annotation=annotation) < 1
+
+
+@pytest.mark.parametrize(
+    "size", _IMAGE_SIZES[1:], ids=lambda size: "x".join(map(str, size))
+)
+def test_segment_sam3_point_logits_redraw_the_mask_on_any_image(
+    size: tuple[int, int],
+) -> None:
+    loaded = _model(name="sam3:latest")
+    embedding = loaded.encode_image(image=_resized_image(size=size))
+    (annotation,) = loaded.decode(
+        embedding=embedding,
+        prompt=types.Prompt(
+            points=[(size[0] * 0.5625, size[1] * 0.5)],
+            point_labels=[1],
+            include_mask_logits=True,
+        ),
+    )
+
+    assert _redraw.distance_where_redraw_differs(annotation=annotation) < 1
 
 
 @pytest.mark.parametrize(

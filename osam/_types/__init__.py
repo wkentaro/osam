@@ -6,6 +6,7 @@ from ._image_embedding import ImageEmbedding
 from ._model import Model
 from ._model import annotations_from_logits
 from ._model import annotations_from_mask
+from ._model import logits_around_box
 from ._model import mask_in_box
 from ._prompt import Prompt
 from ._prompt import point_inputs
@@ -29,6 +30,7 @@ __all__ = [
     "RemoveAction",
     "annotations_from_logits",
     "annotations_from_mask",
+    "logits_around_box",
     "mask_in_box",
     "point_inputs",
     "scale_points",

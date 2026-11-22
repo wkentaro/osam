@@ -59,6 +59,7 @@ class SamBase(types.Model):
             covered_size=output.covered_size,
             height=embedding.original_height,
             width=embedding.original_width,
+            include_mask_logits=prompt.include_mask_logits,
         )
 
 

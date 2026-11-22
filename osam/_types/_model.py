@@ -258,7 +258,10 @@ class Model(abc.ABC):
             prompt = self.default_prompt(
                 height=embedding.original_height, width=embedding.original_width
             ).model_copy(
-                update=prompt.model_dump(include=set(THRESHOLDS), exclude_none=True)
+                update=prompt.model_dump(
+                    include=set(THRESHOLDS) | {"include_mask_logits"},
+                    exclude_none=True,
+                )
             )
             logger.debug("Using the default prompt: {prompt!r}", prompt=prompt)
         if unsupported := prompt.kinds - self.prompt_kinds:
@@ -324,6 +327,7 @@ def annotations_from_logits(
     height: int,
     width: int,
     score: float | None = None,
+    include_mask_logits: bool = False,
 ) -> list[Annotation]:
     positive = logits > 0
     rows = np.flatnonzero(positive.any(axis=1))
@@ -339,7 +343,7 @@ def annotations_from_logits(
     ymax = min(height, math.ceil((rows[-1] + 2) * cell_height)) - 1
     if xmin > xmax or ymin > ymax:
         return []
-    return annotations_from_mask(
+    annotations = annotations_from_mask(
         mask=mask_in_box(
             logits=logits,
             covered_size=covered_size,
@@ -348,6 +352,53 @@ def annotations_from_logits(
         score=score,
         origin=(xmin, ymin),
     )
+    if not include_mask_logits:
+        return annotations
+    return [
+        annotation.model_copy(
+            update=logits_around_box(
+                logits=logits, covered_size=covered_size, bounding_box=bounding_box
+            )
+        )
+        for annotation in annotations
+        if (bounding_box := annotation.bounding_box) is not None
+    ]
+
+
+LOGIT_ZERO: typing.Final = 32768
+LOGIT_SCALE: typing.Final = 256
+
+
+def logits_around_box(
+    *,
+    logits: npt.NDArray[np.float32],
+    covered_size: tuple[float, float],
+    bounding_box: BoundingBox,
+) -> dict[str, typing.Any]:
+    grid_height, grid_width = logits.shape
+    cell_width = covered_size[0] / grid_width
+    cell_height = covered_size[1] / grid_height
+    bb = bounding_box
+
+    def cells(start: int, stop: int, cell: float, count: int) -> tuple[int, int]:
+        first = math.floor(start / cell - 0.5)
+        last = math.ceil(stop / cell - 0.5)
+        return max(0, first), min(count - 1, last) + 1
+
+    col_start, col_stop = cells(bb.xmin, bb.xmax + 1, cell_width, grid_width)
+    row_start, row_stop = cells(bb.ymin, bb.ymax + 1, cell_height, grid_height)
+    crop = logits[row_start:row_stop, col_start:col_stop]
+    return {
+        "mask_logits": np.clip(
+            np.round(LOGIT_ZERO + LOGIT_SCALE * crop), 0, 65535
+        ).astype(np.uint16),
+        "mask_logits_box": (
+            col_start * cell_width,
+            row_start * cell_height,
+            col_stop * cell_width,
+            row_stop * cell_height,
+        ),
+    }
 
 
 def mask_in_box(
