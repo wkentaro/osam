@@ -43,7 +43,11 @@ def _session(*, inputs: list, outputs: list) -> pytypes.SimpleNamespace:
             EfficientSam,
             "decoder",
             "batched_point_coords",
-            [np.zeros((1, 1, 3, HEIGHT, WIDTH))] * 3,
+            [
+                np.zeros((1, 1, 3, HEIGHT, WIDTH), np.float32),
+                np.zeros((1, 1, 3), np.float32),
+                np.zeros((1, 3, 256, 256), np.float32),
+            ],
             (1024, 1024),
         ),
         (
