@@ -78,6 +78,10 @@ class Annotation(pydantic.BaseModel):
                 f"mask_logits must be a 2D uint16 array: got {mask_logits.dtype} "
                 f"{mask_logits.shape}"
             )
+        if max(mask_logits.shape) > _json.MAX_LOGITS_SIDE:
+            raise ValueError(
+                f"mask logits are larger than {_json.MAX_LOGITS_SIDE} pixels a side"
+            )
         return mask_logits
 
     @pydantic.field_validator("mask", mode="before")

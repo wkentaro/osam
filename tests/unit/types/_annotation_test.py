@@ -250,3 +250,15 @@ def test_json_rejects_mask_logits_larger_than_any_grid_before_decoding_them(
 
     with pytest.raises(pydantic.ValidationError, match="4096 pixels"):
         Annotation.model_validate(data)
+
+
+@pytest.mark.parametrize("shape", [(1, 4097), (4097, 1)])
+def test_rejects_mask_logits_larger_than_their_json_takes(
+    shape: tuple[int, int],
+) -> None:
+    with pytest.raises(pydantic.ValidationError, match="4096 pixels"):
+        Annotation(
+            bounding_box=BoundingBox(xmin=0, ymin=0, xmax=0, ymax=0),
+            mask_logits=np.zeros(shape, np.uint16),
+            mask_logits_box=(0, 0, 1, 1),
+        )
