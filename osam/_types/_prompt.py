@@ -70,7 +70,8 @@ class Prompt(PromptBase):
     include_mask_logits: bool = pydantic.Field(
         default=False,
         description="true adds each annotation's mask_logits, for a client that "
-        "draws the mask at another size",
+        "draws the mask at another size; a model that returns no mask returns "
+        "no mask_logits either",
     )
 
 

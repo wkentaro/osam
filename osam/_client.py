@@ -207,7 +207,8 @@ class Client:
         scores only.
         include_mask_logits: True adds each annotation's mask_logits, to draw
         the mask at another size, such as an image's own before it was shrunk
-        to send.
+        to send. A model that returns no mask, such as YOLO-World, returns no
+        mask_logits either.
         keep_alive: as in load.
         """
         prompt: dict[str, Any] = {
