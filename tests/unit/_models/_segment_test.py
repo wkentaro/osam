@@ -1,6 +1,7 @@
 import contextlib
 import pathlib
 from collections.abc import Iterator
+from collections.abc import Sequence
 
 import imgviz
 import numpy as np
@@ -13,6 +14,7 @@ import pytest
 from osam import _registry
 from osam import _runtime
 from osam import _types as types
+from osam._models.sam import SKIPPED_MASKS_HW
 from osam._models.sam2._models import LOW_RES_HW
 
 image_path = (
@@ -149,6 +151,40 @@ def test_decoder_orig_im_size_reaches_only_the_full_size_masks(model: str) -> No
             reached.update(node.output)
 
     assert [o.name for o in graph.output if o.name in reached] == ["masks"]
+
+
+def test_efficientsam_decoder_divides_the_points_by_orig_im_size() -> None:
+    decoder = _registry.get_model_type_by_name(name="efficientsam:10m")._blobs[
+        "decoder"
+    ]
+    session = onnxruntime.InferenceSession(
+        decoder.path, providers=["CPUExecutionProvider"]
+    )
+    rng = np.random.default_rng(0)
+    embedding = rng.normal(size=(1, 256, 64, 64)).astype(np.float32)
+    height, width = 4000, 6000
+    points = (rng.random((1, 1, 3, 2)) * [width, height]).astype(np.float32)
+    labels = np.array([[[1, 2, 3]]], dtype=np.float32)
+
+    def run(*, points: np.ndarray, orig_im_size: tuple[int, int]) -> Sequence[object]:
+        return session.run(
+            None,
+            {
+                "image_embeddings": embedding,
+                "batched_point_coords": points,
+                "batched_point_labels": labels,
+                "orig_im_size": np.array(orig_im_size, dtype=np.int64),
+            },
+        )
+
+    _, expected_iou, expected_logits = run(points=points, orig_im_size=(height, width))
+    _, iou, logits = run(
+        points=points / np.array([width, height], dtype=np.float32),
+        orig_im_size=SKIPPED_MASKS_HW,
+    )
+
+    np.testing.assert_array_equal(iou, expected_iou)
+    np.testing.assert_array_equal(logits, expected_logits)
 
 
 @pytest.mark.parametrize(

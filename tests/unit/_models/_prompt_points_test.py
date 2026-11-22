@@ -87,7 +87,7 @@ def test_decode_sends_the_clicked_pixel_center_at_its_place_in_the_model(
     sent = inputs[0][coords].reshape(-1, 2)[:2]
     assert sent.dtype == np.float32
     if model_type is EfficientSam:
-        sent = sent * [1024 / WIDTH, 1024 / HEIGHT]
+        sent = sent * 1024 / inputs[0]["orig_im_size"][::-1]
     scale = np.array(model_size) / [WIDTH, HEIGHT]
     np.testing.assert_allclose(
         sent + 0.5, (np.array([(10, 20), (WIDTH - 1, 0)]) + 0.5) * scale, rtol=1e-6
