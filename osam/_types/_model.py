@@ -375,13 +375,12 @@ def mask_in_box(
             )
         )
     else:
-        values = _lerp(
-            x=_lerp(x=logits, axis=0, start=bb.ymin, stop=bb.ymax + 1, scale=scale_y),
-            axis=1,
-            start=bb.xmin,
-            stop=bb.xmax + 1,
-            scale=scale_x,
-        )
+        axes = [(0, bb.ymin, bb.ymax + 1, scale_y), (1, bb.xmin, bb.xmax + 1, scale_x)]
+        if (bb.ymax - bb.ymin + 1) * grid_width > grid_height * (bb.xmax - bb.xmin + 1):
+            axes.reverse()
+        values = logits
+        for axis, start, stop, scale in axes:
+            values = _lerp(x=values, axis=axis, start=start, stop=stop, scale=scale)
     return values > 0
 
 
