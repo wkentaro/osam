@@ -240,14 +240,19 @@ def test_mask_in_a_tall_box_narrower_than_the_grid_stays_small() -> None:
     logits = np.random.default_rng(0).normal(size=(288, 288)).astype(np.float32)
     covered_size = (16, 20000)
 
-    tracemalloc.start()
+    was_tracing = tracemalloc.is_tracing()
+    if not was_tracing:
+        tracemalloc.start()
+    before = tracemalloc.get_traced_memory()[0]
+    tracemalloc.reset_peak()
     mask = types.mask_in_box(
         logits=logits,
         covered_size=covered_size,
         bounding_box=types.BoundingBox(xmin=0, ymin=0, xmax=15, ymax=19999),
     )
-    peak = tracemalloc.get_traced_memory()[1]
-    tracemalloc.stop()
+    peak = tracemalloc.get_traced_memory()[1] - before
+    if not was_tracing:
+        tracemalloc.stop()
 
     np.testing.assert_array_equal(
         mask, _tracker._resize(logits[None, None], 20000, 16)[0, 0] > 0
