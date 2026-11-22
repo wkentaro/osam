@@ -1,8 +1,11 @@
+from types import SimpleNamespace
+
 import numpy as np
 import onnx
 import onnxruntime
 import pytest
 
+from osam import _types as types
 from osam._models.sam2._models import Sam2Tiny
 
 
@@ -55,3 +58,38 @@ def test_encode_image_normalizes_channels(
         np.broadcast_to(np.array(expected)[:, None, None], (3, 8, 8)),
         atol=1e-4,
     )
+
+
+def _clipping_decoder(*, logits: np.ndarray) -> SimpleNamespace:
+    def masks(orig_im_size: np.ndarray) -> np.ndarray:
+        if tuple(orig_im_size) == logits.shape[-2:]:
+            return logits
+        return np.zeros((*logits.shape[:2], *orig_im_size), np.float32)
+
+    return SimpleNamespace(
+        run=lambda _, feeds: [
+            masks(feeds["orig_im_size"]),
+            np.array([[1, 0, 0, 0]], np.float32),
+            np.clip(logits, -32, 32),
+        ]
+    )
+
+
+def test_decode_draws_the_mask_from_unclipped_logits() -> None:
+    logits = np.full((1, 4, 256, 256), -5, np.float32)
+    logits[..., 0] = 100
+    model = Sam2Tiny.__new__(Sam2Tiny)
+    model._inference_sessions = {"decoder": _clipping_decoder(logits=logits)}
+    embedding = types.ImageEmbedding(
+        original_height=1024,
+        original_width=1024,
+        embedding=np.zeros((1, 1, 1), np.float32),
+        extra_features=[np.zeros((1, 1, 1), np.float32)] * 2,
+    )
+
+    [annotation] = model.decode(
+        embedding=embedding, prompt=types.Prompt(points=[(0, 0)], point_labels=[1])
+    )
+
+    assert annotation.bounding_box is not None
+    assert annotation.bounding_box.xmax == 5

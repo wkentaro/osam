@@ -1,3 +1,4 @@
+from typing import Final
 from typing import cast
 
 import imgviz
@@ -8,7 +9,8 @@ from typing_extensions import override
 from osam import _types as types
 from osam._models.sam import MaskOutput
 from osam._models.sam import SamBase
-from osam._models.sam._models import SKIPPED_MASKS_HW
+
+LOW_RES_HW: Final = (256, 256)
 
 
 class Sam2(SamBase):
@@ -80,16 +82,14 @@ class Sam2(SamBase):
             )[None],
             "point_coords": input_point[None],
             "point_labels": point_labels[None],
-            "mask_input": np.zeros((1, 1, 256, 256), dtype=np.float32),
+            "mask_input": np.zeros((1, 1, *LOW_RES_HW), dtype=np.float32),
             "has_mask_input": np.array([0], dtype=np.float32),
-            "orig_im_size": np.array(SKIPPED_MASKS_HW, dtype=np.int64),
+            "orig_im_size": np.array(LOW_RES_HW, dtype=np.int64),
         }
-        _, scores, low_res_masks = self._inference_sessions["decoder"].run(
-            None, decoder_inputs
-        )
+        masks, scores, _ = self._inference_sessions["decoder"].run(None, decoder_inputs)
         best = int(np.argmax(cast(npt.NDArray[np.float32], scores)))
         return MaskOutput(
-            low_res_logits=cast(npt.NDArray[np.float32], low_res_masks)[0, best],
+            low_res_logits=cast(npt.NDArray[np.float32], masks)[0, best],
             covered_size=(
                 image_embedding.original_width,
                 image_embedding.original_height,

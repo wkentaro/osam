@@ -5,12 +5,15 @@ from collections.abc import Iterator
 import imgviz
 import numpy as np
 import onnx
+import onnx.utils
+import onnxruntime
 import PIL.Image
 import pytest
 
 from osam import _registry
 from osam import _runtime
 from osam import _types as types
+from osam._models.sam2._models import LOW_RES_HW
 
 image_path = (
     pathlib.Path(__file__).resolve().parents[3] / "examples" / "_images" / "dogs.jpg"
@@ -146,6 +149,45 @@ def test_decoder_orig_im_size_reaches_only_the_full_size_masks(model: str) -> No
             reached.update(node.output)
 
     assert [o.name for o in graph.output if o.name in reached] == ["masks"]
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "sam2:tiny",
+        pytest.param("sam2:small", marks=pytest.mark.extra),
+        pytest.param("sam2:latest", marks=pytest.mark.extra),
+        pytest.param("sam2:large", marks=pytest.mark.extra),
+    ],
+)
+def test_sam2_decoder_masks_at_the_grid_size_are_the_unclipped_logits(
+    model: str,
+) -> None:
+    decoder = _registry.get_model_type_by_name(name=model)._blobs["decoder"]
+    proto = onnx.load(str(decoder.path), load_external_data=False)
+    producers = {o: n for n in proto.graph.node for o in n.output}
+    (unclipped, *_) = producers["low_res_masks"].input
+    proto.graph.value_info.append(
+        onnx.helper.make_tensor_value_info(
+            unclipped, onnx.TensorProto.FLOAT, (1, 4, *LOW_RES_HW)
+        )
+    )
+    masks_only = onnx.utils.Extractor(proto).extract_model(
+        [unclipped, "orig_im_size"], ["masks"]
+    )
+    logits = np.random.default_rng(0).normal(scale=100, size=(1, 4, *LOW_RES_HW))
+
+    (masks,) = onnxruntime.InferenceSession(
+        masks_only.SerializeToString(), providers=["CPUExecutionProvider"]
+    ).run(
+        None,
+        {
+            unclipped: logits.astype(np.float32),
+            "orig_im_size": np.array(LOW_RES_HW, np.int64),
+        },
+    )
+
+    np.testing.assert_array_equal(masks, logits.astype(np.float32))
 
 
 def test_segment_negative_box_rejected_by_sam2() -> None:
