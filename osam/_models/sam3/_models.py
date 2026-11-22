@@ -177,34 +177,6 @@ def _file(*, name: str, device: str) -> str:
     return f"{name}_fp16"
 
 
-def _crop_mask(
-    *,
-    mask: NDArray[np.float32],
-    bounding_box: types.BoundingBox,
-    height: int,
-    width: int,
-) -> NDArray[np.bool_]:
-    # The mask probabilities resized to height x width and thresholded, as
-    # sam3-onnx does, over the bounding box's pixels only.
-    bb = bounding_box
-    mask_h, mask_w = mask.shape
-    return (
-        np.asarray(
-            PIL.Image.fromarray(mask).resize(
-                (bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1),
-                resample=PIL.Image.Resampling.BILINEAR,
-                box=(
-                    bb.xmin * mask_w / width,
-                    bb.ymin * mask_h / height,
-                    (bb.xmax + 1) * mask_w / width,
-                    (bb.ymax + 1) * mask_h / height,
-                ),
-            )
-        )
-        > 0.5
-    )
-
-
 class Sam3(types.Model):
     name = "sam3:latest"
     metadata = types.ModelMetadata(
@@ -417,7 +389,7 @@ class Sam3(types.Model):
                 "language_encoder"
             ].run(["text_attention_mask", "text_memory"], {"tokens": tokens})
             outputs = self._inference_sessions["decoder"].run(
-                ["boxes", "scores", "masks"],
+                ["boxes", "scores", "mask_logits"],
                 {
                     "backbone_fpn_0": embedding.embedding,
                     "backbone_fpn_1": embedding.extra_features[0],
@@ -436,7 +408,7 @@ class Sam3(types.Model):
             np.concatenate([run[0] for run in runs]), 0, 1
         )
         scores: NDArray[np.float32] = np.concatenate([run[1] for run in runs])
-        masks_native: NDArray[np.float32] = np.concatenate([run[2] for run in runs])
+        mask_logits: NDArray[np.float32] = np.concatenate([run[2] for run in runs])
         row_texts: list[str] = [text for text, run in zip(texts, runs) for _ in run[1]]
 
         # Scale normalized box edges to the first and last pixels whose
@@ -470,15 +442,13 @@ class Sam3(types.Model):
                 xmax=round(box[2]),
                 ymax=round(box[3]),
             )
-            cropped_mask: NDArray[np.bool_] = _crop_mask(
-                mask=masks_native[i, 0],
-                bounding_box=bb,
-                height=original_height,
-                width=original_width,
-            )
             annotations.append(
                 types.Annotation(
-                    mask=cropped_mask,
+                    mask=types.mask_in_box(
+                        logits=mask_logits[i, 0],
+                        covered_size=(original_width, original_height),
+                        bounding_box=bb,
+                    ),
                     bounding_box=bb,
                     text=row_texts[i],
                     score=float(scores[i]),
