@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import hashlib
+import math
 import threading
 import typing
 from collections.abc import Callable
@@ -9,6 +10,7 @@ from collections.abc import Callable
 import numpy as np
 import numpy.typing as npt
 import onnxruntime
+import PIL.Image
 from loguru import logger
 
 from .. import _onnx
@@ -290,7 +292,10 @@ class Model(abc.ABC):
 
 
 def annotations_from_mask(
-    *, mask: npt.NDArray[np.bool_], score: float | None = None
+    *,
+    mask: npt.NDArray[np.bool_],
+    score: float | None = None,
+    origin: tuple[int, int] = (0, 0),
 ) -> list[Annotation]:
     # The mask cropped to its bounding box, or none for an empty mask.
     # From the rows and columns with a pixel: 0.2 ms at 2560x1600, where
@@ -300,11 +305,94 @@ def annotations_from_mask(
         return []
     xs = np.flatnonzero(mask.any(axis=0))
     ymin, ymax, xmin, xmax = int(ys[0]), int(ys[-1]), int(xs[0]), int(xs[-1])
+    x0, y0 = origin
     return [
         Annotation(
             # A copy, so a cached annotation doesn't keep the whole mask.
             mask=mask[ymin : ymax + 1, xmin : xmax + 1].copy(),
-            bounding_box=BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax),
+            bounding_box=BoundingBox(
+                xmin=x0 + xmin, ymin=y0 + ymin, xmax=x0 + xmax, ymax=y0 + ymax
+            ),
             score=score,
         )
     ]
+
+
+def annotations_from_logits(
+    *,
+    logits: npt.NDArray[np.float32],
+    covered_size: tuple[float, float],
+    height: int,
+    width: int,
+    score: float | None = None,
+) -> list[Annotation]:
+    positive = logits > 0
+    rows = np.flatnonzero(positive.any(axis=1))
+    if rows.size == 0:
+        return []
+    cols = np.flatnonzero(positive.any(axis=0))
+    grid_height, grid_width = logits.shape
+    cell_width = covered_size[0] / grid_width
+    cell_height = covered_size[1] / grid_height
+    xmin = max(0, math.floor((cols[0] - 1) * cell_width))
+    ymin = max(0, math.floor((rows[0] - 1) * cell_height))
+    xmax = min(width, math.ceil((cols[-1] + 2) * cell_width)) - 1
+    ymax = min(height, math.ceil((rows[-1] + 2) * cell_height)) - 1
+    if xmin > xmax or ymin > ymax:
+        return []
+    return annotations_from_mask(
+        mask=mask_in_box(
+            logits=logits,
+            covered_size=covered_size,
+            bounding_box=BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax),
+        ),
+        score=score,
+        origin=(xmin, ymin),
+    )
+
+
+def mask_in_box(
+    *,
+    logits: npt.NDArray[np.float32],
+    covered_size: tuple[float, float],
+    bounding_box: BoundingBox,
+) -> npt.NDArray[np.bool_]:
+    grid_height, grid_width = logits.shape
+    scale_x = grid_width / covered_size[0]
+    scale_y = grid_height / covered_size[1]
+    bb = bounding_box
+    if scale_x <= 1 and scale_y <= 1:
+        values = np.asarray(
+            PIL.Image.fromarray(logits).resize(
+                (bb.xmax - bb.xmin + 1, bb.ymax - bb.ymin + 1),
+                resample=PIL.Image.Resampling.BILINEAR,
+                box=(
+                    bb.xmin * scale_x,
+                    bb.ymin * scale_y,
+                    (bb.xmax + 1) * scale_x,
+                    (bb.ymax + 1) * scale_y,
+                ),
+            )
+        )
+    else:
+        values = _lerp(
+            x=_lerp(x=logits, axis=0, start=bb.ymin, stop=bb.ymax + 1, scale=scale_y),
+            axis=1,
+            start=bb.xmin,
+            stop=bb.xmax + 1,
+            scale=scale_x,
+        )
+    return values > 0
+
+
+def _lerp(
+    *, x: npt.NDArray[np.float32], axis: int, start: int, stop: int, scale: float
+) -> npt.NDArray[np.float32]:
+    size = x.shape[axis]
+    t = np.clip((np.arange(start, stop) + 0.5) * scale - 0.5, 0, size - 1)
+    i0 = np.floor(t).astype(np.int64)
+    i1 = np.minimum(i0 + 1, size - 1)
+    shape = [1, 1]
+    shape[axis] = stop - start
+    w1 = (t - i0).astype(np.float32).reshape(shape)
+    return np.take(x, i0, axis=axis) * (1 - w1) + np.take(x, i1, axis=axis) * w1
