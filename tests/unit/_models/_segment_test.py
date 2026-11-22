@@ -149,7 +149,7 @@ def test_segment_box_rejected_by_yoloworld() -> None:
         _segment(model="yoloworld", prompt=types.Prompt(box=(450, 551, 1059, 1421)))
 
 
-def _assert_logits_redraw_mask(*, annotation: types.Annotation) -> None:
+def _redrawn(*, annotation: types.Annotation) -> np.ndarray:
     assert annotation.bounding_box is not None
     assert annotation.mask is not None
     assert annotation.mask_logits is not None
@@ -158,23 +158,24 @@ def _assert_logits_redraw_mask(*, annotation: types.Annotation) -> None:
     xmin, ymin, xmax, ymax = annotation.mask_logits_box
     rows, cols = annotation.mask_logits.shape
     cell_width, cell_height = (xmax - xmin) / cols, (ymax - ymin) / rows
-    redrawn = (
-        np.asarray(
-            PIL.Image.fromarray(annotation.mask_logits.astype(np.float32)).resize(
-                annotation.mask.shape[::-1],
-                resample=PIL.Image.Resampling.BILINEAR,
-                box=(
-                    (bb.xmin - xmin) / cell_width,
-                    (bb.ymin - ymin) / cell_height,
-                    (bb.xmax + 1 - xmin) / cell_width,
-                    (bb.ymax + 1 - ymin) / cell_height,
-                ),
-            )
+    return np.asarray(
+        PIL.Image.fromarray(annotation.mask_logits.astype(np.float32)).resize(
+            annotation.mask.shape[::-1],
+            resample=PIL.Image.Resampling.BILINEAR,
+            box=(
+                (bb.xmin - xmin) / cell_width,
+                (bb.ymin - ymin) / cell_height,
+                (bb.xmax + 1 - xmin) / cell_width,
+                (bb.ymax + 1 - ymin) / cell_height,
+            ),
         )
-        > 32768
     )
-    iou = (redrawn & annotation.mask).sum() / (redrawn | annotation.mask).sum()
-    assert iou >= 0.98
+
+
+def _assert_logits_redraw_mask(*, annotation: types.Annotation) -> None:
+    redrawn = _redrawn(annotation=annotation)
+    differs = (redrawn > 32768) != annotation.mask
+    assert np.abs(redrawn[differs] - 32768).max(initial=0) < 1
 
 
 @pytest.mark.parametrize(
@@ -185,16 +186,24 @@ def _assert_logits_redraw_mask(*, annotation: types.Annotation) -> None:
         "sam2:tiny",
     ],
 )
-def test_segment_point_logits_redraw_the_mask(model: str) -> None:
-    (plain,) = _segment(model=model, prompt=types.Prompt())
-    (annotation,) = _segment(model=model, prompt=types.Prompt(include_mask_logits=True))
+def test_segment_point_logits_redraw_the_mask_at_the_model_input_size(
+    model: str,
+) -> None:
+    image = np.asarray(PIL.Image.open(image_path).convert("RGB").resize((1024, 640)))
+    loaded = _model(name=model)
+    embedding = loaded.encode_image(image=image)
+    (plain,) = loaded.decode(embedding=embedding, prompt=types.Prompt())
+    (annotation,) = loaded.decode(
+        embedding=embedding, prompt=types.Prompt(include_mask_logits=True)
+    )
 
     assert plain.mask_logits is None
     _assert_logits_redraw_mask(annotation=annotation)
 
 
 @pytest.mark.extra
-def test_sam_logits_redraw_the_mask_where_the_decoder_rounds_up() -> None:
+@pytest.mark.parametrize("rows", [512.5 / 513, 513 / 512.5])
+def test_sam_logits_sit_on_the_rows_the_decoder_rounds_up_to(rows: float) -> None:
     # 1025 * 1024 / 2048 is 512.5: the encoder rounds it to 512, the decoder
     # crops 513 rows.
     image = np.asarray(PIL.Image.open(image_path).convert("RGB").resize((2048, 1025)))
@@ -207,8 +216,18 @@ def test_sam_logits_redraw_the_mask_where_the_decoder_rounds_up() -> None:
             include_mask_logits=True,
         ),
     )
+    assert annotation.mask is not None
+    assert annotation.mask_logits_box is not None
+    xmin, ymin, xmax, ymax = annotation.mask_logits_box
+    moved = annotation.model_copy(
+        update={"mask_logits_box": (xmin, ymin * rows, xmax, ymax * rows)}
+    )
 
-    _assert_logits_redraw_mask(annotation=annotation)
+    def iou(redrawn: np.ndarray) -> float:
+        mask = redrawn > 32768
+        return (mask & annotation.mask).sum() / (mask | annotation.mask).sum()
+
+    assert iou(_redrawn(annotation=annotation)) > iou(_redrawn(annotation=moved))
 
 
 # The tests below run SAM3, after the YOLO-World case of the first, so that it
