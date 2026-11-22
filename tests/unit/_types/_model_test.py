@@ -370,6 +370,17 @@ def test_mask_logits_redraw_the_mask_on_any_image(seed: int) -> None:
         assert _redraw.distance_where_redraw_differs(annotation=annotation) < 1
 
 
+def test_mask_logits_redraw_differs_from_the_mask_next_to_a_clipped_cell() -> None:
+    logits = np.array([[200, -100], [200, -100]], np.float32)
+
+    (annotation,) = types.annotations_from_logits(
+        logits=logits, covered_size=(8, 2), height=2, width=8, include_mask_logits=True
+    )
+
+    assert annotation.mask is not None and annotation.mask[:, 4].all()
+    assert (_redraw.redrawn(annotation=annotation)[:, 4] < 32768).all()
+
+
 def _resized(*, logits: np.ndarray, size: tuple[int, int], box=None) -> np.ndarray:
     return np.asarray(
         PIL.Image.fromarray(logits.astype(np.float32)).resize(

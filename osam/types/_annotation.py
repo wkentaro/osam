@@ -48,8 +48,9 @@ class Annotation(pydantic.BaseModel):
         "16-bit grayscale image of 32768 + 256 x logit clipped to 0..65535. "
         "Sampled bilinearly at each pixel center within bounding_box, with the "
         "cells tiling mask_logits_box and the edge cells clamped, a pixel is in "
-        "the mask above 32768. That redraws mask up to the encoding, which rounds "
-        "to 1/256 and clips logits beyond +-128",
+        "the mask above 32768. That matches mask to within the encoding's 1/256 "
+        "rounding, but only where no cell a pixel interpolates is clipped at "
+        "+-128",
     )
     mask_logits_box: tuple[float, float, float, float] | None = pydantic.Field(
         default=None,
