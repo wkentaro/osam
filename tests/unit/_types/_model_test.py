@@ -333,6 +333,17 @@ def test_annotations_from_logits_leave_out_logits_unless_asked() -> None:
     assert annotation.mask_logits_box is None
 
 
+def test_annotations_from_logits_refuse_cells_their_json_rejects() -> None:
+    with pytest.raises(ValueError, match="larger than 4096 pixels a side"):
+        types.annotations_from_logits(
+            logits=np.ones((1, 4097), np.float32),
+            covered_size=(4097, 1),
+            height=1,
+            width=4097,
+            include_mask_logits=True,
+        )
+
+
 @pytest.mark.parametrize("seed", range(20))
 def test_mask_logits_redraw_the_mask_on_any_image(seed: int) -> None:
     rng = np.random.default_rng(seed)

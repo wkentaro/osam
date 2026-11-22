@@ -355,8 +355,9 @@ def annotations_from_logits(
     if not include_mask_logits:
         return annotations
     return [
-        annotation.model_copy(
-            update=logits_around_box(
+        Annotation.model_validate(
+            dict(annotation)
+            | logits_around_box(
                 logits=logits, covered_size=covered_size, bounding_box=bounding_box
             )
         )
