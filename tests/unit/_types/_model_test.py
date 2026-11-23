@@ -465,6 +465,23 @@ def test_mask_logits_redraw_a_text_annotation_cut_to_its_scaled_box() -> None:
     )
 
 
+def test_mask_logits_redraw_a_pixel_on_a_shared_edge_in_one_text_box() -> None:
+    drawn = np.zeros(3, int)
+    for x in (0, 1):
+        value, area = _redraw.redrawn(
+            annotation=_text_annotation(
+                logits=np.ones((1, 2), np.float32),
+                covered_size=(2, 2),
+                bounding_box=types.BoundingBox(xmin=x, ymin=0, xmax=x, ymax=1),
+            ),
+            image_size=(2, 2),
+            scale=1.5,
+        )
+        drawn[area.xmin : area.xmax + 1] += (value > 32768).all(axis=0)
+
+    assert drawn.tolist() == [1, 1, 1]
+
+
 @pytest.mark.parametrize("seed", range(50))
 def test_mask_logits_redraw_a_text_annotation_at_a_larger_size(seed: int) -> None:
     rng = np.random.default_rng(seed)

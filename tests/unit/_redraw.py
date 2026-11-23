@@ -17,18 +17,19 @@ def _samples(
     stop: float,
     clip: tuple[float, float],
     size: int,
-    scale: int,
+    scale: float,
     cells: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    centers = (np.arange(size * scale) + 0.5) * size / (size * scale)
+    count = round(size * scale)
+    centers = (np.arange(count) + 0.5) * size / count
     pixels = np.flatnonzero(
-        (max(start, clip[0]) <= centers) & (centers <= min(stop, clip[1]))
+        (max(start, clip[0]) <= centers) & (centers < min(stop, clip[1]))
     )
     return pixels, (centers[pixels] - start) / (stop - start) * cells - 0.5
 
 
 def redrawn(
-    *, annotation: types.Annotation, image_size: tuple[int, int], scale: int = 1
+    *, annotation: types.Annotation, image_size: tuple[int, int], scale: float = 1
 ) -> tuple[np.ndarray, types.BoundingBox]:
     assert annotation.mask_logits is not None
     assert annotation.mask_logits_box is not None

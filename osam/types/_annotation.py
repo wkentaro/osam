@@ -53,6 +53,8 @@ class Annotation(pydantic.BaseModel):
         "is above 32768. An annotation with text also needs the point inside "
         "bounding_box's pixel edges xmin, ymin, xmax + 1, ymax + 1: the model's "
         "own box rounded to the sent pixels, at least one pixel wide and tall. "
+        "Either box holds a point on its lower edges and not on its upper ones, "
+        "so two boxes that share an edge never both draw a pixel. "
         "The bounding box at that size is the extent of what was drawn. At the "
         "sent size this matches mask to within the encoding's 1/256 rounding, "
         "but only where no cell a pixel interpolates is clipped at +-128",
