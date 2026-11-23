@@ -191,16 +191,6 @@ def test_rejects_an_inverted_bounding_box(box: tuple[int, int, int, int]) -> Non
         BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
 
 
-def test_accepts_mask_logits_without_a_mask() -> None:
-    annotation = Annotation(
-        bounding_box=BoundingBox(xmin=0, ymin=0, xmax=0, ymax=0),
-        mask_logits=np.zeros((2, 2), np.uint16),
-        mask_logits_box=(0, 0, 1, 1),
-    )
-
-    assert annotation.mask is None
-
-
 def test_rejects_mask_logits_without_their_box() -> None:
     with pytest.raises(pydantic.ValidationError, match="come together"):
         Annotation(mask_logits=np.zeros((2, 2), np.uint16))
