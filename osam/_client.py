@@ -246,8 +246,9 @@ class Client:
 
         actions: every edit so far, in order, with coordinates in pixels:
 
-        - {"type": "prompt", "frame", ...} with the prompt of segment, first
-          and only first: points or a box track one object, texts every match.
+        - {"type": "prompt", "frame", ...} with the prompt of segment, except
+          include_mask_logits, first and only first: points or a box track
+          one object, texts every match.
         - {"type": "add", "frame", "points", "point_labels", "box", "base"}
         - {"type": "refine", "frame", "object_id", "points", "point_labels",
           "base"}
