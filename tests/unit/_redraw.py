@@ -13,26 +13,43 @@ def _lerp(*, grid: np.ndarray, t: np.ndarray, axis: int) -> np.ndarray:
     return np.take(grid, i0, axis) * (1 - w1) + np.take(grid, i1, axis) * w1
 
 
-def redrawn(
-    *, annotation: types.Annotation, image_size: tuple[int, int]
-) -> tuple[np.ndarray, types.BoundingBox]:
-    assert annotation.mask_logits is not None
-    assert annotation.mask_logits_box is not None
-    xmin, ymin, xmax, ymax = annotation.mask_logits_box
-    area = types.BoundingBox(
+def _pixels_centered_in(
+    *, edges: tuple[float, float, float, float], image_size: tuple[int, int]
+) -> types.BoundingBox:
+    xmin, ymin, xmax, ymax = edges
+    return types.BoundingBox(
         xmin=max(0, math.ceil(xmin - 0.5)),
         ymin=max(0, math.ceil(ymin - 0.5)),
         xmax=min(image_size[0] - 1, math.floor(xmax - 0.5)),
         ymax=min(image_size[1] - 1, math.floor(ymax - 0.5)),
     )
+
+
+def redrawn(
+    *, annotation: types.Annotation, image_size: tuple[int, int], scale: int = 1
+) -> tuple[np.ndarray, types.BoundingBox]:
+    assert annotation.mask_logits is not None
+    assert annotation.mask_logits_box is not None
+    image_size = (image_size[0] * scale, image_size[1] * scale)
+    xmin, ymin, xmax, ymax = (scale * edge for edge in annotation.mask_logits_box)
+    area = _pixels_centered_in(edges=(xmin, ymin, xmax, ymax), image_size=image_size)
     if annotation.text is not None:
         assert annotation.bounding_box is not None
         bb = annotation.bounding_box
+        clip = _pixels_centered_in(
+            edges=(
+                scale * bb.xmin,
+                scale * bb.ymin,
+                scale * (bb.xmax + 1),
+                scale * (bb.ymax + 1),
+            ),
+            image_size=image_size,
+        )
         area = types.BoundingBox(
-            xmin=max(area.xmin, bb.xmin),
-            ymin=max(area.ymin, bb.ymin),
-            xmax=min(area.xmax, bb.xmax),
-            ymax=min(area.ymax, bb.ymax),
+            xmin=max(area.xmin, clip.xmin),
+            ymin=max(area.ymin, clip.ymin),
+            xmax=min(area.xmax, clip.xmax),
+            ymax=min(area.ymax, clip.ymax),
         )
     grid = annotation.mask_logits.astype(np.float64)
     rows, cols = grid.shape
