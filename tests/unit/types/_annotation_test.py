@@ -210,11 +210,31 @@ def test_rejects_mask_logits_without_their_box() -> None:
 
 @pytest.mark.parametrize(
     "box",
-    [(1, 0, 0, 1), (0, 1, 1, 1), (0, 0, float("inf"), 1), (float("nan"), 0, 1, 1)],
+    [
+        (1, 0, 0, 1),
+        (0, 1, 1, 1),
+        (0, 0, float("inf"), 1),
+        (float("nan"), 0, 1, 1),
+        (-1e308, 0, 1e308, 1),
+    ],
 )
-def test_rejects_an_empty_mask_logits_box(box) -> None:
-    with pytest.raises(pydantic.ValidationError, match="is empty"):
+def test_rejects_an_empty_or_unbounded_mask_logits_box(box) -> None:
+    with pytest.raises(pydantic.ValidationError, match="is empty or unbounded"):
         Annotation(mask_logits=np.zeros((2, 2), np.uint16), mask_logits_box=box)
+
+
+def test_json_rejects_a_mask_logits_box_of_unbounded_span() -> None:
+    annotation = Annotation(
+        bounding_box=BoundingBox(xmin=0, ymin=0, xmax=0, ymax=0),
+        mask_logits=np.zeros((2, 2), np.uint16),
+        mask_logits_box=(0, 0, 1, 1),
+    )
+    data = json.loads(annotation.model_dump_json()) | {
+        "mask_logits_box": (-1e308, 0, 1e308, 1)
+    }
+
+    with pytest.raises(pydantic.ValidationError, match="is empty or unbounded"):
+        Annotation.model_validate_json(json.dumps(data))
 
 
 def _logits_json(*, image: PIL.Image.Image, format: str = "PNG") -> dict:

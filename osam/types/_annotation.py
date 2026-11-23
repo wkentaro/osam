@@ -115,9 +115,13 @@ class Annotation(pydantic.BaseModel):
         if self.mask_logits_box is not None:
             xmin, ymin, xmax, ymax = self.mask_logits_box
             if not (
-                np.isfinite(self.mask_logits_box).all() and xmin < xmax and ymin < ymax
+                np.isfinite((xmin, ymin, xmax - xmin, ymax - ymin)).all()
+                and xmin < xmax
+                and ymin < ymax
             ):
-                raise ValueError(f"mask_logits_box {self.mask_logits_box} is empty")
+                raise ValueError(
+                    f"mask_logits_box {self.mask_logits_box} is empty or unbounded"
+                )
             if self.bounding_box is None:
                 raise ValueError(
                     "bounding_box is required when mask_logits is provided"
