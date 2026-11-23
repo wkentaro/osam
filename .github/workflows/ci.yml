@@ -68,6 +68,7 @@ jobs:
             python-version: '3.10'
             # large models exceed runner memory with 3 workers
             pytest-args: -n 2 -m 'not model_conformance'
+            save-models: true
           - os: ubuntu-latest
             python-version: '3.14'
             # onnxruntime 1.24 or later, which Python 3.11+ installs
@@ -89,14 +90,21 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/osam/models/blobs
-          key: osam-models-${{ runner.os }}-${{ hashFiles('osam/_models/**') }}
-          restore-keys: |
-            osam-models-${{ runner.os }}-
+      - id: models
+        uses: ./.github/actions/restore-models
       - run: just setup
       - run: just test ${{ matrix.pytest-args }}
+      - if: matrix.save-models && github.ref == 'refs/heads/main' && steps.models.outputs.cache-hit
+          != 'true'
+        run: mv ~/.cache/osam/models/blobs .models
+        shell: bash
+      - if: matrix.save-models && github.ref == 'refs/heads/main' && steps.models.outputs.cache-hit
+          != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .models
+          key: ${{ steps.models.outputs.key }}
+          enableCrossOsArchive: true
   model-conformance:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -112,11 +120,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/osam/models/blobs
-          key: osam-models-${{ runner.os }}-${{ hashFiles('osam/_models/**') }}
-          restore-keys: |
-            osam-models-${{ runner.os }}-
+      - uses: ./.github/actions/restore-models
       - run: just setup
       - run: just test -n 0 -m 'model_conformance and not extra' -rP -o faulthandler_timeout=120
