@@ -59,6 +59,36 @@ def test_decode_boxes_the_pixels_inside_the_predicted_edges(
     assert annotation.mask.all()
 
 
+def test_decode_draws_a_text_mask_from_logits_not_probabilities() -> None:
+    logits = np.array([[[[-0.2, 6]]]], np.float32)
+    outputs = {
+        "boxes": np.array([[0, 0, 1, 1]], np.float32),
+        "scores": np.array([0.9], np.float32),
+        "masks": 1 / (1 + np.exp(-logits)),
+        "mask_logits": logits,
+    }
+    model = Sam3.__new__(Sam3)
+    model._inference_sessions = {
+        "language_encoder": pytypes.SimpleNamespace(
+            run=lambda *_: [np.ones((1, 32), bool), np.zeros((32, 1, 8), np.float32)]
+        ),
+        "decoder": pytypes.SimpleNamespace(
+            get_inputs=lambda: [pytypes.SimpleNamespace(name="box_coords", shape=[1])],
+            run=lambda names, _: [outputs[name] for name in names],
+        ),
+    }
+    embedding = types.ImageEmbedding(
+        original_height=1,
+        original_width=16,
+        embedding=np.zeros((1, 1, 1), np.float32),
+        extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
+    )
+
+    [annotation] = model.decode(embedding=embedding, prompt=types.Prompt(texts=["car"]))
+
+    assert annotation.mask.tolist() == [[False] * 4 + [True] * 12]
+
+
 @pytest.mark.parametrize(
     "point_labels, box, expected",
     [
