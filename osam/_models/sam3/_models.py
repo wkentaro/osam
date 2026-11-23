@@ -369,9 +369,12 @@ class Sam3(types.Model):
         def encode_tokens(
             tokens: bytes,
         ) -> tuple[NDArray[np.bool_], NDArray[np.float32]]:
-            language_mask, language_features = session.run(
-                ["text_attention_mask", "text_memory"],
-                {"tokens": np.frombuffer(tokens, np.int64).reshape(1, -1)},
+            language_mask, language_features = cast(
+                list[NDArray],
+                session.run(
+                    ["text_attention_mask", "text_memory"],
+                    {"tokens": np.frombuffer(tokens, np.int64).reshape(1, -1)},
+                ),
             )
             return language_mask, language_features
 
