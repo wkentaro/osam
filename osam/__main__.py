@@ -494,6 +494,15 @@ def _track(
     json: bool,
     overwrite: bool = False,
 ) -> None:
+    # --prompt takes Client.segment's keywords: those Client.track takes too,
+    # such as include_masks, are options of the request, the rest the action's.
+    track_keys: set[str] = set(inspect.signature(Client.track).parameters)
+    options: dict = {k: v for k, v in prompt.items() if k in track_keys}
+    action: dict = {k: v for k, v in prompt.items() if k not in track_keys}
+    if "include_mask_logits" in action:
+        raise click.BadParameter(
+            "include_mask_logits isn't available with --video", param_hint="--prompt"
+        )
     # Frames in name order, numbers by value, so frame_2 comes before frame_10.
     # Only images, so a .DS_Store or a label file beside the frames is no frame.
     extensions: dict[str, str] = PIL.Image.registered_extensions()
@@ -540,15 +549,6 @@ def _track(
         ]
     except PIL.UnidentifiedImageError as e:
         raise click.BadParameter(str(e), param_hint="--video")
-    # --prompt takes Client.segment's keywords: those Client.track takes too,
-    # such as include_masks, are options of the request, the rest the action's.
-    track_keys: set[str] = set(inspect.signature(Client.track).parameters)
-    options: dict = {k: v for k, v in prompt.items() if k in track_keys}
-    action: dict = {k: v for k, v in prompt.items() if k not in track_keys}
-    if "include_mask_logits" in action:
-        raise click.BadParameter(
-            "include_mask_logits isn't available with --video", param_hint="--prompt"
-        )
 
     def progress(event: types.TrackProgress) -> None:
         message = "Preparing video"
