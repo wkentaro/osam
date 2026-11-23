@@ -185,10 +185,29 @@ def test_json_rejects_a_mask_logits_box_that_misses_a_pixel_of_the_bounding_box(
 
 
 @pytest.mark.parametrize("box", [(3, 0, 2, 1), (0, 3, 1, 2)])
-def test_rejects_an_inverted_bounding_box(box: tuple[int, int, int, int]) -> None:
+def test_json_rejects_mask_logits_on_an_inverted_bounding_box(
+    box: tuple[int, int, int, int],
+) -> None:
+    annotation = Annotation(
+        bounding_box=BoundingBox(xmin=0, ymin=0, xmax=3, ymax=3),
+        mask_logits=np.zeros((2, 2), np.uint16),
+        mask_logits_box=(0, 0, 4, 4),
+    )
     xmin, ymin, xmax, ymax = box
+    data = json.loads(annotation.model_dump_json()) | {
+        "bounding_box": {"xmin": xmin, "ymin": ymin, "xmax": xmax, "ymax": ymax}
+    }
+
     with pytest.raises(pydantic.ValidationError, match="is inverted"):
-        BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
+        Annotation.model_validate(data)
+
+
+def test_accepts_an_inverted_bounding_box_without_mask_logits() -> None:
+    data = '{"bounding_box": {"xmin": 3, "ymin": 0, "xmax": 2, "ymax": 1}}'
+
+    annotation = Annotation.model_validate_json(data)
+
+    assert annotation.bounding_box == BoundingBox(xmin=3, ymin=0, xmax=2, ymax=1)
 
 
 def test_rejects_mask_logits_without_their_box() -> None:

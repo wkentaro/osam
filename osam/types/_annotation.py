@@ -132,6 +132,8 @@ class Annotation(pydantic.BaseModel):
                     "bounding_box is required when mask_logits is provided"
                 )
             bb = self.bounding_box
+            if bb.xmin > bb.xmax or bb.ymin > bb.ymax:
+                raise ValueError(f"bounding box {bb} is inverted")
             _require_inside_image(bounding_box=bb, info=info)
             if not (
                 xmin <= bb.xmin + 0.5
