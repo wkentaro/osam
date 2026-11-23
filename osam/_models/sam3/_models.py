@@ -1,3 +1,4 @@
+import functools
 from collections.abc import Callable
 from typing import Final
 from typing import cast
@@ -358,6 +359,27 @@ class Sam3(types.Model):
     def default_prompt(cls, *, height: int, width: int) -> types.Prompt:
         return types.Prompt(texts=["visual"])
 
+    @functools.cached_property
+    def _encode_text(
+        self,
+    ) -> Callable[[str], tuple[NDArray[np.bool_], NDArray[np.float32]]]:
+        session = self._inference_sessions["language_encoder"]
+
+        @functools.lru_cache(maxsize=64)
+        def encode_tokens(
+            tokens: bytes,
+        ) -> tuple[NDArray[np.bool_], NDArray[np.float32]]:
+            language_mask, language_features = session.run(
+                ["text_attention_mask", "text_memory"],
+                {"tokens": np.frombuffer(tokens, np.int64).reshape(1, -1)},
+            )
+            return language_mask, language_features
+
+        def encode(text: str) -> tuple[NDArray[np.bool_], NDArray[np.float32]]:
+            return encode_tokens(tokenize(texts=[text], context_length=32).tobytes())
+
+        return encode
+
     @override
     def _decode(
         self, *, embedding: types.ImageEmbedding, prompt: types.Prompt
@@ -412,10 +434,7 @@ class Sam3(types.Model):
         texts: list[str] = prompt.texts or ["visual"]
         runs: list[list[NDArray[np.float32]]] = []
         for text in texts:
-            tokens: NDArray[np.int64] = tokenize(texts=[text], context_length=32)
-            language_mask, language_features = self._inference_sessions[
-                "language_encoder"
-            ].run(["text_attention_mask", "text_memory"], {"tokens": tokens})
+            language_mask, language_features = self._encode_text(text)
             outputs = self._inference_sessions["decoder"].run(
                 ["boxes", "scores", "masks"],
                 {

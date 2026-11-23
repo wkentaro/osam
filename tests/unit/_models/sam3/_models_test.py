@@ -1,11 +1,13 @@
 import types as pytypes
 import typing
+import weakref
 
 import numpy as np
 import PIL.Image
 import pytest
 
 from osam import _types as types
+from osam._models._clip import tokenize
 from osam._models.sam3 import _models
 from osam._models.sam3._models import Sam3
 
@@ -146,6 +148,57 @@ def test_decode_finds_objects_for_each_text() -> None:
         ("car", pytest.approx(0.9)),
         ("dog", pytest.approx(0.5)),
     ]
+
+
+def test_decode_encodes_each_text_once_without_keeping_the_model_alive() -> None:
+    encoded: list[bytes] = []
+
+    def encode(_, inputs: dict) -> list[np.ndarray]:
+        tokens: np.ndarray = inputs["tokens"]
+        encoded.append(tokens.tobytes())
+        return [
+            np.ones((1, 32), bool),
+            np.full((32, 1, 8), tokens.sum(), np.float32),
+        ]
+
+    decoded: list[float] = []
+
+    def decode(_, inputs: dict) -> list[np.ndarray]:
+        assert inputs["language_mask"].shape == (1, 32)
+        decoded.append(inputs["language_features"].item(0))
+        return [
+            np.zeros((0, 4), np.float32),
+            np.zeros((0,), np.float32),
+            np.zeros((0, 1, 8, 8), np.float32),
+        ]
+
+    model = Sam3.__new__(Sam3)
+    model._inference_sessions = {
+        "language_encoder": pytypes.SimpleNamespace(run=encode),
+        "decoder": pytypes.SimpleNamespace(
+            get_inputs=lambda: [pytypes.SimpleNamespace(name="box_coords", shape=[1])],
+            run=decode,
+        ),
+    }
+    embedding = types.ImageEmbedding(
+        original_height=100,
+        original_width=100,
+        embedding=np.zeros((1, 1, 1), np.float32),
+        extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
+    )
+
+    texts = ["car", "dog", "car ", "car", "dog"]
+    for text in texts:
+        model.decode(embedding=embedding, prompt=types.Prompt(texts=[text]))
+
+    assert len(encoded) == 2
+    car, dog = (
+        tokenize(texts=[text], context_length=32).sum() for text in ["car", "dog"]
+    )
+    assert decoded == [car, dog, car, car, dog]
+    freed = weakref.ref(model)
+    del model
+    assert freed() is None
 
 
 def test_encode_image_fetches_only_the_outputs_decoders_read() -> None:
