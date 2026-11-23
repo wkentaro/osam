@@ -367,9 +367,16 @@ def mask_in_box(
     used = np.zeros(grid_width, dtype=bool)
     used[i0x] = used[i1x] = True
     position = np.cumsum(used) - 1
-    rows = _lerp(x=logits[:, used], i0=i0y, i1=i1y, w1=w1y[:, None])
-    columns = _lerp(x=rows.T, i0=position[i0x], i1=position[i1x], w1=w1x[:, None])
-    return np.ascontiguousarray(columns.T > 0)
+    columns = logits[:, used]
+    mask = np.empty((len(i0y), len(i0x)), dtype=bool)
+    block = max(1, (1 << 18) // len(i0x))
+    for top in range(0, len(i0y), block):
+        ys = slice(top, top + block)
+        rows = _lerp(x=columns, i0=i0y[ys], i1=i1y[ys], w1=w1y[ys, None])
+        mask[ys] = (
+            _lerp(x=rows.T, i0=position[i0x], i1=position[i1x], w1=w1x[:, None]) > 0
+        ).T
+    return mask
 
 
 def _lerp_weights(

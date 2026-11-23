@@ -246,9 +246,14 @@ def test_mask_in_box_is_row_major() -> None:
     assert mask.flags.c_contiguous
 
 
-def test_mask_in_a_tall_box_narrower_than_the_grid_stays_small() -> None:
+@pytest.mark.parametrize(
+    "width, height, bytes_per_pixel",
+    [(16, 20000, 64), (2560, 1600, 4)],
+    ids=["tall box narrower than the grid", "whole image"],
+)
+def test_mask_draw_stays_small(width: int, height: int, bytes_per_pixel: int) -> None:
     logits = np.random.default_rng(0).normal(size=(288, 288)).astype(np.float32)
-    covered_size = (16, 20000)
+    covered_size = (width, height)
 
     was_tracing = tracemalloc.is_tracing()
     if not was_tracing:
@@ -258,13 +263,13 @@ def test_mask_in_a_tall_box_narrower_than_the_grid_stays_small() -> None:
     mask = types.mask_in_box(
         logits=logits,
         covered_size=covered_size,
-        bounding_box=types.BoundingBox(xmin=0, ymin=0, xmax=15, ymax=19999),
+        bounding_box=types.BoundingBox(xmin=0, ymin=0, xmax=width - 1, ymax=height - 1),
     )
     peak = tracemalloc.get_traced_memory()[1] - before
     if not was_tracing:
         tracemalloc.stop()
 
     np.testing.assert_array_equal(
-        mask, _tracker._resize(logits[None, None], 20000, 16)[0, 0] > 0
+        mask, _tracker._resize(logits[None, None], height, width)[0, 0] > 0
     )
-    assert peak < 64 * mask.size
+    assert peak < bytes_per_pixel * mask.size
