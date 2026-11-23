@@ -153,6 +153,7 @@ def test_decoder_orig_im_size_reaches_only_the_full_size_masks(model: str) -> No
     assert [o.name for o in graph.output if o.name in reached] == ["masks"]
 
 
+@pytest.mark.model_conformance
 def test_efficientsam_decoder_divides_the_points_by_orig_im_size() -> None:
     decoder = _registry.get_model_type_by_name(name="efficientsam:10m")._blobs[
         "decoder"
@@ -162,7 +163,7 @@ def test_efficientsam_decoder_divides_the_points_by_orig_im_size() -> None:
     )
     rng = np.random.default_rng(0)
     embedding = rng.normal(size=(1, 256, 64, 64)).astype(np.float32)
-    height, width = 4000, 6000
+    height, width = 400, 600
     points = (rng.random((1, 1, 3, 2)) * [width, height]).astype(np.float32)
     labels = np.array([[[1, 2, 3]]], dtype=np.float32)
 
