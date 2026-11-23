@@ -1,5 +1,3 @@
-import math
-
 import numpy as np
 
 from osam import types
@@ -13,16 +11,20 @@ def _lerp(*, grid: np.ndarray, t: np.ndarray, axis: int) -> np.ndarray:
     return np.take(grid, i0, axis) * (1 - w1) + np.take(grid, i1, axis) * w1
 
 
-def _pixels_centered_in(
-    *, edges: tuple[float, float, float, float], image_size: tuple[int, int]
-) -> types.BoundingBox:
-    xmin, ymin, xmax, ymax = edges
-    return types.BoundingBox(
-        xmin=max(0, math.ceil(xmin - 0.5)),
-        ymin=max(0, math.ceil(ymin - 0.5)),
-        xmax=min(image_size[0] - 1, math.floor(xmax - 0.5)),
-        ymax=min(image_size[1] - 1, math.floor(ymax - 0.5)),
+def _samples(
+    *,
+    start: float,
+    stop: float,
+    clip: tuple[float, float],
+    size: int,
+    scale: int,
+    cells: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    centers = (np.arange(size * scale) + 0.5) * size / (size * scale)
+    pixels = np.flatnonzero(
+        (max(start, clip[0]) <= centers) & (centers <= min(stop, clip[1]))
     )
+    return pixels, (centers[pixels] - start) / (stop - start) * cells - 0.5
 
 
 def redrawn(
@@ -30,32 +32,34 @@ def redrawn(
 ) -> tuple[np.ndarray, types.BoundingBox]:
     assert annotation.mask_logits is not None
     assert annotation.mask_logits_box is not None
-    image_size = (image_size[0] * scale, image_size[1] * scale)
-    xmin, ymin, xmax, ymax = (scale * edge for edge in annotation.mask_logits_box)
-    area = _pixels_centered_in(edges=(xmin, ymin, xmax, ymax), image_size=image_size)
+    xmin, ymin, xmax, ymax = annotation.mask_logits_box
+    clip = (0, 0, image_size[0], image_size[1])
     if annotation.text is not None:
         assert annotation.bounding_box is not None
         bb = annotation.bounding_box
-        clip = _pixels_centered_in(
-            edges=(
-                scale * bb.xmin,
-                scale * bb.ymin,
-                scale * (bb.xmax + 1),
-                scale * (bb.ymax + 1),
-            ),
-            image_size=image_size,
-        )
-        area = types.BoundingBox(
-            xmin=max(area.xmin, clip.xmin),
-            ymin=max(area.ymin, clip.ymin),
-            xmax=min(area.xmax, clip.xmax),
-            ymax=min(area.ymax, clip.ymax),
-        )
+        clip = (bb.xmin, bb.ymin, bb.xmax + 1, bb.ymax + 1)
     grid = annotation.mask_logits.astype(np.float64)
     rows, cols = grid.shape
-    xs = (np.arange(area.xmin, area.xmax + 1) + 0.5 - xmin) * cols / (xmax - xmin) - 0.5
-    ys = (np.arange(area.ymin, area.ymax + 1) + 0.5 - ymin) * rows / (ymax - ymin) - 0.5
-    return _lerp(grid=_lerp(grid=grid, t=ys, axis=0), t=xs, axis=1), area
+    xs, tx = _samples(
+        start=xmin,
+        stop=xmax,
+        clip=(clip[0], clip[2]),
+        size=image_size[0],
+        scale=scale,
+        cells=cols,
+    )
+    ys, ty = _samples(
+        start=ymin,
+        stop=ymax,
+        clip=(clip[1], clip[3]),
+        size=image_size[1],
+        scale=scale,
+        cells=rows,
+    )
+    area = types.BoundingBox(
+        xmin=int(xs[0]), ymin=int(ys[0]), xmax=int(xs[-1]), ymax=int(ys[-1])
+    )
+    return _lerp(grid=_lerp(grid=grid, t=ty, axis=0), t=tx, axis=1), area
 
 
 def distance_where_redraw_differs(

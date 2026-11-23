@@ -46,16 +46,16 @@ class Annotation(pydantic.BaseModel):
         default=None,
         description="The logit cells mask was drawn from, as a base64 16-bit "
         "grayscale PNG of 32768 + 256 x logit clipped to 0..65535. To draw the "
-        "mask at another size, scale mask_logits_box to it: each pixel whose "
-        "center lies in the box takes a bilinear sample at its center, with the "
-        "cells tiling the box and the edge cells clamped, and is in the mask "
-        "above 32768. Outside the box the mask is empty, and its bounding box at "
-        "that size is the extent of the pixels drawn. An annotation with text is "
-        "also cut to bounding_box, the model's own box: scale its pixel edges "
-        "xmin, ymin, xmax + 1, ymax + 1 the same way and keep the pixels whose "
-        "centers lie inside. At the image's own size this matches mask to within "
-        "the encoding's 1/256 rounding, but only where no cell a pixel "
-        "interpolates is clipped at +-128",
+        "mask on an image of any size, map each pixel's center back to the sent "
+        "image, x = (X + 0.5) x sent width / width and likewise y. The pixel is "
+        "in the mask when that point lies in mask_logits_box and the bilinear "
+        "sample there, with the cells tiling the box and the edge cells clamped, "
+        "is above 32768. An annotation with text also needs the point inside "
+        "bounding_box's pixel edges xmin, ymin, xmax + 1, ymax + 1: the model's "
+        "own box rounded to the sent pixels, at least one pixel wide and tall. "
+        "The bounding box at that size is the extent of what was drawn. At the "
+        "sent size this matches mask to within the encoding's 1/256 rounding, "
+        "but only where no cell a pixel interpolates is clipped at +-128",
     )
     mask_logits_box: tuple[float, float, float, float] | None = pydantic.Field(
         default=None,

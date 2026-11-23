@@ -589,3 +589,18 @@ def test_mask_logits_redraw_a_grid_finer_than_the_image_at_a_larger_size() -> No
     np.testing.assert_array_equal(
         value > 32768, np.tile([True, False, True, False], (4, 1))
     )
+
+
+@pytest.mark.parametrize("scale", [1, 4])
+def test_mask_logits_redraw_a_box_too_wide_to_scale(scale: int) -> None:
+    annotation = types.Annotation(
+        bounding_box=types.BoundingBox(xmin=0, ymin=0, xmax=0, ymax=0),
+        mask_logits=np.array([[65535, 65535, 65535, 0]], np.uint16),
+        mask_logits_box=(-6e307, 0, 6e307, 1),
+    )
+    restored = types.Annotation.model_validate_json(
+        annotation.model_dump_json(), context={"canvas_size": (1, 1)}
+    )
+
+    value, _ = _redraw.redrawn(annotation=restored, image_size=(1, 1), scale=scale)
+    assert (value > 32768).all()
