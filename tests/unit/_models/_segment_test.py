@@ -449,6 +449,7 @@ def test_segment_sam3_logits_redraw_the_mask(
         )
 
 
+@pytest.mark.model_conformance
 @pytest.mark.parametrize(
     "size", _IMAGE_SIZES[1:], ids=lambda size: "x".join(map(str, size))
 )
