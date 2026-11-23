@@ -1,0 +1,36 @@
+---
+name: restore-models
+description: Restore the model blobs shared by every OS into ~/.cache/osam/models/blobs
+outputs:
+  key:
+    value: ${{ steps.key.outputs.key }}
+  cache-hit:
+    value: ${{ steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - id: key
+      run: |
+        uv run --no-project python - >> "$GITHUB_OUTPUT" <<'PY'
+        import hashlib
+        import pathlib
+        import re
+        hashes = sorted(
+            {
+                h
+                for p in pathlib.Path("osam/_models").rglob("*.py")
+                for h in re.findall(r"sha256:[0-9a-f]{64}", p.read_text(encoding="utf-8"))
+            }
+        )
+        print("key=osam-models-" + hashlib.sha256("\n".join(hashes).encode()).hexdigest())
+        PY
+      shell: bash
+    - id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: .models
+        key: ${{ steps.key.outputs.key }}
+        enableCrossOsArchive: true
+    - if: steps.restore.outputs.cache-hit == 'true'
+      run: mkdir -p ~/.cache/osam/models && mv .models ~/.cache/osam/models/blobs
+      shell: bash
