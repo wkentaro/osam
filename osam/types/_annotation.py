@@ -140,8 +140,8 @@ class Annotation(pydantic.BaseModel):
             if not (
                 xmin <= bb.xmin + 0.5
                 and ymin <= bb.ymin + 0.5
-                and bb.xmax + 0.5 <= xmax
-                and bb.ymax + 0.5 <= ymax
+                and bb.xmax + 0.5 < xmax
+                and bb.ymax + 0.5 < ymax
             ):
                 raise ValueError(
                     f"mask_logits_box {self.mask_logits_box} misses a pixel center "

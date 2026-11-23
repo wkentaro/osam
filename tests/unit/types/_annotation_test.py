@@ -168,7 +168,15 @@ def test_json_rejects_mask_logits_outside_the_image_they_were_predicted_on(
 
 
 @pytest.mark.parametrize(
-    "box", [(20, 0, 30, 10), (1, 0, 10, 10), (0, 1, 10, 10), (0, 0, 9, 10)]
+    "box",
+    [
+        (20, 0, 30, 10),
+        (1, 0, 10, 10),
+        (0, 1, 10, 10),
+        (0, 0, 9, 10),
+        (0, 0, 9.5, 10),
+        (0, 0, 10, 9.5),
+    ],
 )
 def test_json_rejects_a_mask_logits_box_that_misses_a_pixel_of_the_bounding_box(
     box: tuple[float, float, float, float],
