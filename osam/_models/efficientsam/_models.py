@@ -5,6 +5,8 @@ import numpy.typing as npt
 from typing_extensions import override
 
 from osam import _types as types
+from osam._models.sam import SKIPPED_MASKS_HW
+from osam._models.sam import MaskOutput
 from osam._models.sam import SamBase
 
 
@@ -45,13 +47,13 @@ class EfficientSam(SamBase):
         image_embedding: types.ImageEmbedding,
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
-    ) -> npt.NDArray[np.bool_]:
-        # The decoder scales the points by 1024 / size itself.
-        scale = self.input_size / np.array(
+    ) -> MaskOutput:
+        size = np.array(
             [image_embedding.original_width, image_embedding.original_height],
             dtype=np.float32,
         )
-        points = types.scale_points(points=points, scale=scale) / scale
+        scale = self.input_size / size
+        points = types.scale_points(points=points, scale=scale) / scale / size
         decoder_inputs = {
             # batch_size, embedding_dim, height, width
             "image_embeddings": cast(
@@ -61,19 +63,19 @@ class EfficientSam(SamBase):
             "batched_point_coords": points[None, None, :, :],
             # batch_size, num_queries, num_points
             "batched_point_labels": point_labels[None, None, :],
-            "orig_im_size": np.array(
-                (image_embedding.original_height, image_embedding.original_width),
-                dtype=np.int64,
-            ),
+            "orig_im_size": np.array(SKIPPED_MASKS_HW, dtype=np.int64),
         }
 
-        masks, _, _ = self._inference_sessions["decoder"].run(None, decoder_inputs)
-        masks = cast(npt.NDArray[np.float32], masks)
-        mask: npt.NDArray[np.bool_] = (
-            masks[0, 0, 0, :, :] > 0
-        )  # (1, 1, 3, H, W) -> (H, W)
-
-        return mask
+        _, _, low_res_masks = self._inference_sessions["decoder"].run(
+            None, decoder_inputs
+        )
+        return MaskOutput(
+            low_res_logits=cast(npt.NDArray[np.float32], low_res_masks)[0, 0],
+            covered_size=(
+                image_embedding.original_width,
+                image_embedding.original_height,
+            ),
+        )
 
 
 class EfficientSam10m(EfficientSam):

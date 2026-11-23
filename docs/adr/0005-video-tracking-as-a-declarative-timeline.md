@@ -59,10 +59,11 @@ longer has it.
 
 - Actions:
 
-  - `{"type": "prompt", "frame", ...}` with the fields of `Prompt` is the
-    first action, and only the first. With `points` or `box` it tracks one
-    object. With `texts` it finds every match. `example_boxes` without
-    `texts` is an error.
+  - `{"type": "prompt", "frame", ...}` with the fields of `Prompt` except
+    `include_mask_logits` ([#313](https://github.com/wkentaro/osam/issues/313))
+    is the first action, and only the first. With `points` or `box` it
+    tracks one object. With `texts` it finds every match. `example_boxes`
+    without `texts` is an error.
   - `{"type": "add", "frame", "points", "point_labels", "box"}` adds an
     object.
   - `{"type": "refine", "frame", "object_id", "points", "point_labels"}`

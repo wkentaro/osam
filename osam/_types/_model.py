@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import hashlib
+import math
 import threading
 import typing
 from collections.abc import Callable
@@ -257,7 +258,10 @@ class Model(abc.ABC):
             prompt = self.default_prompt(
                 height=embedding.original_height, width=embedding.original_width
             ).model_copy(
-                update=prompt.model_dump(include=set(THRESHOLDS), exclude_none=True)
+                update=prompt.model_dump(
+                    include=set(THRESHOLDS) | {"include_mask_logits"},
+                    exclude_none=True,
+                )
             )
             logger.debug("Using the default prompt: {prompt!r}", prompt=prompt)
         if unsupported := prompt.kinds - self.prompt_kinds:
@@ -290,7 +294,10 @@ class Model(abc.ABC):
 
 
 def annotations_from_mask(
-    *, mask: npt.NDArray[np.bool_], score: float | None = None
+    *,
+    mask: npt.NDArray[np.bool_],
+    score: float | None = None,
+    origin: tuple[int, int] = (0, 0),
 ) -> list[Annotation]:
     # The mask cropped to its bounding box, or none for an empty mask.
     # From the rows and columns with a pixel: 0.2 ms at 2560x1600, where
@@ -300,11 +307,163 @@ def annotations_from_mask(
         return []
     xs = np.flatnonzero(mask.any(axis=0))
     ymin, ymax, xmin, xmax = int(ys[0]), int(ys[-1]), int(xs[0]), int(xs[-1])
+    x0, y0 = origin
     return [
         Annotation(
             # A copy, so a cached annotation doesn't keep the whole mask.
             mask=mask[ymin : ymax + 1, xmin : xmax + 1].copy(),
-            bounding_box=BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax),
+            bounding_box=BoundingBox(
+                xmin=x0 + xmin, ymin=y0 + ymin, xmax=x0 + xmax, ymax=y0 + ymax
+            ),
             score=score,
         )
     ]
+
+
+def annotations_from_logits(
+    *,
+    logits: npt.NDArray[np.float32],
+    covered_size: tuple[float, float],
+    height: int,
+    width: int,
+    score: float | None = None,
+    include_mask_logits: bool = False,
+) -> list[Annotation]:
+    positive = logits > 0
+    rows = np.flatnonzero(positive.any(axis=1))
+    if rows.size == 0:
+        return []
+    cols = np.flatnonzero(positive.any(axis=0))
+    grid_height, grid_width = logits.shape
+    kept_cols = slice(max(0, cols[0] - 1), min(grid_width, cols[-1] + 2))
+    kept_rows = slice(max(0, rows[0] - 1), min(grid_height, rows[-1] + 2))
+    cell_width = covered_size[0] / grid_width
+    cell_height = covered_size[1] / grid_height
+    xmin = math.floor(kept_cols.start * cell_width)
+    ymin = math.floor(kept_rows.start * cell_height)
+    xmax = min(width, math.ceil(kept_cols.stop * cell_width)) - 1
+    ymax = min(height, math.ceil(kept_rows.stop * cell_height)) - 1
+    if xmin > xmax or ymin > ymax:
+        return []
+    annotations = annotations_from_mask(
+        mask=mask_in_box(
+            logits=logits,
+            covered_size=covered_size,
+            bounding_box=BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax),
+        ),
+        score=score,
+        origin=(xmin, ymin),
+    )
+    if not include_mask_logits:
+        return annotations
+    return [
+        Annotation.model_validate(
+            dict(annotation)
+            | _encoded_cells(
+                logits=logits,
+                covered_size=covered_size,
+                cols=kept_cols,
+                rows=kept_rows,
+            )
+        )
+        for annotation in annotations
+    ]
+
+
+LOGIT_ZERO: typing.Final = 32768
+LOGIT_SCALE: typing.Final = 256
+
+
+def logits_around_box(
+    *,
+    logits: npt.NDArray[np.float32],
+    covered_size: tuple[float, float],
+    bounding_box: BoundingBox,
+) -> dict[str, typing.Any]:
+    grid_height, grid_width = logits.shape
+    cell_width = covered_size[0] / grid_width
+    cell_height = covered_size[1] / grid_height
+    bb = bounding_box
+
+    def cells(start: int, stop: int, cell: float, count: int) -> slice:
+        first = math.floor(start / cell - 0.5)
+        last = math.ceil(stop / cell - 0.5)
+        return slice(max(0, first), min(count - 1, last) + 1)
+
+    return _encoded_cells(
+        logits=logits,
+        covered_size=covered_size,
+        cols=cells(bb.xmin, bb.xmax + 1, cell_width, grid_width),
+        rows=cells(bb.ymin, bb.ymax + 1, cell_height, grid_height),
+    )
+
+
+def _encoded_cells(
+    *,
+    logits: npt.NDArray[np.float32],
+    covered_size: tuple[float, float],
+    cols: slice,
+    rows: slice,
+) -> dict[str, typing.Any]:
+    grid_height, grid_width = logits.shape
+    cell_width = covered_size[0] / grid_width
+    cell_height = covered_size[1] / grid_height
+    return {
+        "mask_logits": np.clip(
+            np.round(LOGIT_ZERO + LOGIT_SCALE * logits[rows, cols]), 0, 65535
+        ).astype(np.uint16),
+        "mask_logits_box": (
+            cols.start * cell_width,
+            rows.start * cell_height,
+            cols.stop * cell_width,
+            rows.stop * cell_height,
+        ),
+    }
+
+
+def mask_in_box(
+    *,
+    logits: npt.NDArray[np.float32],
+    covered_size: tuple[float, float],
+    bounding_box: BoundingBox,
+) -> npt.NDArray[np.bool_]:
+    grid_height, grid_width = logits.shape
+    bb = bounding_box
+    i0y, i1y, w1y = _lerp_weights(
+        start=bb.ymin, stop=bb.ymax + 1, size=grid_height, covered=covered_size[1]
+    )
+    i0x, i1x, w1x = _lerp_weights(
+        start=bb.xmin, stop=bb.xmax + 1, size=grid_width, covered=covered_size[0]
+    )
+    used = np.zeros(grid_width, dtype=bool)
+    used[i0x] = used[i1x] = True
+    position = np.cumsum(used) - 1
+    columns = logits[:, used]
+    mask = np.empty((len(i0y), len(i0x)), dtype=bool)
+    block = max(1, (1 << 18) // len(i0x))
+    for top in range(0, len(i0y), block):
+        ys = slice(top, top + block)
+        rows = _lerp(x=columns, i0=i0y[ys], i1=i1y[ys], w1=w1y[ys, None])
+        mask[ys] = (
+            _lerp(x=rows.T, i0=position[i0x], i1=position[i1x], w1=w1x[:, None]) > 0
+        ).T
+    return mask
+
+
+def _lerp_weights(
+    *, start: int, stop: int, size: int, covered: float
+) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int64], npt.NDArray[np.float32]]:
+    t = np.clip((np.arange(start, stop) + 0.5) * (size / covered) - 0.5, 0, size - 1)
+    i0 = np.floor(t).astype(np.int64)
+    i1 = np.minimum(i0 + 1, size - 1)
+    return i0, i1, (t - i0).astype(np.float32)
+
+
+def _lerp(
+    *,
+    x: npt.NDArray[np.float32],
+    i0: npt.NDArray[np.int64],
+    i1: npt.NDArray[np.int64],
+    w1: npt.NDArray[np.float32],
+) -> npt.NDArray[np.float32]:
+    return x[i0] * (1 - w1) + x[i1] * w1

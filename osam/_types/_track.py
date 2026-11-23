@@ -4,12 +4,12 @@ import pydantic
 
 from ._prompt import Box
 from ._prompt import PointLabel
-from ._prompt import Prompt
+from ._prompt import PromptBase
 
 # The actions of /api/track, as ADR 0005 defines them. Coordinates are pixels.
 
 
-class PromptAction(Prompt):
+class PromptAction(PromptBase):
     # The first action, and only the first: points or box track one object,
     # texts find every match.
     type: typing.Literal["prompt"]

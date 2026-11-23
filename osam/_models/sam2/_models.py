@@ -1,3 +1,4 @@
+from typing import Final
 from typing import cast
 
 import imgviz
@@ -6,7 +7,10 @@ import numpy.typing as npt
 from typing_extensions import override
 
 from osam import _types as types
+from osam._models.sam import MaskOutput
 from osam._models.sam import SamBase
+
+LOW_RES_HW: Final = (256, 256)
 
 
 class Sam2(SamBase):
@@ -55,7 +59,7 @@ class Sam2(SamBase):
         image_embedding: types.ImageEmbedding,
         points: npt.NDArray[np.float32],
         point_labels: npt.NDArray[np.float32],
-    ) -> npt.NDArray[np.bool_]:
+    ) -> MaskOutput:
         input_size: int = self.input_size
 
         input_point: npt.NDArray[np.float32] = types.scale_points(
@@ -78,23 +82,19 @@ class Sam2(SamBase):
             )[None],
             "point_coords": input_point[None],
             "point_labels": point_labels[None],
-            "mask_input": np.zeros((1, 1, 256, 256), dtype=np.float32),
+            "mask_input": np.zeros((1, 1, *LOW_RES_HW), dtype=np.float32),
             "has_mask_input": np.array([0], dtype=np.float32),
-            "orig_im_size": np.array(
-                (image_embedding.original_height, image_embedding.original_width),
-                dtype=np.int64,
-            ),
+            "orig_im_size": np.array(LOW_RES_HW, dtype=np.int64),
         }
-        masks, scores, _low_res_mask = self._inference_sessions["decoder"].run(
-            None, decoder_inputs
+        masks, scores, _ = self._inference_sessions["decoder"].run(None, decoder_inputs)
+        best = int(np.argmax(cast(npt.NDArray[np.float32], scores)))
+        return MaskOutput(
+            low_res_logits=cast(npt.NDArray[np.float32], masks)[0, best],
+            covered_size=(
+                image_embedding.original_width,
+                image_embedding.original_height,
+            ),
         )
-        masks = cast(npt.NDArray[np.float32], masks)
-        scores = cast(npt.NDArray[np.float32], scores)
-
-        mask: npt.NDArray[np.bool_] = (
-            masks[0, np.argmax(scores)] > 0.0
-        )  # (1, N, H, W) -> (H, W)
-        return mask
 
 
 class Sam2Tiny(Sam2):

@@ -1,8 +1,13 @@
+import tracemalloc
+
 import numpy as np
 import pytest
 
 from osam import _types as types
+from osam._models.sam3 import _tracker
 from osam._types import _model
+
+from .. import _redraw
 
 
 class _VanishingBlob:
@@ -83,3 +88,536 @@ def test_decode_rejects_other_kinds_and_keeps_thresholds() -> None:
     [prompt] = prompts
     assert prompt.points == [(3, 2)]  # the default prompt, with the thresholds
     assert (prompt.iou_threshold, prompt.score_threshold) == (None, 0.5)
+
+
+def _full_mask(
+    *, annotations: list[types.Annotation], height: int, width: int
+) -> np.ndarray:
+    full = np.zeros((height, width), bool)
+    for annotation in annotations:
+        bb = annotation.bounding_box
+        assert bb is not None and annotation.mask is not None
+        full[bb.ymin : bb.ymax + 1, bb.xmin : bb.xmax + 1] = annotation.mask
+    return full
+
+
+@pytest.mark.parametrize(
+    "grid_hw, covered_hw, image_hw",
+    [
+        ((16, 24), (32, 48), (32, 48)),
+        ((16, 16), (40, 40), (25, 40)),
+        ((16, 16), (10, 10), (7, 10)),
+        ((16, 16), (40, 10), (40, 7)),
+    ],
+    ids=["covers-the-image", "reaches-past-the-image", "smaller-image", "mixed"],
+)
+@pytest.mark.parametrize("seed", range(5))
+def test_mask_samples_the_logits_at_each_pixel_center(
+    grid_hw: tuple[int, int],
+    covered_hw: tuple[int, int],
+    image_hw: tuple[int, int],
+    seed: int,
+) -> None:
+    logits = np.random.default_rng(seed).normal(size=grid_hw).astype(np.float32) - 1.5
+    height, width = image_hw
+    expected = (
+        _tracker._resize(logits[None, None], *covered_hw)[0, 0, :height, :width] > 0
+    )
+
+    annotations = types.annotations_from_logits(
+        logits=logits,
+        covered_size=(covered_hw[1], covered_hw[0]),
+        height=height,
+        width=width,
+    )
+
+    np.testing.assert_array_equal(
+        _full_mask(annotations=annotations, height=height, width=width), expected
+    )
+    bounding_box = types.BoundingBox(xmin=1, ymin=2, xmax=width - 2, ymax=height - 1)
+    np.testing.assert_array_equal(
+        types.mask_in_box(
+            logits=logits,
+            covered_size=(covered_hw[1], covered_hw[0]),
+            bounding_box=bounding_box,
+        ),
+        expected[2:height, 1 : width - 1],
+    )
+
+
+def test_mask_reaches_past_its_positive_cells() -> None:
+    logits = np.full((4, 4), -1, np.float32)
+    logits[1, 2] = 10
+    expected = _tracker._resize(logits[None, None], 32, 32)[0, 0] > 0
+
+    annotations = types.annotations_from_logits(
+        logits=logits, covered_size=(32, 32), height=32, width=32
+    )
+
+    np.testing.assert_array_equal(
+        _full_mask(annotations=annotations, height=32, width=32), expected
+    )
+
+
+def test_mask_is_empty_without_a_positive_cell_over_the_image() -> None:
+    logits = np.full((16, 16), -1, np.float32)
+    logits[:, -2:] = 1
+
+    assert (
+        types.annotations_from_logits(
+            logits=logits, covered_size=(64, 64), height=64, width=40
+        )
+        == []
+    )
+
+
+def _whole_mask(*, logits: np.ndarray, covered_size: tuple[int, int]) -> np.ndarray:
+    return types.mask_in_box(
+        logits=logits,
+        covered_size=covered_size,
+        bounding_box=types.BoundingBox(
+            xmin=0, ymin=0, xmax=covered_size[0] - 1, ymax=covered_size[1] - 1
+        ),
+    )
+
+
+def test_mask_around_its_cells_matches_the_whole_draw_when_shrunk() -> None:
+    logits = np.full((288, 288), -0.55859375, np.float32)
+    logits[:, 259] = 1.3359375
+    covered_size = (2559, 1600)
+
+    annotations = types.annotations_from_logits(
+        logits=logits, covered_size=covered_size, height=1600, width=2559
+    )
+
+    np.testing.assert_array_equal(
+        _full_mask(annotations=annotations, height=1600, width=2559),
+        _whole_mask(logits=logits, covered_size=covered_size),
+    )
+
+
+def test_mask_in_a_thin_box_matches_the_whole_draw() -> None:
+    logits = np.full((288, 288), -1, np.float32)
+    logits[100, 258:260] = [-127.11328125, 22.265625]
+    logits[101, 258:260] = [-23.9296875, 124.8671875]
+    covered_size = (2557, 287)
+
+    mask = types.mask_in_box(
+        logits=logits,
+        covered_size=covered_size,
+        bounding_box=types.BoundingBox(xmin=2300, ymin=100, xmax=2300, ymax=101),
+    )
+
+    np.testing.assert_array_equal(
+        mask, _whole_mask(logits=logits, covered_size=covered_size)[100:102, 2300:2301]
+    )
+
+
+def test_mask_in_any_box_matches_the_whole_draw() -> None:
+    rng = np.random.default_rng(0)
+    for _ in range(40):
+        side = int(rng.choice([256, 288]))
+        logits = rng.normal(scale=0.1, size=(side, side)).astype(np.float32)
+        covered_size = (int(rng.integers(64, 1200)), int(rng.integers(64, 1200)))
+        whole = _whole_mask(logits=logits, covered_size=covered_size)
+        for _ in range(10):
+            xmin, xmax = np.sort(rng.integers(0, covered_size[0], size=2))
+            ymin, ymax = np.sort(rng.integers(0, covered_size[1], size=2))
+            match rng.integers(3):
+                case 0:
+                    xmax = xmin
+                case 1:
+                    ymax = ymin
+            mask = types.mask_in_box(
+                logits=logits,
+                covered_size=covered_size,
+                bounding_box=types.BoundingBox(
+                    xmin=int(xmin), ymin=int(ymin), xmax=int(xmax), ymax=int(ymax)
+                ),
+            )
+            np.testing.assert_array_equal(mask, whole[ymin : ymax + 1, xmin : xmax + 1])
+
+
+def test_mask_in_box_is_row_major() -> None:
+    mask = types.mask_in_box(
+        logits=np.ones((288, 288), np.float32),
+        covered_size=(60, 40),
+        bounding_box=types.BoundingBox(xmin=0, ymin=0, xmax=59, ymax=39),
+    )
+
+    assert mask.flags.c_contiguous
+
+
+@pytest.mark.parametrize(
+    "width, height, bytes_per_pixel",
+    [(16, 20000, 64), (2560, 1600, 4)],
+    ids=["tall box narrower than the grid", "whole image"],
+)
+def test_mask_draw_stays_small(width: int, height: int, bytes_per_pixel: int) -> None:
+    logits = np.random.default_rng(0).normal(size=(288, 288)).astype(np.float32)
+    covered_size = (width, height)
+
+    was_tracing = tracemalloc.is_tracing()
+    if not was_tracing:
+        tracemalloc.start()
+    before = tracemalloc.get_traced_memory()[0]
+    tracemalloc.reset_peak()
+    mask = types.mask_in_box(
+        logits=logits,
+        covered_size=covered_size,
+        bounding_box=types.BoundingBox(xmin=0, ymin=0, xmax=width - 1, ymax=height - 1),
+    )
+    peak = tracemalloc.get_traced_memory()[1] - before
+    if not was_tracing:
+        tracemalloc.stop()
+
+    np.testing.assert_array_equal(
+        mask, _tracker._resize(logits[None, None], height, width)[0, 0] > 0
+    )
+    assert peak < bytes_per_pixel * mask.size
+
+
+def test_logits_around_box_keep_the_cells_whose_centers_bracket_the_box() -> None:
+    logits = np.tile(np.arange(8, dtype=np.float32) - 4, (8, 1))
+
+    around = types.logits_around_box(
+        logits=logits,
+        covered_size=(32, 32),
+        bounding_box=types.BoundingBox(xmin=9, ymin=0, xmax=14, ymax=31),
+    )
+
+    assert around["mask_logits_box"] == (4, 0, 20, 32)
+    np.testing.assert_array_equal(
+        around["mask_logits"][0], [32000, 32256, 32512, 32768]
+    )
+
+
+def test_logits_around_box_keep_a_cell_for_a_box_thinner_than_one() -> None:
+    around = types.logits_around_box(
+        logits=np.full((4, 4), 20, np.float32),
+        covered_size=(1024, 1024),
+        bounding_box=types.BoundingBox(xmin=10, ymin=10, xmax=10, ymax=10),
+    )
+
+    np.testing.assert_array_equal(around["mask_logits"], [[32768 + 20 * 256]])
+    assert around["mask_logits_box"] == (0, 0, 256, 256)
+
+
+def test_logits_around_box_hold_every_box_on_every_image_size() -> None:
+    rng = np.random.default_rng(0)
+    logits = np.zeros((288, 288), np.float32)
+    for _ in range(2000):
+        width, height = (int(side) for side in rng.integers(1, 5000, size=2))
+        xmin, xmax = sorted(int(x) for x in rng.integers(0, width, size=2))
+        ymin, ymax = sorted(int(y) for y in rng.integers(0, height, size=2))
+        if rng.random() < 0.5:
+            xmax, ymax = width - 1, height - 1
+        bounding_box = types.BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
+
+        types.Annotation.model_validate(
+            {"bounding_box": bounding_box}
+            | types.logits_around_box(
+                logits=logits, covered_size=(width, height), bounding_box=bounding_box
+            ),
+            context={"canvas_size": (width, height)},
+        )
+        blob = np.full((288, 288), -1, np.float32)
+        rows, cols = (np.sort(rng.integers(0, 288, size=2)) for _ in range(2))
+        blob[rows[0] : rows[1] + 1, cols[0] : cols[1] + 1] = 1
+        types.annotations_from_logits(
+            logits=blob,
+            covered_size=(width, height),
+            height=height,
+            width=width,
+            include_mask_logits=True,
+        )
+
+
+def test_annotations_from_logits_leave_out_logits_unless_asked() -> None:
+    (annotation,) = types.annotations_from_logits(
+        logits=np.eye(4, dtype=np.float32), covered_size=(4, 4), height=4, width=4
+    )
+
+    assert annotation.mask_logits is None
+    assert annotation.mask_logits_box is None
+
+
+def test_annotations_from_logits_refuse_cells_their_json_rejects() -> None:
+    with pytest.raises(ValueError, match="larger than 4096 pixels a side"):
+        types.annotations_from_logits(
+            logits=np.ones((1, 4097), np.float32),
+            covered_size=(4097, 1),
+            height=1,
+            width=4097,
+            include_mask_logits=True,
+        )
+
+
+@pytest.mark.parametrize("seed", range(20))
+def test_mask_logits_redraw_the_mask_on_any_image(seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    side = int(rng.choice([256, 288]))
+    logits = rng.normal(scale=8, size=(side, side)).astype(np.float32) - 6
+    width, height = (int(n) for n in rng.integers(1, 3000, size=2))
+    longest = max(width, height)
+    covered_size = (width, height) if rng.random() < 0.5 else (longest, longest)
+
+    annotations = types.annotations_from_logits(
+        logits=logits,
+        covered_size=covered_size,
+        height=height,
+        width=width,
+        include_mask_logits=True,
+    )
+    for _ in range(20):
+        xmin, xmax = sorted(int(x) for x in rng.integers(0, width, size=2))
+        ymin, ymax = sorted(int(y) for y in rng.integers(0, height, size=2))
+        bounding_box = types.BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
+        annotations.append(
+            _text_annotation(
+                logits=logits, covered_size=covered_size, bounding_box=bounding_box
+            )
+        )
+
+    assert len(annotations) == 21
+    for annotation in annotations:
+        assert (
+            _redraw.distance_where_redraw_differs(
+                annotation=annotation, image_size=(width, height)
+            )
+            < 1
+        )
+
+
+def test_mask_logits_redraw_differs_from_the_mask_next_to_a_clipped_cell() -> None:
+    logits = np.array([[200, -100], [200, -100]], np.float32)
+
+    (annotation,) = types.annotations_from_logits(
+        logits=logits, covered_size=(8, 2), height=2, width=8, include_mask_logits=True
+    )
+
+    assert annotation.mask is not None and annotation.mask[:, 4].all()
+    value, area = _redraw.redrawn(annotation=annotation, image_size=(8, 2))
+    assert (value[:, 4 - area.xmin] < 32768).all()
+
+
+def _text_annotation(
+    *,
+    logits: np.ndarray,
+    covered_size: tuple[float, float],
+    bounding_box: types.BoundingBox,
+) -> types.Annotation:
+    return types.Annotation(
+        mask=types.mask_in_box(
+            logits=logits, covered_size=covered_size, bounding_box=bounding_box
+        ),
+        bounding_box=bounding_box,
+        text="match",
+        **types.logits_around_box(
+            logits=logits, covered_size=covered_size, bounding_box=bounding_box
+        ),
+    )
+
+
+def _assert_text_redraws_as_drawn(
+    *,
+    logits: np.ndarray,
+    covered_size: tuple[float, float],
+    image_size: tuple[int, int],
+    bounding_box: types.BoundingBox,
+    scale: int,
+) -> None:
+    value, area = _redraw.redrawn(
+        annotation=_text_annotation(
+            logits=logits, covered_size=covered_size, bounding_box=bounding_box
+        ),
+        image_size=image_size,
+        scale=scale,
+    )
+    bb = bounding_box
+    scaled = types.BoundingBox(
+        xmin=bb.xmin * scale,
+        ymin=bb.ymin * scale,
+        xmax=(bb.xmax + 1) * scale - 1,
+        ymax=(bb.ymax + 1) * scale - 1,
+    )
+    redraw = np.zeros((scaled.ymax + 1 - scaled.ymin, scaled.xmax + 1 - scaled.xmin))
+    redraw[
+        area.ymin - scaled.ymin : area.ymax + 1 - scaled.ymin,
+        area.xmin - scaled.xmin : area.xmax + 1 - scaled.xmin,
+    ] = value
+    direct = types.mask_in_box(
+        logits=logits,
+        covered_size=(covered_size[0] * scale, covered_size[1] * scale),
+        bounding_box=scaled,
+    )
+    differs = ((redraw > 32768) != direct) & (np.abs(redraw - 32768) >= 1)
+    assert not differs.any(), f"{differs.sum()} pixels differ"
+
+
+def test_mask_logits_redraw_a_text_annotation_cut_to_its_scaled_box() -> None:
+    _assert_text_redraws_as_drawn(
+        logits=np.ones((4, 4), np.float32),
+        covered_size=(4, 4),
+        image_size=(4, 4),
+        bounding_box=types.BoundingBox(xmin=1, ymin=1, xmax=2, ymax=2),
+        scale=2,
+    )
+
+
+def test_mask_logits_redraw_a_pixel_on_a_shared_edge_in_one_text_box() -> None:
+    drawn = np.zeros(3, int)
+    for x in (0, 1):
+        value, area = _redraw.redrawn(
+            annotation=_text_annotation(
+                logits=np.ones((1, 2), np.float32),
+                covered_size=(2, 2),
+                bounding_box=types.BoundingBox(xmin=x, ymin=0, xmax=x, ymax=1),
+            ),
+            image_size=(2, 2),
+            scale=1.5,
+        )
+        drawn[area.xmin : area.xmax + 1] += (value > 32768).all(axis=0)
+
+    assert drawn.tolist() == [1, 1, 1]
+
+
+@pytest.mark.parametrize("seed", range(50))
+def test_mask_logits_redraw_a_text_annotation_at_a_larger_size(seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    grid_height, grid_width = (int(n) for n in rng.integers(8, 40, size=2))
+    logits = (rng.normal(scale=8, size=(grid_height, grid_width)) - 2).astype(
+        np.float32
+    )
+    width, height = (int(n) for n in rng.integers(8, 160, size=2))
+    covered_size = (width * rng.uniform(1, 1.4), height * rng.uniform(1, 1.4))
+    xmin, xmax = sorted(int(x) for x in rng.integers(0, width, size=2))
+    ymin, ymax = sorted(int(y) for y in rng.integers(0, height, size=2))
+
+    _assert_text_redraws_as_drawn(
+        logits=logits,
+        covered_size=covered_size,
+        image_size=(width, height),
+        bounding_box=types.BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax),
+        scale=[2, 3, 8, 24][seed % 4],
+    )
+
+
+def _assert_redraws_as_drawn(
+    *,
+    logits: np.ndarray,
+    covered_size: tuple[float, float],
+    width: int,
+    height: int,
+    scale: int,
+) -> None:
+    annotations = types.annotations_from_logits(
+        logits=logits,
+        covered_size=covered_size,
+        height=height,
+        width=width,
+        include_mask_logits=True,
+    )
+    (annotation,) = annotations
+    size = (width * scale, height * scale)
+    value, area = _redraw.redrawn(
+        annotation=annotation, image_size=(width, height), scale=scale
+    )
+    redraw = np.zeros((size[1], size[0]))
+    redraw[area.ymin : area.ymax + 1, area.xmin : area.xmax + 1] = value
+    direct = types.mask_in_box(
+        logits=logits,
+        covered_size=(covered_size[0] * scale, covered_size[1] * scale),
+        bounding_box=types.BoundingBox(
+            xmin=0, ymin=0, xmax=size[0] - 1, ymax=size[1] - 1
+        ),
+    )
+    differs = ((redraw > 32768) != direct) & (np.abs(redraw - 32768) >= 1)
+    assert not differs.any(), f"{differs.sum()} pixels differ"
+
+
+@pytest.mark.parametrize("seed", range(200))
+def test_mask_logits_redraw_the_mask_as_the_model_draws_it_at_a_larger_size(
+    seed: int,
+) -> None:
+    rng = np.random.default_rng(seed)
+    grid_height, grid_width = (int(n) for n in rng.integers(8, 40, size=2))
+    logits = rng.normal(size=(grid_height, grid_width))
+    for _ in range(int(rng.integers(0, 4))):
+        logits = (
+            logits
+            + np.roll(logits, 1, 0)
+            + np.roll(logits, 1, 1)
+            + np.roll(logits, -1, 0)
+            + np.roll(logits, -1, 1)
+        ) / 5
+    logits = logits * rng.uniform(2, 30) - rng.uniform(0, 4)
+    logits[rng.integers(grid_height), rng.integers(grid_width)] = 1
+    width, height = (int(n) for n in rng.integers(8, 160, size=2))
+    covered_size = (width * rng.uniform(1, 1.4), height * rng.uniform(1, 1.4))
+    logits = logits.astype(np.float32)
+    if not types.annotations_from_logits(
+        logits=logits, covered_size=covered_size, height=height, width=width
+    ):
+        pytest.skip("no mask at the sent size")
+
+    _assert_redraws_as_drawn(
+        logits=logits,
+        covered_size=covered_size,
+        width=width,
+        height=height,
+        scale=[2, 3, 8, 24][seed % 4],
+    )
+
+
+def test_mask_logits_redraw_a_peak_between_the_sent_pixels() -> None:
+    logits = np.full((64, 64), -10, np.float32)
+    logits[20:40, 20:40] = 10
+    logits[30, 43] = 0.5
+
+    _assert_redraws_as_drawn(
+        logits=logits, covered_size=(256, 256), width=256, height=256, scale=8
+    )
+
+
+@pytest.mark.parametrize(
+    "value, background, width", [(10, -1, 1), (-2, 10, 1), (0, 10, 3), (1, -9, 2)]
+)
+@pytest.mark.parametrize("scale", [1, 4])
+def test_mask_logits_redraw_a_thin_column_as_the_model_draws_it(
+    value: float, background: float, width: int, scale: int
+) -> None:
+    logits = np.full((256, 256), background, np.float32)
+    logits[:, 128 : 128 + width] = value
+
+    _assert_redraws_as_drawn(
+        logits=logits, covered_size=(1024, 1024), width=1024, height=1024, scale=scale
+    )
+
+
+def test_mask_logits_redraw_a_grid_finer_than_the_image_at_a_larger_size() -> None:
+    logits = np.array([[10, -1, 10, -20]], np.float32)
+
+    (annotation,) = types.annotations_from_logits(
+        logits=logits, covered_size=(1, 1), height=1, width=1, include_mask_logits=True
+    )
+
+    value, _ = _redraw.redrawn(annotation=annotation, image_size=(1, 1), scale=4)
+    np.testing.assert_array_equal(
+        value > 32768, np.tile([True, False, True, False], (4, 1))
+    )
+
+
+@pytest.mark.parametrize("scale", [1, 4])
+def test_mask_logits_redraw_a_box_too_wide_to_scale(scale: int) -> None:
+    annotation = types.Annotation(
+        bounding_box=types.BoundingBox(xmin=0, ymin=0, xmax=0, ymax=0),
+        mask_logits=np.array([[65535, 65535, 65535, 0]], np.uint16),
+        mask_logits_box=(-6e307, 0, 6e307, 1),
+    )
+    restored = types.Annotation.model_validate_json(
+        annotation.model_dump_json(), context={"canvas_size": (1, 1)}
+    )
+
+    value, _ = _redraw.redrawn(annotation=restored, image_size=(1, 1), scale=scale)
+    assert (value > 32768).all()

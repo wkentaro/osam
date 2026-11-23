@@ -184,6 +184,7 @@ class Client:
         score_threshold: float | None = None,
         max_annotations: int | None = None,
         include_masks: bool | None = None,
+        include_mask_logits: bool | None = None,
         keep_alive: float | str | None = None,
     ) -> builtins.list[types.Annotation]:
         """Segment image, an HxWx3 uint8 RGB array, with model; uint8 grayscale
@@ -202,8 +203,12 @@ class Client:
         model uses its default one. The thresholds apply to models that find
         every match. Prompts on an image the server saw recently reuse its
         embedding.
-        include_masks: False leaves out each annotation's mask, for boxes and
-        scores only.
+        include_masks: False leaves out each annotation's mask, for a client
+        that doesn't draw it.
+        include_mask_logits: True adds each annotation's mask_logits, to draw
+        the mask at another size, such as an image's own before it was shrunk
+        to send, as osam.types.Annotation.mask_logits describes. A model that
+        returns no mask, such as YOLO-World, returns no mask_logits either.
         keep_alive: as in load.
         """
         prompt: dict[str, Any] = {
@@ -217,6 +222,7 @@ class Client:
             "score_threshold": score_threshold,
             "max_annotations": max_annotations,
             "include_masks": include_masks,
+            "include_mask_logits": include_mask_logits,
             "keep_alive": keep_alive,
         }
         request = _requests.SegmentRequest.model_validate(
@@ -240,8 +246,9 @@ class Client:
 
         actions: every edit so far, in order, with coordinates in pixels:
 
-        - {"type": "prompt", "frame", ...} with the prompt of segment, first
-          and only first: points or a box track one object, texts every match.
+        - {"type": "prompt", "frame", ...} with the prompt of segment, except
+          include_mask_logits, first and only first: points or a box track
+          one object, texts every match.
         - {"type": "add", "frame", "points", "point_labels", "box", "base"}
         - {"type": "refine", "frame", "object_id", "points", "point_labels",
           "base"}

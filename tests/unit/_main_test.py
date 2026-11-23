@@ -354,3 +354,26 @@ def test_run_rejects_device_with_osam_host(
     )
     assert result.exit_code == 2  # noqa: PLR2004
     assert "unset OSAM_HOST" in result.output
+
+
+def test_video_rejects_mask_logits_before_opening_a_frame(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    video = tmp_path / "frames"
+    video.mkdir()
+    PIL.Image.fromarray(np.zeros((4, 4, 3), np.uint8)).save(video / "0.png")
+
+    def unexpected(**kwargs):
+        raise AssertionError("started inference with an unsupported prompt")
+
+    def unexpected_open(*args, **kwargs):
+        raise AssertionError("opened a frame with an unsupported prompt")
+
+    monkeypatch.setattr(__main__, "_client", unexpected)
+    monkeypatch.setattr(PIL.Image, "open", unexpected_open)
+    prompt = json.dumps({"texts": ["dog"], "include_mask_logits": True})
+    result = CliRunner().invoke(
+        __main__.run, ["sam3", "--video", str(video), "--prompt", prompt, "--json"]
+    )
+    assert result.exit_code == 2, result.output
+    assert "include_mask_logits" in result.output

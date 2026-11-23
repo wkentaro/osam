@@ -1,15 +1,24 @@
 import contextlib
 import pathlib
 from collections.abc import Iterator
+from collections.abc import Sequence
+from typing import Final
 
 import imgviz
 import numpy as np
+import onnx
+import onnx.utils
+import onnxruntime
 import PIL.Image
 import pytest
 
 from osam import _registry
 from osam import _runtime
 from osam import _types as types
+from osam._models.sam import SKIPPED_MASKS_HW
+from osam._models.sam2._models import LOW_RES_HW
+
+from .. import _redraw
 
 image_path = (
     pathlib.Path(__file__).resolve().parents[3] / "examples" / "_images" / "dogs.jpg"
@@ -131,6 +140,129 @@ def test_segment_thin_image_sam(height: int, width: int) -> None:
         bb = annotation.bounding_box
         assert bb is not None
         assert bb.xmax < width and bb.ymax < height
+
+
+@pytest.mark.parametrize(
+    "model", [pytest.param("sam:100m", marks=pytest.mark.extra), "sam2:tiny"]
+)
+def test_decoder_orig_im_size_reaches_only_the_full_size_masks(model: str) -> None:
+    decoder = _registry.get_model_type_by_name(name=model)._blobs["decoder"]
+    graph = onnx.load(str(decoder.path), load_external_data=False).graph
+    reached = {"orig_im_size"}
+    for node in graph.node:
+        if reached.intersection(node.input):
+            reached.update(node.output)
+
+    assert [o.name for o in graph.output if o.name in reached] == ["masks"]
+
+
+@pytest.mark.model_conformance
+def test_efficientsam_decoder_divides_the_points_by_orig_im_size() -> None:
+    decoder = _registry.get_model_type_by_name(name="efficientsam:10m")._blobs[
+        "decoder"
+    ]
+    session = onnxruntime.InferenceSession(
+        decoder.path, providers=["CPUExecutionProvider"]
+    )
+    rng = np.random.default_rng(0)
+    embedding = rng.normal(size=(1, 256, 64, 64)).astype(np.float32)
+    height, width = 400, 600
+    points = (rng.random((1, 1, 3, 2)) * [width, height]).astype(np.float32)
+    labels = np.array([[[1, 2, 3]]], dtype=np.float32)
+
+    def run(*, points: np.ndarray, orig_im_size: tuple[int, int]) -> Sequence[object]:
+        return session.run(
+            None,
+            {
+                "image_embeddings": embedding,
+                "batched_point_coords": points,
+                "batched_point_labels": labels,
+                "orig_im_size": np.array(orig_im_size, dtype=np.int64),
+            },
+        )
+
+    _, expected_iou, expected_logits = run(points=points, orig_im_size=(height, width))
+    _, iou, logits = run(
+        points=points / np.array([width, height], dtype=np.float32),
+        orig_im_size=SKIPPED_MASKS_HW,
+    )
+
+    np.testing.assert_array_equal(iou, expected_iou)
+    np.testing.assert_array_equal(logits, expected_logits)
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "sam2:tiny",
+        pytest.param("sam2:small", marks=pytest.mark.extra),
+        pytest.param("sam2:latest", marks=pytest.mark.extra),
+        pytest.param("sam2:large", marks=pytest.mark.extra),
+    ],
+)
+def test_sam2_decoder_masks_at_the_grid_size_are_the_unclipped_logits(
+    model: str,
+) -> None:
+    decoder = _registry.get_model_type_by_name(name=model)._blobs["decoder"]
+    proto = onnx.load(str(decoder.path), load_external_data=False)
+    producers = {o: n for n in proto.graph.node for o in n.output}
+    (unclipped, *_) = producers["low_res_masks"].input
+    proto.graph.value_info.append(
+        onnx.helper.make_tensor_value_info(
+            unclipped, onnx.TensorProto.FLOAT, (1, 4, *LOW_RES_HW)
+        )
+    )
+    masks_only = onnx.utils.Extractor(proto).extract_model(
+        [unclipped, "orig_im_size"], ["masks"]
+    )
+    logits = np.random.default_rng(0).normal(scale=100, size=(1, 4, *LOW_RES_HW))
+
+    (masks,) = onnxruntime.InferenceSession(
+        masks_only.SerializeToString(), providers=["CPUExecutionProvider"]
+    ).run(
+        None,
+        {
+            unclipped: logits.astype(np.float32),
+            "orig_im_size": np.array(LOW_RES_HW, np.int64),
+        },
+    )
+
+    np.testing.assert_array_equal(masks, logits.astype(np.float32))
+
+
+_IMAGE_SIZES: Final = ((2560, 1600), (1024, 640), (1200, 300), (300, 225))
+
+
+def _resized_image(*, size: tuple[int, int]) -> np.ndarray:
+    return np.asarray(PIL.Image.open(image_path).convert("RGB").resize(size))
+
+
+@pytest.mark.parametrize(
+    "size", _IMAGE_SIZES, ids=lambda size: "x".join(map(str, size))
+)
+@pytest.mark.parametrize(
+    "model",
+    [
+        "efficientsam:10m",
+        pytest.param("sam:100m", marks=pytest.mark.extra),
+        "sam2:tiny",
+    ],
+)
+def test_segment_point_logits_redraw_the_mask(
+    model: str, size: tuple[int, int]
+) -> None:
+    loaded = _model(name=model)
+    embedding = loaded.encode_image(image=_resized_image(size=size))
+    (plain,) = loaded.decode(embedding=embedding, prompt=types.Prompt())
+    (annotation,) = loaded.decode(
+        embedding=embedding, prompt=types.Prompt(include_mask_logits=True)
+    )
+
+    assert plain.mask_logits is None
+    assert (
+        _redraw.distance_where_redraw_differs(annotation=annotation, image_size=size)
+        < 1
+    )
 
 
 def test_segment_negative_box_rejected_by_sam2() -> None:
@@ -286,6 +418,59 @@ def test_segment_point_to_mask_sam3(
     bb = annotation.bounding_box
     assert bb.xmin < 1439 < bb.xmax
     assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        types.Prompt(texts=["dog"], include_mask_logits=True),
+        types.Prompt(points=[(1440, 800)], point_labels=[1], include_mask_logits=True),
+    ],
+    ids=["texts", "point"],
+)
+def test_segment_sam3_logits_redraw_the_mask(
+    prompt: types.Prompt, sam3_embedding: types.ImageEmbedding
+) -> None:
+    annotations = _sam3(embedding=sam3_embedding, prompt=prompt)
+    plain = _sam3(
+        embedding=sam3_embedding,
+        prompt=prompt.model_copy(update={"include_mask_logits": False}),
+    )
+
+    assert annotations
+    assert all(annotation.mask_logits is None for annotation in plain)
+    image_size = (sam3_embedding.original_width, sam3_embedding.original_height)
+    for annotation in annotations:
+        assert (
+            _redraw.distance_where_redraw_differs(
+                annotation=annotation, image_size=image_size
+            )
+            < 1
+        )
+
+
+@pytest.mark.model_conformance
+@pytest.mark.parametrize(
+    "size", _IMAGE_SIZES[1:], ids=lambda size: "x".join(map(str, size))
+)
+def test_segment_sam3_point_logits_redraw_the_mask_on_any_image(
+    size: tuple[int, int],
+) -> None:
+    loaded = _model(name="sam3:latest")
+    embedding = loaded.encode_image(image=_resized_image(size=size))
+    (annotation,) = loaded.decode(
+        embedding=embedding,
+        prompt=types.Prompt(
+            points=[(size[0] * 0.5625, size[1] * 0.5)],
+            point_labels=[1],
+            include_mask_logits=True,
+        ),
+    )
+
+    assert (
+        _redraw.distance_where_redraw_differs(annotation=annotation, image_size=size)
+        < 1
+    )
 
 
 @pytest.mark.parametrize(

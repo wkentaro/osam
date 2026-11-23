@@ -2,7 +2,6 @@ import types as pytypes
 import typing
 
 import numpy as np
-import PIL.Image
 import pytest
 
 from osam import _types as types
@@ -58,6 +57,36 @@ def test_decode_boxes_the_pixels_inside_the_predicted_edges(
     assert (bb.xmin, bb.ymin, bb.xmax, bb.ymax) == expected
     assert annotation.mask.shape == (bb.ymax - bb.ymin + 1, bb.xmax - bb.xmin + 1)
     assert annotation.mask.all()
+
+
+def test_decode_draws_a_text_mask_from_logits_not_probabilities() -> None:
+    logits = np.array([[[[-0.2, 6]]]], np.float32)
+    outputs = {
+        "boxes": np.array([[0, 0, 1, 1]], np.float32),
+        "scores": np.array([0.9], np.float32),
+        "masks": 1 / (1 + np.exp(-logits)),
+        "mask_logits": logits,
+    }
+    model = Sam3.__new__(Sam3)
+    model._inference_sessions = {
+        "language_encoder": pytypes.SimpleNamespace(
+            run=lambda *_: [np.ones((1, 32), bool), np.zeros((32, 1, 8), np.float32)]
+        ),
+        "decoder": pytypes.SimpleNamespace(
+            get_inputs=lambda: [pytypes.SimpleNamespace(name="box_coords", shape=[1])],
+            run=lambda names, _: [outputs[name] for name in names],
+        ),
+    }
+    embedding = types.ImageEmbedding(
+        original_height=1,
+        original_width=16,
+        embedding=np.zeros((1, 1, 1), np.float32),
+        extra_features=[np.zeros((1, 1, 1), np.float32)] * 3,
+    )
+
+    [annotation] = model.decode(embedding=embedding, prompt=types.Prompt(texts=["car"]))
+
+    assert annotation.mask.tolist() == [[False] * 4 + [True] * 12]
 
 
 @pytest.mark.parametrize(
@@ -202,7 +231,6 @@ def test_file_runs_fastest_on_the_device(
     ort_version: tuple[int, int],
     expected: str,
 ) -> None:
-    from osam._models.sam3 import _models
 
     monkeypatch.setattr(_models, "_ORT_VERSION", ort_version)
     assert _models._file(name="image_encoder", device=device) == expected
@@ -228,29 +256,6 @@ def test_remove_deletes_the_files_an_upgrade_leaves(
         "sha256:5934b587489f52cce77fa445c48ebdf1c09ee79c57d5d7342e0a727f27323449",
         "sha256:80fe0ef83dd53d64b9918fa23c97ab0473502c0c9f2369ac81c4017220c92bc7",
     } <= set(removed)
-
-
-def test_crop_mask_matches_the_mask_resized_to_the_image() -> None:
-    # As sam3-onnx resizes the whole mask, on boxes that end on odd native
-    # pixels and on the image's edges.
-    mask = np.random.default_rng(0).random((36, 36)).astype(np.float32)
-    height, width = 100, 160
-    full = (
-        np.asarray(
-            PIL.Image.fromarray(mask).resize(
-                (width, height), resample=PIL.Image.Resampling.BILINEAR
-            )
-        )
-        > 0.5
-    )
-    for xmin, ymin, xmax, ymax in [(7, 3, 61, 50), (0, 0, 159, 99), (150, 90, 159, 99)]:
-        bounding_box = types.BoundingBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
-        np.testing.assert_array_equal(
-            _models._crop_mask(
-                mask=mask, bounding_box=bounding_box, height=height, width=width
-            ),
-            full[ymin : ymax + 1, xmin : xmax + 1],
-        )
 
 
 @pytest.mark.parametrize(

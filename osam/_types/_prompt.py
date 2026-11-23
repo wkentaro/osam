@@ -14,7 +14,7 @@ PointLabel = typing.Literal[0, 1]
 THRESHOLDS: Final = frozenset({"iou_threshold", "score_threshold", "max_annotations"})
 
 
-class Prompt(pydantic.BaseModel):
+class PromptBase(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="forbid")
 
     # One object: points with at most one box.
@@ -48,7 +48,7 @@ class Prompt(pydantic.BaseModel):
         )
 
     @pydantic.model_validator(mode="after")
-    def _check_prompt(self) -> "Prompt":
+    def _check_prompt(self) -> "PromptBase":
         if (self.points is None) != (self.point_labels is None) or len(
             self.points or []
         ) != len(self.point_labels or []):
@@ -64,6 +64,15 @@ class Prompt(pydantic.BaseModel):
                 "find every match; give one or the other"
             )
         return self
+
+
+class Prompt(PromptBase):
+    include_mask_logits: bool = pydantic.Field(
+        default=False,
+        description="true adds each annotation's mask_logits, for a client that "
+        "draws the mask at another size, as Annotation.mask_logits describes; a "
+        "model that returns no mask returns no mask_logits either",
+    )
 
 
 def point_inputs(

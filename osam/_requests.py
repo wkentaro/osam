@@ -100,7 +100,7 @@ class SegmentRequest(types.Prompt):
     include_masks: bool = pydantic.Field(
         default=True,
         description="false leaves out each annotation's mask, for a client that "
-        "needs only boxes and scores",
+        "doesn't draw it",
     )
     keep_alive: KeepAlive = DEFAULT_KEEP_ALIVE
 
