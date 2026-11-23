@@ -259,7 +259,10 @@ def test_segment_point_logits_redraw_the_mask(
     )
 
     assert plain.mask_logits is None
-    assert _redraw.distance_where_redraw_differs(annotation=annotation) < 1
+    assert (
+        _redraw.distance_where_redraw_differs(annotation=annotation, image_size=size)
+        < 1
+    )
 
 
 def test_segment_negative_box_rejected_by_sam2() -> None:
@@ -436,8 +439,14 @@ def test_segment_sam3_logits_redraw_the_mask(
 
     assert annotations
     assert all(annotation.mask_logits is None for annotation in plain)
+    image_size = (sam3_embedding.original_width, sam3_embedding.original_height)
     for annotation in annotations:
-        assert _redraw.distance_where_redraw_differs(annotation=annotation) < 1
+        assert (
+            _redraw.distance_where_redraw_differs(
+                annotation=annotation, image_size=image_size
+            )
+            < 1
+        )
 
 
 @pytest.mark.parametrize(
@@ -457,7 +466,10 @@ def test_segment_sam3_point_logits_redraw_the_mask_on_any_image(
         ),
     )
 
-    assert _redraw.distance_where_redraw_differs(annotation=annotation) < 1
+    assert (
+        _redraw.distance_where_redraw_differs(annotation=annotation, image_size=size)
+        < 1
+    )
 
 
 @pytest.mark.parametrize(

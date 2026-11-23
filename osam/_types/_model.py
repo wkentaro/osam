@@ -335,12 +335,14 @@ def annotations_from_logits(
         return []
     cols = np.flatnonzero(positive.any(axis=0))
     grid_height, grid_width = logits.shape
+    kept_cols = slice(max(0, cols[0] - 1), min(grid_width, cols[-1] + 2))
+    kept_rows = slice(max(0, rows[0] - 1), min(grid_height, rows[-1] + 2))
     cell_width = covered_size[0] / grid_width
     cell_height = covered_size[1] / grid_height
-    xmin = max(0, math.floor((cols[0] - 1) * cell_width))
-    ymin = max(0, math.floor((rows[0] - 1) * cell_height))
-    xmax = min(width, math.ceil((cols[-1] + 2) * cell_width)) - 1
-    ymax = min(height, math.ceil((rows[-1] + 2) * cell_height)) - 1
+    xmin = math.floor(kept_cols.start * cell_width)
+    ymin = math.floor(kept_rows.start * cell_height)
+    xmax = min(width, math.ceil(kept_cols.stop * cell_width)) - 1
+    ymax = min(height, math.ceil(kept_rows.stop * cell_height)) - 1
     if xmin > xmax or ymin > ymax:
         return []
     annotations = annotations_from_mask(
@@ -357,12 +359,14 @@ def annotations_from_logits(
     return [
         Annotation.model_validate(
             dict(annotation)
-            | logits_around_box(
-                logits=logits, covered_size=covered_size, bounding_box=bounding_box
+            | _encoded_cells(
+                logits=logits,
+                covered_size=covered_size,
+                cols=kept_cols,
+                rows=kept_rows,
             )
         )
         for annotation in annotations
-        if (bounding_box := annotation.bounding_box) is not None
     ]
 
 
@@ -381,23 +385,38 @@ def logits_around_box(
     cell_height = covered_size[1] / grid_height
     bb = bounding_box
 
-    def cells(start: int, stop: int, cell: float, count: int) -> tuple[int, int]:
+    def cells(start: int, stop: int, cell: float, count: int) -> slice:
         first = math.floor(start / cell - 0.5)
         last = math.ceil(stop / cell - 0.5)
-        return max(0, first), min(count - 1, last) + 1
+        return slice(max(0, first), min(count - 1, last) + 1)
 
-    col_start, col_stop = cells(bb.xmin, bb.xmax + 1, cell_width, grid_width)
-    row_start, row_stop = cells(bb.ymin, bb.ymax + 1, cell_height, grid_height)
-    crop = logits[row_start:row_stop, col_start:col_stop]
+    return _encoded_cells(
+        logits=logits,
+        covered_size=covered_size,
+        cols=cells(bb.xmin, bb.xmax + 1, cell_width, grid_width),
+        rows=cells(bb.ymin, bb.ymax + 1, cell_height, grid_height),
+    )
+
+
+def _encoded_cells(
+    *,
+    logits: npt.NDArray[np.float32],
+    covered_size: tuple[float, float],
+    cols: slice,
+    rows: slice,
+) -> dict[str, typing.Any]:
+    grid_height, grid_width = logits.shape
+    cell_width = covered_size[0] / grid_width
+    cell_height = covered_size[1] / grid_height
     return {
         "mask_logits": np.clip(
-            np.round(LOGIT_ZERO + LOGIT_SCALE * crop), 0, 65535
+            np.round(LOGIT_ZERO + LOGIT_SCALE * logits[rows, cols]), 0, 65535
         ).astype(np.uint16),
         "mask_logits_box": (
-            col_start * cell_width,
-            row_start * cell_height,
-            col_stop * cell_width,
-            row_stop * cell_height,
+            cols.start * cell_width,
+            rows.start * cell_height,
+            cols.stop * cell_width,
+            rows.stop * cell_height,
         ),
     }
 
