@@ -203,8 +203,8 @@ class Client:
         model uses its default one. The thresholds apply to models that find
         every match. Prompts on an image the server saw recently reuse its
         embedding.
-        include_masks: False leaves out each annotation's mask, for boxes and
-        scores only.
+        include_masks: False leaves out each annotation's mask, for a client
+        that doesn't draw it.
         include_mask_logits: True adds each annotation's mask_logits, to draw
         the mask at another size, such as an image's own before it was shrunk
         to send, as osam.types.Annotation.mask_logits describes. A model that
