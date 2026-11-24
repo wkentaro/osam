@@ -127,6 +127,25 @@ class HttpBackend:
             for model in self._request(method="GET", path="/api/models")["models"]
         ]
 
+    def show(self, *, model: str) -> types.ModelInfo:
+        try:
+            return types.ModelInfo.model_validate(
+                self._request(method="POST", path="/api/show", body={"model": model})
+            )
+        except _errors.ResponseError as e:
+            if e.code != "not_found":
+                raise
+            return self._find_listed(model=model)
+
+    def _find_listed(self, *, model: str) -> types.ModelInfo:
+        name: str = model if ":" in model else f"{model}:latest"
+        for info in self.list():
+            if info.name == name:
+                return info
+        raise _errors.NotFoundError(
+            f"Model {model!r} not found.", status_code=404, code="model_not_found"
+        )
+
     def ps(self) -> builtins.list[types.RunningModel]:
         return [
             types.RunningModel.model_validate(model)

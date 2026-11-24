@@ -39,6 +39,12 @@ class Version(pydantic.BaseModel):
     version: str
 
 
+class ShowRequest(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    model: str
+
+
 class PullRequest(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="forbid")
 
@@ -160,6 +166,10 @@ def create_app(*, runtime: _runtime.Runtime) -> fastapi.FastAPI:
     @app.get("/api/models")
     def list_models() -> ModelList:
         return ModelList(models=runtime.list())
+
+    @app.post("/api/show")
+    def show(request: ShowRequest) -> types.ModelInfo:
+        return runtime.show(model=request.model)
 
     @app.get("/api/ps")
     def list_running_models() -> RunningModelList:

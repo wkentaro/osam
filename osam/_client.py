@@ -26,6 +26,8 @@ class _Backend(Protocol):
 
     def list(self) -> list[types.ModelInfo]: ...
 
+    def show(self, *, model: str) -> types.ModelInfo: ...
+
     def ps(self) -> builtins.list[types.RunningModel]: ...
 
     def pull(
@@ -124,6 +126,10 @@ class Client:
     def list(self) -> list[types.ModelInfo]:
         """List every model osam knows, pulled or not."""
         return self._backend.list()
+
+    def show(self, model: str) -> types.ModelInfo:
+        """Get information for one model, pulled or not."""
+        return self._backend.show(model=model)
 
     def ps(self) -> builtins.list[types.RunningModel]:
         """List the loaded models."""

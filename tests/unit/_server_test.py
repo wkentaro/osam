@@ -76,6 +76,19 @@ def test_list_models(app: fastapi.FastAPI) -> None:
     assert (model["input_size"], model["input_resize"]) == (1024, "fit")
 
 
+def test_show_model(app: fastapi.FastAPI) -> None:
+    client = TestClient(app)
+    (model,) = client.get("/api/models").json()["models"]
+    response = client.post("/api/show", json={"model": "fake"})
+    assert response.status_code == 200
+    assert response.json() == model
+
+    for name in ["missing", "", "facebook/sam3"]:
+        response = client.post("/api/show", json={"model": name})
+        assert response.status_code == 404
+        assert response.json()["code"] == "model_not_found"
+
+
 def test_pull_streams_progress(
     monkeypatch: pytest.MonkeyPatch, app: fastapi.FastAPI, runtime: _runtime.Runtime
 ) -> None:

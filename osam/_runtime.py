@@ -146,23 +146,24 @@ class Runtime:
         return __version__
 
     def list(self) -> list[types.ModelInfo]:
-        return [
-            types.ModelInfo(
-                name=model_type.name,
-                id=model_type.get_id(device=self._device),
-                size=model_type.get_size(device=self._device),
-                download_size=model_type.get_download_size(device=self._device),
-                modified_at=model_type.get_modified_at(device=self._device),
-                metadata=model_type.metadata,
-                capabilities=["segment", "track"]
-                if model_type.tracks()
-                else ["segment"],
-                prompt_kinds=sorted(model_type.prompt_kinds),
-                input_size=model_type.input_size,
-                input_resize=model_type.input_resize,
-            )
-            for model_type in self._model_types
-        ]
+        return [self._model_info(model_type=cls) for cls in self._model_types]
+
+    def show(self, *, model: str) -> types.ModelInfo:
+        return self._model_info(model_type=self.model_type(name=model))
+
+    def _model_info(self, *, model_type: type[types.Model]) -> types.ModelInfo:
+        return types.ModelInfo(
+            name=model_type.name,
+            id=model_type.get_id(device=self._device),
+            size=model_type.get_size(device=self._device),
+            download_size=model_type.get_download_size(device=self._device),
+            modified_at=model_type.get_modified_at(device=self._device),
+            metadata=model_type.metadata,
+            capabilities=["segment", "track"] if model_type.tracks() else ["segment"],
+            prompt_kinds=sorted(model_type.prompt_kinds),
+            input_size=model_type.input_size,
+            input_resize=model_type.input_resize,
+        )
 
     def ps(self) -> builtins.list[types.RunningModel]:
         # Most recently used first, as Ollama lists them.
