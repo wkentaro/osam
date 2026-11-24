@@ -48,6 +48,21 @@ def test_unknown_model_raises(runtime: _runtime.Runtime) -> None:
         _segment(runtime=runtime, model="efficientsam:10m")  # registered, but not here
 
 
+def test_show_builds_info_only_for_the_requested_model(
+    runtime: _runtime.Runtime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    expected = runtime.list()[0]
+
+    def unexpected_size(*, device: types.Device | None) -> int:
+        pytest.fail("show inspected another model")
+
+    monkeypatch.setattr(runtime.model_type(name="b:1"), "get_size", unexpected_size)
+    assert runtime.show(model="a") == expected
+    assert runtime.ps() == []
+    with pytest.raises(_errors.UnknownModelError):
+        runtime.show(model="missing")
+
+
 def test_list_gives_the_input_size_and_resize_of_each_registered_model() -> None:
     with contextlib.closing(_runtime.Runtime()) as runtime:
         inputs = {

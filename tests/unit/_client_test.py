@@ -121,12 +121,36 @@ def test_unknown_model_raises_lookup_error(any_client: osam.Client) -> None:
         lambda: any_client.load("missing"),
         lambda: any_client.pull("missing"),
         lambda: any_client.remove("missing"),
+        lambda: any_client.show("missing"),
+        lambda: any_client.show(""),
+        lambda: any_client.show("facebook/sam3"),
     ]
     for call in calls:
         with pytest.raises(LookupError, match="not found") as e:
             call()
         if isinstance(e.value, osam.ResponseError):
             assert (e.value.status_code, e.value.code) == (404, "model_not_found")
+
+
+def test_show_falls_back_to_list_on_a_server_without_the_route(
+    client: osam.Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = _backend(client)
+    request = backend._request
+
+    def request_without_show(*, method: str, path: str, **kwargs: Any) -> Any:
+        if path == "/api/show":
+            raise _errors.NotFoundError("Not Found", status_code=404, code="not_found")
+        return request(method=method, path=path, **kwargs)
+
+    expected = client.show("sam2")
+    monkeypatch.setattr(backend, "_request", request_without_show)
+    assert client.show("sam2") == client.show("sam2:latest") == expected
+    for name in ["missing", "", "facebook/sam3"]:
+        with pytest.raises(osam.ResponseError, match="not found") as e:
+            client.show(name)
+        assert isinstance(e.value, LookupError)
+        assert (e.value.status_code, e.value.code) == (404, "model_not_found")
 
 
 def test_not_pulled_error_keeps_its_device_over_http() -> None:

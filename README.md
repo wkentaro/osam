@@ -393,9 +393,11 @@ prompt fields return 422 instead of being ignored. `/api/models`,
 `osam rm`; each model in `/api/models` also lists its `capabilities`, such as
 `"segment"`, the `prompt_kinds` it takes, such as `"points"` and
 `"texts"`, and its `download_size` in bytes for the server's device, known
-before a pull. `input_size` and `input_resize` say how the model resizes an
-image before encoding it, and `osam.types.ModelInfo.input_shape` gives the
-resulting size. An image resized to that size with Pillow's bilinear filter
+before a pull. `client.show(model)` and `POST /api/show` with
+`{"model": name}` return the same information for one model, pulled or not.
+`input_size` and `input_resize` say how the model resizes an image before
+encoding it, and `osam.types.ModelInfo.input_shape` gives the resulting size.
+An image resized to that size with Pillow's bilinear filter
 gives the same embedding as the full image, except with EfficientSAM, whose
 encoder resizes without antialiasing. `/api/pull` streams NDJSON lines such as
 `{"status": "pulling encoder.onnx", "completed": 524288, "total": 24799761}` and
