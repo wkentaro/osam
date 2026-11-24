@@ -42,8 +42,8 @@ def _has_hardware_webgpu() -> bool:
     try:
         if _webgpu_plugin() is None:
             return False
-        device: Any | None = _webgpu_device()
-        return device is not None and _can_use_webgpu(ep_device=device)
+        _, has_hardware = _webgpu_device()
+        return has_hardware
     except Exception as e:  # plugin missing or failing to register
         logger.debug("Skipping WebGpuExecutionProvider: {e}", e=e)
         return False
@@ -132,7 +132,7 @@ def _webgpu_plugin() -> Any | None:
 
 
 @functools.cache
-def _webgpu_device() -> Any | None:
+def _webgpu_device() -> tuple[Any | None, bool]:
     webgpu_ep = _webgpu_plugin()
     if webgpu_ep is None:
         raise RuntimeError(
@@ -154,7 +154,7 @@ def _webgpu_device() -> Any | None:
             logger.debug(
                 "Picked WebGPU adapter {}", _describe_adapter(ep_device=device)
             )
-            return device
+            return device, True
     if devices:
         logger.warning(
             "No usable hardware WebGPU adapters: {adapters!r}. "
@@ -162,8 +162,8 @@ def _webgpu_device() -> Any | None:
             adapters=[_describe_adapter(ep_device=d) for d in devices],
             first=_describe_adapter(ep_device=devices[0]),
         )
-        return devices[0]
-    return None
+        return devices[0], False
+    return None, False
 
 
 def load_inference_sessions(
@@ -227,7 +227,8 @@ def device_providers(
         )
     provider: str = DEVICE_PROVIDERS[device]
     if device == "webgpu":
-        if _webgpu_device() is None:
+        ep_device, _ = _webgpu_device()
+        if ep_device is None:
             raise RuntimeError(f"{provider} found no GPU")
     elif provider not in onnxruntime.get_available_providers():  # type: ignore[possibly-missing-attribute]
         raise RuntimeError(f"{provider} is unavailable in the installed onnxruntime")
@@ -320,7 +321,8 @@ def _create_session(
     provider: str = _first_provider(providers=providers)
     if provider == "WebGpuExecutionProvider":
         # A plugin provider is added by device; CPU stays as the fallback.
-        sess_options.add_provider_for_devices([_webgpu_device()], {})
+        ep_device, _ = _webgpu_device()
+        sess_options.add_provider_for_devices([ep_device], {})
         return onnxruntime.InferenceSession(path, sess_options)
     model: str | bytes = (
         _coreml_model(path=path) if provider == "CoreMLExecutionProvider" else path
