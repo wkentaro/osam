@@ -158,7 +158,7 @@ def test_device_coreml_runs_only_coreml_blobs_on_coreml(
     from osam._models.sam3._models import Sam3
 
     monkeypatch.setattr(_onnx, "_coreml_model", lambda path: f"{path}.t")
-    monkeypatch.setattr(_onnx, "_webgpu_device", lambda: None)
+    monkeypatch.setattr(_onnx, "_webgpu_device", lambda: (None, False))
     Sam3(device="coreml")
 
     blobs = Sam3._device_blobs(device="coreml")
@@ -632,7 +632,7 @@ def test_resolve_providers_picks_hardware_webgpu_after_software(
     hardware = _webgpu_adapter()
     fake_webgpu += [_warp_adapter(), hardware]
     assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
-    assert _onnx._webgpu_device() is hardware
+    assert _onnx._webgpu_device() == (hardware, True)
 
 
 @pytest.mark.parametrize(
@@ -690,12 +690,14 @@ def test_windows_webgpu_requires_d3d12_hardware(
             vendor_id=0x15AD, device_id=0x0406, description="VMware SVGA 3D"
         )
     )
-    assert resolve_providers() == (
+    expected = (
         ["WebGpuExecutionProvider", "CPUExecutionProvider"]
         if supported
         else ["CPUExecutionProvider"]
     )
-    assert checked and set(checked) == {1}
+    assert resolve_providers() == expected
+    assert resolve_providers() == expected
+    assert checked == [1]
 
 
 def test_windows_webgpu_prefers_d3d12_capable_adapter(
@@ -709,7 +711,7 @@ def test_windows_webgpu_prefers_d3d12_capable_adapter(
     supported.device.metadata["LUID"] = "2"
     fake_webgpu += [unsupported, supported]
     assert resolve_providers() == ["WebGpuExecutionProvider", "CPUExecutionProvider"]
-    assert _onnx._webgpu_device() is supported
+    assert _onnx._webgpu_device() == (supported, True)
 
 
 @pytest.mark.parametrize("metadata", [{}, {"LUID": "invalid"}])
@@ -729,13 +731,17 @@ def test_windows_webgpu_probe_failure_uses_cpu(
 ) -> None:
     monkeypatch.delenv("OSAM_ONNX_PROVIDERS", raising=False)
     monkeypatch.setattr(sys, "platform", "win32")
+    checked: list[int] = []
 
     def check(*, luid: int) -> bool:
+        checked.append(luid)
         raise OSError("Cannot load d3d12.dll")
 
     monkeypatch.setattr(_onnx, "supports_d3d12", check)
     fake_webgpu.append(_webgpu_adapter())
     assert resolve_providers() == ["CPUExecutionProvider"]
+    assert resolve_providers() == ["CPUExecutionProvider"]
+    assert checked == [1]
 
 
 @pytest.mark.parametrize("platform", ["darwin", "linux"])
