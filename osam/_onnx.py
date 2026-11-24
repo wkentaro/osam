@@ -133,8 +133,6 @@ def _webgpu_plugin() -> Any | None:
 
 @functools.cache
 def _webgpu_device() -> tuple[Any | None, bool]:
-    # Keep the hardware check with the cached device so listing models does
-    # not call into the Windows driver again.
     webgpu_ep = _webgpu_plugin()
     if webgpu_ep is None:
         raise RuntimeError(
