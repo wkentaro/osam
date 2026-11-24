@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## 0.12.1 - 2026-11-24
+
+### Added
+
+- Return the logit cells each mask was drawn from as `Annotation.mask_logits`, placed by `mask_logits_box`, when a request sets `include_mask_logits`, so a client can draw the mask at another size than the model saw. ([#315](https://github.com/wkentaro/osam/pull/315))
+- `Client.show(model)` and `POST /api/show` return metadata for one model before or after its files are downloaded. ([#322](https://github.com/wkentaro/osam/pull/322))
+
+### Changed
+
+- SAM, EfficientSAM, SAM2 and SAM3 draw a mask the same way, from the model's low-resolution logits sampled at each pixel center. SAM's mask edge moves on images whose long side is not 1024. SAM3's text masks move where they were drawn from probabilities, and on an image under 288 px a side SAM3 no longer averages the logits under each pixel, so a part of a mask thinner than a pixel can drop out. Elsewhere a pixel can change side only where its logit is within float rounding of 0. ([#314](https://github.com/wkentaro/osam/pull/314))
+- SAM3 keeps the text features of its 64 most recent prompts per loaded model, so a repeated text or example-box prompt skips the language encoder, 21 ms on an Apple M5 with WebGPU. ([#317](https://github.com/wkentaro/osam/pull/317))
+
+### Fixed
+
+- A client rejects an annotation mask whose bounding box leaves the image or frame it sent, or whose PNG is another size than its box, before decoding it. ([#307](https://github.com/wkentaro/osam/pull/307))
+- On Windows, listing models reuses the WebGPU adapter's Direct3D 12 support result to avoid blocking apps with repeated driver checks. ([#321](https://github.com/wkentaro/osam/pull/321))
+
 ## 0.12.0 - 2026-11-19
 
 ### Added
